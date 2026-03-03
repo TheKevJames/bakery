@@ -1,26 +1,20 @@
 {
   "cursorUp": [
-    "up",
-    "alt+k"
+    "up"
   ],
   "cursorDown": [
-    "down",
-    "alt+j"
+    "down"
   ],
   "cursorLeft": [
-    "left",
-    "alt+h"
+    "left"
   ],
   "cursorRight": [
-    "right",
-    "alt+l"
+    "right"
   ],
   "cursorWordLeft": [
-    "alt+left",
-    "alt+b"
+    "ctrl+left"
   ],
   "cursorWordRight": [
-    "alt+right",
-    "alt+w"
+    "ctrl+right"
   ]
 }
