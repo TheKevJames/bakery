@@ -25,17 +25,11 @@ export default function timeAwareness(pi: ExtensionAPI) {
     });
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-    return {
-      systemPrompt:
-        event.systemPrompt +
-        `
-
-## Current Time
-- UTC: ${utc}
+    // A section rather than a returned `systemPrompt`: returning one forces
+    // the whole prompt, discarding other extensions' prompt changes.
+    event.systemPromptOptions.sections.current_time = `- UTC: ${utc}
 - Local (${tz}): ${local}
 
-When working with time-sensitive operations (log queries, freshness filters, cron expressions, timestamps), use the times above as your reference. Do not guess or assume the current time. If significant time has passed since the start of this conversation, verify the current time with \`date -u\` before using it in commands.
-`,
-    };
+When working with time-sensitive operations (log queries, freshness filters, cron expressions, timestamps), use the times above as your reference. Do not guess or assume the current time. If significant time has passed since the start of this conversation, verify the current time with \`date -u\` before using it in commands.`;
   });
 }
