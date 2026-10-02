@@ -3,7 +3,9 @@ name = "bakery"
 version = "0.1.0"
 description = "agentic harness: pi control plane and claw gateway"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "croniter==6.2.4",
+]
 
 [project.scripts]
 bakery = "bakery.cli:main"
@@ -17,6 +19,7 @@ dev = [
     "flake8==7.4.1",
     "pylint==4.1.1",
     "pytest==9.1.1",
+    "types-croniter==6.2.4.20260711",
 ]
 
 [tool.pytest.ini_options]
