@@ -1,12 +1,7 @@
 import asyncio
 import pathlib
-import shutil
-import tempfile
 from collections.abc import Awaitable
 from collections.abc import Callable
-from collections.abc import Iterator
-
-import pytest
 
 from bakery.chat import relay
 from bakery.chat import transport
@@ -17,17 +12,6 @@ from testing import harness
 
 Reply = harness.Reply
 ASK = 'pi/claw-extensions/ask-user.ts'
-
-
-@pytest.fixture(name='root', scope='function')
-def fixture_root(
-    fake_llm: harness.FakeLLM, monkeypatch: pytest.MonkeyPatch
-) -> Iterator[pathlib.Path]:
-    root = pathlib.Path(tempfile.mkdtemp(prefix='bk', dir='/tmp'))
-    monkeypatch.setenv('XDG_STATE_HOME', str(root / 'state'))
-    monkeypatch.setenv('BAKERY_FAKE_LLM_URL', fake_llm.url)
-    yield root
-    shutil.rmtree(root)
 
 
 def run(

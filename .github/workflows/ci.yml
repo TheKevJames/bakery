@@ -25,6 +25,12 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7.0.1
+      # sandbox-runtime's Linux backend; Ubuntu's AppArmor otherwise denies
+      # bubblewrap the unprivileged user namespaces it needs.
+      - run: |
+          sudo apt-get update -q
+          sudo apt-get install -qy bubblewrap socat ripgrep
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: 24.21.0

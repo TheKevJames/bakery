@@ -1,9 +1,6 @@
 import asyncio
 import pathlib
-import shutil
-import tempfile
 import time
-from collections.abc import Iterator
 from collections.abc import Mapping
 
 import pytest
@@ -16,18 +13,6 @@ from testing import gateway as testing_gateway
 from testing import harness
 
 Reply = harness.Reply
-
-
-@pytest.fixture(name='root', scope='function')
-def fixture_root(
-    fake_llm: harness.FakeLLM, monkeypatch: pytest.MonkeyPatch
-) -> Iterator[pathlib.Path]:
-    # Short, because the state dir holds unix sockets (104-byte path cap).
-    root = pathlib.Path(tempfile.mkdtemp(prefix='bk', dir='/tmp'))
-    monkeypatch.setenv('XDG_STATE_HOME', str(root / 'state'))
-    monkeypatch.setenv('BAKERY_FAKE_LLM_URL', fake_llm.url)
-    yield root
-    shutil.rmtree(root)
 
 
 async def ctl(record: Mapping[str, object]) -> object:
@@ -270,31 +255,38 @@ def test_control_rejects_bad_requests_and_configs(root: pathlib.Path) -> None:
     testing_gateway.run_gateway(claws, fake, scenario)
 
 
-def test_claws_only_see_allowed_environment(
+def test_secrets_reach_pi_but_not_bash(
     root: pathlib.Path,
     fake_llm: harness.FakeLLM,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    secrets = 'secrets = ["BAKERY_FAKE_LLM_URL", "GRANTED=BAKERY_TEST_ITEM"]'
     claws = testing_gateway.make_claws(
         root,
         {
-            'a': 'secrets = ["BAKERY_FAKE_LLM_URL", "BAKERY_TEST_GRANTED"]\n',
+            'a': f'{secrets}\n[policy]\ntools = ["bash", "env_of"]\n',
             'b': 'secrets = ["BAKERY_FAKE_LLM_URL", "BAKERY_TEST_MISSING"]\n',
         },
+        extensions={'a': ['env_of.ts']},
     )
-    monkeypatch.setenv('BAKERY_TEST_GRANTED', 'granted-value')
+    monkeypatch.setenv('BAKERY_TEST_ITEM', 'granted-value')
     monkeypatch.setenv('BAKERY_TEST_PRIVATE', 'private-value')
     monkeypatch.delenv('BAKERY_TEST_MISSING', raising=False)
     fake = testing_gateway.FakeChannel()
-    fake_llm.queue(Reply(tool='bash', args={'command': 'env'}))
+    fake_llm.queue(
+        Reply(tool='env_of', args={'name': 'GRANTED'}),
+        Reply(tool='bash', args={'command': 'env'}),
+    )
 
     async def scenario(gateway: core.Gateway) -> None:
         run = await fake.wait(gateway.trigger('a', None, 'go'))
-        assert run.status == 'settled'
-        transcript = fake_llm.transcript()
-        assert 'BAKERY_TEST_GRANTED=granted-value' in transcript
-        assert 'BAKERY_ASK_POLICY=ask' in transcript
-        assert 'private-value' not in transcript
+        assert run.status == 'settled', run.reason
+        pi_env = fake_llm.transcript(-2)
+        bash_env = fake_llm.transcript().removeprefix(pi_env)
+        assert 'GRANTED=granted-value' in pi_env
+        assert 'BAKERY_ASK_POLICY=ask' in bash_env
+        for hidden in ('granted-value', 'private-value', fake_llm.url):
+            assert hidden not in bash_env
 
         missing = await fake.wait(gateway.trigger('b', None, 'go'))
         assert missing.status == 'failed'

@@ -11,11 +11,14 @@ import contextlib
 import dataclasses
 import logging
 import os
+import pathlib
 import time
 
+from .. import paths
 from .. import secrets
 from .. import state
 from . import config
+from . import policy
 from . import rpc
 
 REAP_INTERVAL = 15.0
@@ -35,6 +38,22 @@ def bakery_dir() -> str:
     return str(state.root() / '_gateway' / 'bakery')
 
 
+def policy_extension() -> pathlib.Path:
+    return paths.repo() / 'pi' / 'claw-extensions' / 'policy'
+
+
+async def _check_startup(proc: rpc.PiProcess) -> None:
+    """
+    Fail fast if an extension failed while pi started (eg. a bad policy or
+    context.toml), rather than running a claw without it.
+    """
+    await proc.command({'type': 'get_state'})
+    errors = proc.extension_errors()
+    if errors:
+        await proc.close()
+        raise rpc.RpcError('; '.join(errors))
+
+
 def child_env(claw: config.Claw) -> dict[str, str]:
     """Raises secrets.SecretError if a configured secret is missing."""
     env = {
@@ -42,9 +61,19 @@ def child_env(claw: config.Claw) -> dict[str, str]:
         for name, value in os.environ.items()
         if name in INHERITED_ENV or name.startswith(INHERITED_ENV_PREFIXES)
     }
-    env.update({name: secrets.get(name) for name in claw.secrets})
+    env.update(
+        {name: secrets.get(item) for name, item in claw.secrets.items()}
+    )
     env.update(
         {
+            # Claws may read neither the gateway's files nor each other's
+            # state (memory, transcripts, the state repo's history).
+            'BAKERY_POLICY': policy.serialize(
+                claw.policy,
+                extra_deny_read=[state.root()],
+                allow_read=[claw.state_dir, state.root() / state.SHARED],
+                secret_names=claw.secrets,
+            ),
             'PI_CODING_AGENT_DIR': str(claw.profile),
             'PI_CODING_AGENT_BAKERY_DIR': bakery_dir(),
             'BAKERY_ASK_POLICY': claw.ask.policy,
@@ -94,10 +123,14 @@ class Pool:
                 '--name', sid,
                 '--model', claw.model,
                 '--thinking', claw.thinking,
+                # Loaded by the gateway, not the profile, so no profile can
+                # run a claw without its policy.
+                '--extension', str(policy_extension()),
             ],
             cwd=claw.cwd,
             env=child_env(claw),
         )  # fmt: skip
+        await _check_startup(proc)
         self.children[work_key] = Child(
             proc, claw.concurrency.idle_exit_minutes * 60
         )

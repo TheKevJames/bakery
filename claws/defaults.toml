@@ -18,9 +18,38 @@ thinking = "high"
 # Environment variables passed to the claw; values come from the gateway's
 # environment or the Keychain (see bakery/bakery/secrets.py). Nothing else from
 # the gateway's environment is passed on beyond PATH, HOME, locale, XDG_*, and
-# TASK_FOLDER.
-secrets = ["ANTHROPIC_API_KEY"]
+# TASK_FOLDER. Entries are `NAME` or `NAME=ITEM` (the variable NAME, valued
+# from secret ITEM). Bash never sees them; only pi and its extension tools do.
+secrets = [
+    "ANTHROPIC_API_KEY",
+    "JINA_API_KEY",                # web_search, web_fetch
+    "GH_TOKEN=BAKERY_GITHUB_READ", # github: a read-only fine-grained token
+]
 # cwd defaults to the claw's state dir, $XDG_STATE_HOME/claws/<name>.
+
+# Enforced in the claw's pi by pi/claw-extensions/policy. Relative paths are
+# relative to the claw's profile (claws/<name>/); ~ and ${VAR} expand.
+[claw.policy]
+# Tool names; `*` matches any characters. Anything else is blocked.
+tools = [
+    "read", "grep", "find", "ls", "bash",
+    "ask_user", "web_search", "web_fetch", "github", "mcp__context7__*",
+]
+# Writable by bash and edit/write, besides $TMPDIR. Memory is only written
+# through the memory tools.
+write_paths = []
+# Unreadable by bash and the file tools. The gateway also denies the claw
+# state dir, except the claw's own state and _shared.
+deny_read = [
+    "~/.ssh", "~/.aws", "~/.gnupg", "~/.netrc", "~/Library/Keychains",
+    "~/.config/gh", "~/.config/gcloud", "~/.config/zsh/dropins/nobackup-*",
+    "../../interactive/auth.json",
+]
+# Domains bash may reach (eg. "pypi.org", "*.githubusercontent.com"); empty
+# means none. web_*, github, and MCP tools run outside bash.
+network = []
+# Regexes on tool names or bash commands that need my approval in Discord.
+confirm = []
 
 [claw.limits]
 cost_usd = 5.0        # per run

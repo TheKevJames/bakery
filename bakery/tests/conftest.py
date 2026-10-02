@@ -55,3 +55,17 @@ def fixture_run_pi(
 
     yield make
     shutil.rmtree(sockets)
+
+
+@pytest.fixture(name='root', scope='function')
+def fixture_root(
+    fake_llm: harness.FakeLLM, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[pathlib.Path]:
+    """A gateway's world: state dir, fake model, and the repo's extensions."""
+    # Short, because the state dir holds unix sockets (104-byte path cap).
+    root = pathlib.Path(tempfile.mkdtemp(prefix='bk', dir='/tmp'))
+    monkeypatch.setenv('XDG_STATE_HOME', str(root / 'state'))
+    monkeypatch.setenv('BAKERY_FAKE_LLM_URL', fake_llm.url)
+    monkeypatch.setenv('BAKERY_REPO', str(harness.REPO))
+    yield root
+    shutil.rmtree(root)
