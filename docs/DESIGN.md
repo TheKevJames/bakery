@@ -8,7 +8,7 @@ gateway daemon and controlled over Discord.
 
 | Path | Contents |
 | --- | --- |
-| `pi/` | Shared pi resources: `extensions/`, `claw-extensions/` (claws only, eg. `ask_user`), `skills/` (incl. vendored), `prompts/`, `agents/`, `rules/` (instruction fragments). |
+| `pi/` | Shared pi resources: `extensions/`, `claw-extensions/` (claws only: `policy/`, `ask-user.ts`, `github.ts`), `skills/` (incl. vendored), `prompts/`, `agents/`, `rules/` (instruction fragments). |
 | `interactive/` | The interactive profile; used directly as `PI_CODING_AGENT_DIR`. |
 | `claws/<name>/` | One profile per claw: `claw.toml`, `context.toml`, `settings.json`, `SOUL.md`, `IDENTITY.md`, `AGENTS.md`. |
 | `bakery/` | Python project: the `bakery` CLI and the gateway. |
@@ -19,6 +19,12 @@ resources from `../pi/...` (or `../../pi/...` for claws). Pi writes some
 runtime state into the agent dir (`models-store.json`, `trust.json`, `npm/`);
 that is gitignored. Pi also rewrites `settings.json` (e.g.
 `lastChangelogVersion`), which is accepted churn.
+
+Claw profiles list their extensions explicitly rather than loading all of
+`pi/extensions/`: they need `context/`, `bakery.ts`, `time-awareness.ts`,
+`web.ts`, `mcp-servers.ts`, and `pi/claw-extensions/` (the gateway adds
+`policy/` itself), but not the TUI-only extensions or `subagent/` (its child
+pi runs would escape the gateway's cost ledger).
 
 ## State
 
@@ -235,11 +241,13 @@ resumes the unit with my reply as the prompt.
 ### Claw environment
 
 A claw's pi child gets only `PATH`, `HOME`, `USER`, `LANG`, `TMPDIR`,
-`TASK_FOLDER`, `XDG_*`, and `LC_*` from the gateway's environment, plus the
-names listed in its `secrets` (default `["ANTHROPIC_API_KEY"]`). Secret values
-come from the gateway's environment if set, else the Keychain (generic
-password, account `bakery`, service = the name). A missing secret fails the
-run.
+`TASK_FOLDER`, `XDG_*`, and `LC_*` from the gateway's environment, plus its
+`secrets`: entries `NAME` or `NAME=ITEM`, setting variable NAME from secret
+ITEM (default: NAME). The default is `ANTHROPIC_API_KEY`, `JINA_API_KEY`, and
+`GH_TOKEN=BAKERY_GITHUB_READ`. Secret values come from the gateway's
+environment if set, else the Keychain (generic password, account `bakery`,
+service = ITEM). A missing secret fails the run. Secrets are visible to pi and
+its extension tools, never to bash.
 
 ### Control
 
@@ -320,32 +328,67 @@ gateway's `Channel`), `transport` (the interface), `discord_transport`
 
 ## Safety
 
-Prompt-level rules are not enforcement. Four layers:
+Prompt-level rules are not enforcement. Each claw's `[policy]` (defaults in
+`claws/defaults.toml`, overridable per claw; there are no named tiers) is
+enforced in its pi child by `pi/claw-extensions/policy/`, which the gateway
+always loads with `--extension` so no profile can omit it. The gateway passes
+the policy as `BAKERY_POLICY`; without a valid one, every tool call is
+blocked.
 
-1. **Tool allowlist** per tier (`--tools` / `defaultTools`).
-2. **`claw-policy` extension** gating `tool_call`: write/edit path allowlists,
-   bash deny patterns, the `task` subcommand allowlist; anything else routed
-   to Discord for approval.
-3. **`sandbox-exec` around bash**: filesystem writes limited to the claw's
-   worktree and state dir; `$TASK_FOLDER` is write-denied (only the `task`
-   tool may touch it). Read-only tiers get no network from bash.
-4. **`pre-push` hook** in claw worktrees rejecting any ref other than
-   `kjames/bakery-*`.
+- `tools`: names or `*` patterns (eg. `mcp__context7__*`). Only these are
+  declared to the model, and any other call is blocked. The default allows
+  `read`, `grep`, `find`, `ls`, `bash`, `ask_user`, `web_search`,
+  `web_fetch`, `github`, and the context7 tools; no `edit` or `write`.
+- `write_paths`: where bash and `edit`/`write` may write, besides `$TMPDIR`.
+  Empty by default; build's worktrees in step 11. Memory is only written
+  through the memory tools.
+- `deny_read`: paths and globs nothing may read: `~/.ssh`, `~/.aws`,
+  `~/.gnupg`, `~/.netrc`, `~/Library/Keychains`, `~/.config/gh`,
+  `~/.config/gcloud`, `~/.config/zsh/dropins/nobackup-*`, and
+  `interactive/auth.json`. The gateway adds the whole claw state root, with
+  the claw's own state dir and `_shared` re-allowed, so claws read neither the
+  gateway's files nor each other's memory or transcripts.
+- `network`: domains bash may reach (eg. `pypi.org`, `*.githubusercontent.com`);
+  empty by default, so bash has no network. Build's allowlist arrives in step
+  11.
+- `confirm`: regexes on tool names or bash commands; a match asks me in
+  Discord (Approve/Deny) before running.
 
-Credentials (macOS Keychain, injected by the gateway per child, least
-privilege):
+Enforcement:
 
-- Discord bot token and model API keys (`auth.json` holds only `$ENV`
-  references), selected per claw by its `secrets` list (see
-  [Claw environment](#claw-environment)).
-- A read-only fine-grained GitHub PAT (metadata, contents, issues, PRs,
-  actions: read) for read-only claws.
-- A read-write fine-grained GitHub PAT (contents, PRs: write) for `build`.
+1. **Bash** runs inside Anthropic's `sandbox-runtime` (sandbox-exec on
+   macOS, bubblewrap on Linux): writes only to `write_paths` and `$TMPDIR`,
+   no reads under `deny_read`, and network only through its filtering proxy
+   to `network` domains. It also always blocks writes to `.git/hooks`,
+   `.git/config`, and shell rc files, and blocks unix sockets (so the
+   ssh-agent too). Secrets are removed from bash's environment.
+2. **pi's in-process file tools** (`read`, `ls`, `grep`, `find`, `edit`,
+   `write`) are checked by the extension against the same rules (paths are
+   resolved through symlinks first). `grep` and `find` are refused on a
+   directory that contains a denied path, since they recurse.
+3. **Tools that need the network or credentials** (`web_search`,
+   `web_fetch`, context7, `github`) run in pi's process, outside bash.
+   `github` is GET-only, through `gh api` with a read-only token.
+4. **Pushing** (step 11): bash cannot push (no credentials, no ssh-agent), so
+   build pushes through a `git_push` tool that only accepts `kjames/bakery-*`
+   refs and runs git with `-c core.hooksPath=<bakery hooks>`, whose
+   `pre-push` hook rejects anything else. The hook is not installed into
+   worktrees, which share hooks with my own checkouts.
 
-Because read-only claws have no network from bash, network access goes
-through extension tools: `web_search`, `web_fetch`, `context7`, and a GET-only
-`github` tool (via `gh api`). These replace the former skills in every
-profile.
+An extension that fails while pi starts (eg. a bad policy or `context.toml`)
+fails the run before the model is called.
+
+Credentials (macOS Keychain, least privilege, selected per claw by `secrets`):
+
+- `DISCORD_BOT_TOKEN` (gateway only), `ANTHROPIC_API_KEY`, `JINA_API_KEY`.
+- `BAKERY_GITHUB_READ`: a fine-grained PAT for `TheKevJames` repositories
+  with metadata, contents, issues, pull requests, and actions: read.
+- `BAKERY_GITHUB_WRITE` (step 11, build): as above plus contents and pull
+  requests: write.
+
+`web_search`, `web_fetch` (`pi/extensions/web.ts`), and context7 (an MCP
+server registered by `pi/extensions/mcp-servers.ts`) replace the former
+skills in every profile.
 
 ## Shared task list
 
@@ -454,8 +497,9 @@ for build. The gateway runs whatever `pi` is on `PATH`.
 5. Gateway core: RPC client, scheduler, ledger, control socket, CLI.
 6. Discord adapter and setup wizard; `bakery gateway run` and
    `bakery service install|uninstall` (launchd).
-7. Policy extension, sandbox, pre-push hook, secrets.
+7. Policy extension, sandbox, secrets, web/context7/github tools.
 8. Memory tools, flush, dream job.
 9. scout.
 10. triage.
-11. build.
+11. build, with its `git_push` tool, `github` write access, and the
+    pre-push hook.
