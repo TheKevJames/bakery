@@ -28,6 +28,10 @@ CREATE TABLE IF NOT EXISTS runs (
 );
 CREATE INDEX IF NOT EXISTS runs_work_key ON runs (work_key);
 CREATE INDEX IF NOT EXISTS runs_started_at ON runs (started_at);
+CREATE TABLE IF NOT EXISTS threads (
+    work_key TEXT PRIMARY KEY,
+    thread_id INTEGER NOT NULL UNIQUE
+);
 """
 
 
@@ -101,6 +105,31 @@ class Ledger:
             (work_key,),
         ).fetchone()
         return None if row is None else str(row['claw'])
+
+    def work_key_of(self, run_id: int) -> str | None:
+        row = self.db.execute(
+            'SELECT work_key FROM runs WHERE id = ?', (run_id,)
+        ).fetchone()
+        return None if row is None else str(row['work_key'])
+
+    def set_thread(self, work_key: str, thread_id: int) -> None:
+        self.db.execute(
+            'INSERT OR REPLACE INTO threads (work_key, thread_id)'
+            ' VALUES (?, ?)',
+            (work_key, thread_id),
+        )
+
+    def thread_of(self, work_key: str) -> int | None:
+        row = self.db.execute(
+            'SELECT thread_id FROM threads WHERE work_key = ?', (work_key,)
+        ).fetchone()
+        return None if row is None else int(row['thread_id'])
+
+    def work_key_of_thread(self, thread_id: int) -> str | None:
+        row = self.db.execute(
+            'SELECT work_key FROM threads WHERE thread_id = ?', (thread_id,)
+        ).fetchone()
+        return None if row is None else str(row['work_key'])
 
     def spent_today(
         self, tz: zoneinfo.ZoneInfo, claw: str | None = None

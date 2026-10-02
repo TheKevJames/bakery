@@ -64,6 +64,8 @@ def test_repo_defaults_with_claw_overrides(tmp_path: pathlib.Path) -> None:
         ),
         ('[[job]]\nname = "x"\ncron = "* * * * *"', 'missing prompt'),
         ('cwd = "${BAKERY_UNSET_VAR}/x"', 'is not set'),
+        ('secrets = ["lower"]', 'must be a list of names'),
+        ('secrets = "X"', 'must be a list of names'),
     ],
 )
 def test_invalid_config_is_rejected(

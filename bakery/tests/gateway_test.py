@@ -268,3 +268,38 @@ def test_control_rejects_bad_requests_and_configs(root: pathlib.Path) -> None:
         assert gateway.config.claw('a').limits.turns == 50
 
     testing_gateway.run_gateway(claws, fake, scenario)
+
+
+def test_claws_only_see_allowed_environment(
+    root: pathlib.Path,
+    fake_llm: harness.FakeLLM,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    claws = testing_gateway.make_claws(
+        root,
+        {
+            'a': 'secrets = ["BAKERY_FAKE_LLM_URL", "BAKERY_TEST_GRANTED"]\n',
+            'b': 'secrets = ["BAKERY_FAKE_LLM_URL", "BAKERY_TEST_MISSING"]\n',
+        },
+    )
+    monkeypatch.setenv('BAKERY_TEST_GRANTED', 'granted-value')
+    monkeypatch.setenv('BAKERY_TEST_PRIVATE', 'private-value')
+    monkeypatch.delenv('BAKERY_TEST_MISSING', raising=False)
+    fake = testing_gateway.FakeChannel()
+    fake_llm.queue(Reply(tool='bash', args={'command': 'env'}))
+
+    async def scenario(gateway: core.Gateway) -> None:
+        run = await fake.wait(gateway.trigger('a', None, 'go'))
+        assert run.status == 'settled'
+        transcript = fake_llm.transcript()
+        assert 'BAKERY_TEST_GRANTED=granted-value' in transcript
+        assert 'BAKERY_ASK_POLICY=ask' in transcript
+        assert 'private-value' not in transcript
+
+        missing = await fake.wait(gateway.trigger('b', None, 'go'))
+        assert missing.status == 'failed'
+        assert 'secret BAKERY_TEST_MISSING is not set' in (
+            missing.reason or ''
+        )
+
+    testing_gateway.run_gateway(claws, fake, scenario)

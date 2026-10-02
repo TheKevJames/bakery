@@ -40,6 +40,9 @@ class RunInfo:
 
 
 class Channel(Protocol):
+    async def notice(self, text: str) -> None:
+        """A gateway-level announcement (startup, budget, config errors)."""
+
     async def run_started(self, info: RunInfo) -> None: ...
 
     async def run_progress(self, info: RunInfo) -> None:

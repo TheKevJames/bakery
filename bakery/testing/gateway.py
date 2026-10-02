@@ -10,6 +10,7 @@ import textwrap
 from collections.abc import Awaitable
 from collections.abc import Callable
 
+from bakery.chat import relay
 from bakery.gateway import channel
 from bakery.gateway import control
 from bakery.gateway import core
@@ -40,11 +41,15 @@ class FakeChannel:
     progress: list[channel.RunInfo] = dataclasses.field(default_factory=list)
     finished: list[channel.RunInfo] = dataclasses.field(default_factory=list)
     asked: list[dict[str, object]] = dataclasses.field(default_factory=list)
+    notices: list[str] = dataclasses.field(default_factory=list)
     _done: collections.defaultdict[str, asyncio.Queue[channel.RunInfo]] = (
         dataclasses.field(
             default_factory=lambda: collections.defaultdict(asyncio.Queue)
         )
     )
+
+    async def notice(self, text: str) -> None:
+        self.notices.append(text)
 
     async def run_started(self, info: channel.RunInfo) -> None:
         self.started.append(info.work_key)
@@ -92,25 +97,31 @@ def make_claws(
     for name, extra in claws.items():
         profile = claws_dir / name
         profile.mkdir()
+        # Test-only extensions live here; others are repo paths.
         paths = [harness.FAKE_PROVIDER] + [
-            TESTING / ext for ext in (extensions or {}).get(name, [])
+            TESTING / ext if (TESTING / ext).exists() else harness.REPO / ext
+            for ext in (extensions or {}).get(name, [])
         ]
         settings = {'extensions': [str(p) for p in paths]}
         (profile / 'settings.json').write_text(json.dumps(settings))
         toml = 'model = "fake/echo"\nthinking = "off"\n'
+        if not re.search(r'^secrets\s*=', extra, re.MULTILINE):
+            toml += 'secrets = ["BAKERY_FAKE_LLM_URL"]\n'
         (profile / 'claw.toml').write_text(toml + textwrap.dedent(extra))
     return claws_dir
 
 
 def run_gateway(
     claws_dir: pathlib.Path,
-    fake: FakeChannel,
+    fake: channel.Channel,
     scenario: Callable[[core.Gateway], Awaitable[None]],
 ) -> None:
     """Start a gateway with its control socket, run `scenario`, stop it."""
 
     async def main() -> None:
         gateway = core.Gateway(claws_dir, fake)
+        if isinstance(fake, relay.Relay):
+            fake.bind(gateway)
         await gateway.start()
         stop_control = await control.serve(gateway)
         try:

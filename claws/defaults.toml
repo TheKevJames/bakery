@@ -6,11 +6,17 @@
 timezone = "Europe/Lisbon"  # cron schedules and the daily budget reset
 max_processes = 4           # live pi children across all claws
 daily_cost_usd = 50.0       # across all claws
+# [gateway.discord] (guild_id, owner_id) is appended by bin/discord-setup.
 
 [claw]
 enabled = true
 model = "anthropic/claude-sonnet-5-5"
 thinking = "high"
+# Environment variables passed to the claw; values come from the gateway's
+# environment or the Keychain (see bakery/bakery/secrets.py). Nothing else from
+# the gateway's environment is passed on beyond PATH, HOME, locale, XDG_*, and
+# TASK_FOLDER.
+secrets = ["ANTHROPIC_API_KEY"]
 # cwd defaults to the claw's state dir, $XDG_STATE_HOME/claws/<name>.
 
 [claw.limits]
