@@ -3,6 +3,8 @@ import pathlib
 from collections.abc import Awaitable
 from collections.abc import Callable
 
+import pytest
+
 from bakery.chat import relay
 from bakery.chat import transport
 from bakery.gateway import core
@@ -19,8 +21,9 @@ def run(
     scenario: Callable[
         [core.Gateway, relay.Relay, chat.FakeTransport], Awaitable[None]
     ],
+    latency: float = 0.0,
 ) -> None:
-    fake = chat.FakeTransport()
+    fake = chat.FakeTransport(latency)
     bot = relay.Relay(fake, chat.OWNER)
 
     async def wrapped(gateway: core.Gateway) -> None:
@@ -187,8 +190,11 @@ def test_ask_user_is_answered_by_a_thread_reply(
     run(claws, scenario)
 
 
+# With Discord latency, pi's own dialog timeout fires before the relay's,
+# and parking the run cancels the relay's wait for an answer.
+@pytest.mark.parametrize('latency', [0.0, 0.2])
 def test_unanswered_questions_park_until_resumed(
-    root: pathlib.Path, fake_llm: harness.FakeLLM
+    root: pathlib.Path, fake_llm: harness.FakeLLM, latency: float
 ) -> None:
     claws = testing_gateway.make_claws(
         root,
@@ -199,7 +205,6 @@ def test_unanswered_questions_park_until_resumed(
         Reply(
             tool='ask_user', args={'question': 'Merge?', 'assumption': 'no'}
         ),
-        Reply(text='should not run'),
         Reply(text='resumed fine'),
     )
 
@@ -213,15 +218,16 @@ def test_unanswered_questions_park_until_resumed(
         assert 'waiting for an answer: Merge?' in parked.text
         ask = await fake.message(thread, f'<@{chat.OWNER}> **Merge?**')
         await fake.until(lambda: ask.text.endswith('→ timed out'))
+        # Parking ends the run: no model call after the question.
+        assert len(fake_llm.requests) == 1
 
         resume = parked.button('Resume').custom_id
         assert await bot.on_component(chat.OWNER, resume, None) == (
             f'Resuming {key}.'
         )
         await fake.message(thread, 'resumed fine')
-        assert 'should not run' not in fake_llm.transcript()
 
-    run(claws, scenario)
+    run(claws, scenario, latency)
 
 
 def test_silent_jobs_only_post_when_they_have_news(

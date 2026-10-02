@@ -29,6 +29,7 @@ SELECT_BUTTON_LIMIT = 5
 SELECT_OPTION_LIMIT = 25
 THREAD_NAME_LIMIT = 90
 NOT_OWNER = 'Only the owner can do that.'
+TIMEOUT_GRACE = 2.0
 EXPIRED = 'This request has expired.'
 
 
@@ -37,9 +38,6 @@ class _Dialog:
     work_key: str
     method: str
     options: tuple[str, ...]
-    where: transport.Where
-    message_id: int
-    text: str
     answer: asyncio.Future[dict[str, object]]
 
 
@@ -209,36 +207,59 @@ class Relay:
             (cancel,),
         )
 
-    async def dialog(
+    async def _post_dialog(
         self, info: channel.RunInfo, request: dict[str, object]
-    ) -> dict[str, object]:
+    ) -> tuple[_Dialog, transport.Where, int, str]:
+        """Post a dialog's question; returns it with where it was posted."""
         request_id = str(request['id'])
         where = await self._thread(info.claw, info.work_key)
         text, options, components = self._render_dialog(request_id, request)
         text = render.clip(text)
-        message_id = await self.link.send(where, text, components=components)
         pending = _Dialog(
             info.work_key,
             str(request.get('method')),
             options,
-            where,
-            message_id,
-            text,
             asyncio.get_running_loop().create_future(),
         )
+        # Before sending: the message is clickable before send() returns.
         self._dialogs[request_id] = pending
+        try:
+            message_id = await self.link.send(
+                where, text, components=components
+            )
+        except BaseException:
+            self._dialogs.pop(request_id, None)
+            raise
+        return pending, where, message_id, text
+
+    async def dialog(
+        self, info: channel.RunInfo, request: dict[str, object]
+    ) -> dict[str, object]:
+        pending, where, message_id, text = await self._post_dialog(
+            info, request
+        )
         timeout = request.get('timeout')
         seconds = timeout / 1000 if isinstance(timeout, (int, float)) else None
+        loop = asyncio.get_running_loop()
+        deadline = None if seconds is None else loop.time() + seconds
         outcome = 'cancelled'
-        answer: dict[str, object] = {'cancelled': True}
+        answer: dict[str, object] | None = None
         try:
             answer = await asyncio.wait_for(pending.answer, seconds)
+            outcome = self._describe(answer)
         except TimeoutError:
             outcome = 'timed out'
-        else:
-            outcome = self._describe(answer)
         finally:
-            self._dialogs.pop(request_id, None)
+            # pi times dialogs out too, from when it sent the request, so it
+            # usually expires first; the run then stops and cancels this
+            # wait just before this deadline.
+            if (
+                answer is None
+                and deadline is not None
+                and loop.time() >= deadline - TIMEOUT_GRACE
+            ):
+                outcome = 'timed out'
+            self._dialogs.pop(str(request['id']), None)
             with contextlib.suppress(Exception):
                 await self.link.edit(
                     where,
@@ -246,7 +267,7 @@ class Relay:
                     render.clip(f'{text}\n→ {outcome}'),
                     components=(),
                 )
-        return answer
+        return answer or {'cancelled': True}
 
     @staticmethod
     def _describe(answer: dict[str, object]) -> str:

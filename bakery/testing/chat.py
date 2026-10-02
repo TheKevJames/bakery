@@ -39,7 +39,9 @@ class Thread:
 
 
 class FakeTransport:
-    def __init__(self) -> None:
+    def __init__(self, latency: float = 0.0) -> None:
+        # Seconds before each send returns, like a round trip to Discord.
+        self.latency = latency
         self.ids = itertools.count(1)
         self.threads: dict[int, Thread] = {}
         self.messages: dict[int, Message] = {}
@@ -77,6 +79,7 @@ class FakeTransport:
             where, text, tuple(components), attachment
         )
         self.changed.set()
+        await asyncio.sleep(self.latency)
         return message_id
 
     async def edit(
