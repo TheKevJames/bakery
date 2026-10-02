@@ -24,6 +24,7 @@ from .. import state
 DEFAULTS_NAME = 'defaults.toml'
 CLAW_NAME = 'claw.toml'
 NAME_RE = re.compile(r'[a-z][a-z0-9-]*')
+ENV_NAME_RE = re.compile(r'[A-Z_][A-Z0-9_]*')
 ASK_POLICIES = ('ask', 'assume', 'park')
 TIMEOUT_POLICIES = ('assume', 'park')
 
@@ -87,6 +88,7 @@ class Claw:
     limits: Limits
     concurrency: Concurrency
     ask: Ask
+    secrets: tuple[str, ...]
     jobs: tuple[Job, ...]
 
     @property
@@ -105,10 +107,18 @@ class Claw:
 
 
 @dataclasses.dataclass(frozen=True)
+class Discord:
+    guild_id: int
+    owner_id: int
+
+
+@dataclasses.dataclass(frozen=True)
 class Gateway:
     timezone: zoneinfo.ZoneInfo
     max_processes: int
     daily_cost_usd: float
+    # None without a [gateway.discord] table; only the gateway needs it.
+    discord: Discord | None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -171,6 +181,15 @@ class _Table:
         if value < minimum:
             raise ConfigError(f'{self.where}.{key}: must be >= {minimum}')
         return value
+
+    def names(self, key: str) -> tuple[str, ...]:
+        """A list of environment-variable names."""
+        value = self._get(key)
+        if not isinstance(value, list) or not all(
+            isinstance(x, str) and ENV_NAME_RE.fullmatch(x) for x in value
+        ):
+            raise ConfigError(f'{self.where}.{key}: must be a list of names')
+        return tuple(str(x) for x in value)
 
     def table(self, key: str) -> '_Table':
         value = self._get(key)
@@ -285,6 +304,7 @@ def _claw(name: str, profile: pathlib.Path, data: Mapping[str, Any]) -> Claw:
             max_resumes=concurrency.count('max_resumes', minimum=0),
             idle_exit_minutes=concurrency.positive('idle_exit_minutes'),
         ),
+        secrets=table.names('secrets'),
         ask=Ask(
             policy=ask.string('policy', ASK_POLICIES),
             timeout_hours=ask.positive('timeout_hours'),
@@ -303,10 +323,18 @@ def _gateway(data: Mapping[str, Any]) -> Gateway:
         tz = zoneinfo.ZoneInfo(table.string('timezone'))
     except zoneinfo.ZoneInfoNotFoundError:
         raise ConfigError('gateway.timezone: unknown timezone') from None
+    discord = None
+    if table.optional('discord'):
+        sub = table.table('discord')
+        discord = Discord(
+            guild_id=sub.count('guild_id'), owner_id=sub.count('owner_id')
+        )
+        sub.done()
     gateway = Gateway(
         timezone=tz,
         max_processes=table.count('max_processes'),
         daily_cost_usd=table.positive('daily_cost_usd'),
+        discord=discord,
     )
     table.done()
     return gateway

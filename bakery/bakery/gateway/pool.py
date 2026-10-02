@@ -10,13 +10,19 @@ import asyncio
 import contextlib
 import dataclasses
 import logging
+import os
 import time
 
+from .. import secrets
 from .. import state
 from . import config
 from . import rpc
 
 REAP_INTERVAL = 15.0
+# The only parts of the gateway's environment a claw sees, besides its
+# configured secrets.
+INHERITED_ENV = ('PATH', 'HOME', 'USER', 'LANG', 'TMPDIR', 'TASK_FOLDER')
+INHERITED_ENV_PREFIXES = ('XDG_', 'LC_')
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +33,26 @@ def session_id(work_key: str) -> str:
 
 def bakery_dir() -> str:
     return str(state.root() / '_gateway' / 'bakery')
+
+
+def child_env(claw: config.Claw) -> dict[str, str]:
+    """Raises secrets.SecretError if a configured secret is missing."""
+    env = {
+        name: value
+        for name, value in os.environ.items()
+        if name in INHERITED_ENV or name.startswith(INHERITED_ENV_PREFIXES)
+    }
+    env.update({name: secrets.get(name) for name in claw.secrets})
+    env.update(
+        {
+            'PI_CODING_AGENT_DIR': str(claw.profile),
+            'PI_CODING_AGENT_BAKERY_DIR': bakery_dir(),
+            'BAKERY_ASK_POLICY': claw.ask.policy,
+            'BAKERY_ASK_TIMEOUT_HOURS': f'{claw.ask.timeout_hours:g}',
+            'BAKERY_ASK_ON_TIMEOUT': claw.ask.on_timeout,
+        }
+    )
+    return env
 
 
 @dataclasses.dataclass
@@ -70,10 +96,7 @@ class Pool:
                 '--thinking', claw.thinking,
             ],
             cwd=claw.cwd,
-            env={
-                'PI_CODING_AGENT_DIR': str(claw.profile),
-                'PI_CODING_AGENT_BAKERY_DIR': bakery_dir(),
-            },
+            env=child_env(claw),
         )  # fmt: skip
         self.children[work_key] = Child(
             proc, claw.concurrency.idle_exit_minutes * 60

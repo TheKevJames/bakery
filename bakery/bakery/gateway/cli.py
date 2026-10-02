@@ -1,12 +1,20 @@
 """`bakery` subcommands that control the running gateway."""
 
 import argparse
+import asyncio
+import pathlib
 import sys
-import time
 from collections.abc import Callable
+from collections.abc import Coroutine
 from typing import Any
 
+from .. import paths
+from .. import secrets
+from .. import service
+from ..chat import render
+from . import config
 from . import control
+from . import main
 
 
 def _call(record: dict[str, object]) -> dict[str, Any]:
@@ -49,42 +57,58 @@ def do_reload(args: argparse.Namespace) -> int:
     return 0
 
 
-def _run_line(run: dict[str, Any]) -> str:
-    elapsed = int(time.time() - run['started_at'])
-    tool = f' [{run["current_tool"]}]' if run['current_tool'] else ''
-    return (
-        f'    {run["work_key"]}{tool}  {run["turns"]} turns'
-        f'  ${run["cost_usd"]:.2f}  {elapsed // 60}m{elapsed % 60:02d}s'
-    )
-
-
 def do_status(args: argparse.Namespace) -> int:
     _ = args
-    data = _call({'type': 'status'})
-    print(f'processes: {data["processes"]}')
-    for name, claw in data['claws'].items():
-        state = 'disabled' if not claw['enabled'] else 'enabled'
-        state = 'paused' if claw['paused'] else state
-        print(f'{name}: {state}')
-        for run in claw['active']:
-            print(_run_line(run))
-        for key in claw['queued']:
-            print(f'    {key} (queued)')
-        for job, due in sorted(claw['next'].items()):
-            print(f'    next {job}: {due}')
+    print(render.status(_call({'type': 'status'})))
     return 0
 
 
 def do_budget(args: argparse.Namespace) -> int:
     _ = args
-    data = _call({'type': 'budget'})
-    rows = [('all', data['global'])] + sorted(data['claws'].items())
-    width = max(len(name) for name, _ in rows)
-    for name, row in rows:
-        print(
-            f'{name:<{width}}  ${row["spent_usd"]:.2f}'
-            f' / ${row["limit_usd"]:.2f} today'
-        )
+    print(render.budget(_call({'type': 'budget'})))
+    return 0
+
+
+def _claws_dir(args: argparse.Namespace) -> pathlib.Path:
+    if args.claws_dir:
+        return pathlib.Path(args.claws_dir).expanduser().resolve()
+    try:
+        return paths.repo() / 'claws'
+    except paths.PathError as e:
+        sys.exit(str(e))
+
+
+def _run_async(coroutine: Coroutine[None, None, None]) -> int:
+    try:
+        asyncio.run(coroutine)
+    except (config.ConfigError, secrets.SecretError) as e:
+        sys.exit(str(e))
+    return 0
+
+
+def do_run(args: argparse.Namespace) -> int:
+    main.configure_logging()
+    return _run_async(main.run(_claws_dir(args)))
+
+
+def do_check(args: argparse.Namespace) -> int:
+    code = _run_async(main.check(_claws_dir(args)))
+    print('connected; see #bakery')
+    return code
+
+
+def do_service(args: argparse.Namespace) -> int:
+    try:
+        if args.service_command == 'install':
+            print(f'installed {service.install()}')
+        elif args.service_command == 'uninstall':
+            service.uninstall()
+            print('uninstalled')
+        else:
+            service.restart()
+            print('restarted')
+    except (service.ServiceError, paths.PathError) as e:
+        sys.exit(str(e))
     return 0
 
 
@@ -121,3 +145,20 @@ def add_parsers(add_parser: Callable[..., argparse.ArgumentParser]) -> None:
     gateway_sub.add_parser(
         'reload', help='reload claw configuration'
     ).set_defaults(func=do_reload)
+    for name, func, help_ in (
+        ('run', do_run, 'run the gateway in the foreground'),
+        ('check', do_check, 'test the Discord connection and setup'),
+    ):
+        parser = gateway_sub.add_parser(name, help=help_)
+        parser.add_argument(
+            '--claws-dir', help='default: claws/ in the bakery checkout'
+        )
+        parser.set_defaults(func=func)
+
+    service_parser = add_parser(
+        'service', help='manage the launchd agent running the gateway'
+    )
+    service_parser.add_argument(
+        'service_command', choices=('install', 'uninstall', 'restart')
+    )
+    service_parser.set_defaults(func=do_service)

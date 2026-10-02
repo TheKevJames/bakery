@@ -8,11 +8,11 @@ gateway daemon and controlled over Discord.
 
 | Path | Contents |
 | --- | --- |
-| `pi/` | Shared pi resources: `extensions/`, `skills/` (incl. vendored), `prompts/`, `agents/`, `rules/` (instruction fragments). |
+| `pi/` | Shared pi resources: `extensions/`, `claw-extensions/` (claws only, eg. `ask_user`), `skills/` (incl. vendored), `prompts/`, `agents/`, `rules/` (instruction fragments). |
 | `interactive/` | The interactive profile; used directly as `PI_CODING_AGENT_DIR`. |
 | `claws/<name>/` | One profile per claw: `claw.toml`, `context.toml`, `settings.json`, `SOUL.md`, `IDENTITY.md`, `AGENTS.md`. |
 | `bakery/` | Python project: the `bakery` CLI and the gateway. |
-| `bin/` | Helper scripts (e.g. `bin/vendor`). |
+| `bin/` | Helper scripts (eg. `bin/vendor`). |
 
 Every profile directory is a pi agent dir. Its `settings.json` loads shared
 resources from `../pi/...` (or `../../pi/...` for claws). Pi writes some
@@ -38,7 +38,12 @@ $XDG_STATE_HOME/claws/
 ```
 
 The interactive profile keeps using `$XDG_STATE_HOME/pi/{sessions,bakery}`.
-`bakery list|read|attach` scan both the interactive and the claw locations.
+`bakery list|show|read|send|pin|attach` cover both the interactive and the
+claw locations (claw sockets live in `_gateway/bakery/`, named after the work
+key, eg. `bakery read triage-task-151`). `bakery attach` refuses a claw
+session the gateway is running, and runs pi with the claw's profile
+otherwise. `bakery gc` never collects claw sessions, since units of work
+resume from them.
 
 ## Context assembly
 
@@ -220,6 +225,22 @@ Configurable per claw:
 - `assume` — record the assumption and continue.
 - `park` — stop and wait for me.
 
+`ask_user` (`pi/claw-extensions/ask-user.ts`) reads the policy from
+`BAKERY_ASK_*` variables the gateway sets per child. It asks through a pi
+`input` dialog with the timeout attached; cancelling counts as no answer.
+Parking returns `details.park` on the tool result, which the runner turns
+into a parked run (`waiting for an answer: …`); replying in the thread then
+resumes the unit with my reply as the prompt.
+
+### Claw environment
+
+A claw's pi child gets only `PATH`, `HOME`, `USER`, `LANG`, `TMPDIR`,
+`TASK_FOLDER`, `XDG_*`, and `LC_*` from the gateway's environment, plus the
+names listed in its `secrets` (default `["ANTHROPIC_API_KEY"]`). Secret values
+come from the gateway's environment if set, else the Keychain (generic
+password, account `bakery`, service = the name). A missing secret fails the
+run.
+
 ### Control
 
 The control socket backs `bakery trigger|pause|resume|status|budget` and
@@ -230,21 +251,72 @@ takes a claw, `all`, or a work key (re-running a parked unit).
 
 ## Discord
 
-One bot application in a private guild:
+One bot application in a private guild; the gateway creates what is missing
+on connect:
 
-- `#bakery` — gateway status and control commands.
-- `#bakery-<claw>` (e.g. `#bakery-scout`, `#bakery-triage`, `#bakery-build`)
-  — one channel per claw. Each claw posts through a per-channel webhook with
-  its own name and avatar.
-- Only my user ID is accepted; DMs are disabled.
+- a `bakery` category,
+- `#bakery` — gateway notices (start/stop, rejected reloads, exhausted daily
+  budgets) and slash commands,
+- `#bakery-<claw>` per enabled claw (eg. `#bakery-scout`), each with one
+  bot-owned webhook so the claw posts under its own name (and
+  `claws/<name>/avatar.png`, if present). Claws added later need a gateway
+  restart for their channel.
 
-In each thread: one live status message edited in place (current tool, turns,
-cost, elapsed); questions and approvals as buttons that @mention me; the final
-assistant message; failures and limit breaches (also @mentioning me). Full
-transcripts are available via `bakery read|attach`.
+Only my user ID is acted on (others' messages are ignored and their clicks
+and commands refused); bots, webhooks, and DMs are ignored. Settings live in
+`claws/defaults.toml` as `[gateway.discord]` (`guild_id`, `owner_id`); the
+bot token is the `DISCORD_BOT_TOKEN` secret.
 
-Setup (bot application, Message Content intent, channels, Keychain token) is
-a generated `wizard` script.
+Routing:
+
+- My top-level message in `#bakery-<claw>` starts a thread on it; the work key
+  is `<claw>/thread-<thread-id>` and my message is the prompt.
+- Gateway-started work (cron, manual, queues) gets a thread named after its
+  work key. Work-key ↔ thread mappings are kept in `runs.db`.
+- My reply in a thread answers a pending `input` dialog if there is one,
+  else steers the in-flight run, else queues a run with the reply as its
+  prompt. Replies are acknowledged with a reaction.
+- `silent_ok` runs create no thread unless they produce something other than
+  `NO_REPLY` or need attention.
+
+In each thread:
+
+- one status message per run, edited at most every 5s
+  (`⏳ <key> · <tool> · turn 3 · $0.42 · 2m10s`) and replaced by the outcome;
+- the final reply, in ≤2000-character chunks, or attached as `reply.md` if it
+  would take more than 4 messages;
+- for parked, failed, or interrupted runs, an @mention with the reason and a
+  **Resume** button;
+- dialogs, @mentioning me: `confirm` as Approve/Deny; `select` as buttons (up
+  to 5 options) or a select menu; `input`/`editor` as "reply in this thread",
+  each with Cancel. Answered, timed-out, and cancelled dialogs are edited to
+  say so and lose their buttons. Buttons survive restarts (discord.py
+  `DynamicItem`s); clicking one whose request is gone says it expired.
+
+Slash commands (guild-scoped): `/status`, `/budget`, `/trigger claw [job]
+[prompt]`, `/pause target [abort]`, `/resume target`, `/reload`.
+
+Code: `bakery/bakery/chat/` — `relay` (all behaviour; implements the
+gateway's `Channel`), `transport` (the interface), `discord_transport`
+(discord.py, kept thin), and `render` (text, shared with the CLI).
+
+### Running it
+
+1. One-time Discord setup (done by hand): a `bakery` application whose bot
+   has Public Bot off and the Message Content intent on; the bot invited to
+   my server with the `bot` and `applications.commands` scopes and
+   permissions to view, manage, and post in channels and public threads,
+   manage webhooks, read history, attach files, and add reactions; its token
+   stored as the `DISCORD_BOT_TOKEN` Keychain secret; and the server and my
+   user IDs in `[gateway.discord]`. `bakery gateway check` verifies it
+   (connects, creates the layout, posts to `#bakery`).
+2. `bakery service install|uninstall|restart` manages the launchd agent
+   `in.thekev.bakery` (`~/Library/LaunchAgents/in.thekev.bakery.plist`):
+   `bakery gateway run`, kept alive, with `PATH`, `HOME`, `LANG`,
+   `TASK_FOLDER`, `XDG_*`, and `BAKERY_REPO` recorded at install time.
+   Install from the pipx `bakery` so the plist points at a stable path.
+3. Logs: `$XDG_STATE_HOME/claws/_gateway/gateway.log` (rotating), and
+   `launchd.log` for anything before logging starts. SIGHUP reloads config.
 
 ## Safety
 
@@ -264,7 +336,8 @@ Credentials (macOS Keychain, injected by the gateway per child, least
 privilege):
 
 - Discord bot token and model API keys (`auth.json` holds only `$ENV`
-  references).
+  references), selected per claw by its `secrets` list (see
+  [Claw environment](#claw-environment)).
 - A read-only fine-grained GitHub PAT (metadata, contents, issues, PRs,
   actions: read) for read-only claws.
 - A read-write fine-grained GitHub PAT (contents, PRs: write) for `build`.

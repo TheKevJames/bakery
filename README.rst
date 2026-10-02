@@ -10,6 +10,7 @@ Layout
 - ``pi/``: shared extensions, skills, prompts, agents, and rules
 - ``interactive/``: the interactive pi profile (``PI_CODING_AGENT_DIR``)
 - ``bakery/``: the ``bakery`` CLI (Python, ``uv``)
+- ``claws/``: claw profiles and gateway configuration (``defaults.toml``)
 - ``bin/vendor``: refresh vendored skills under ``pi/skills/vendor``
 
 Setup
@@ -21,6 +22,8 @@ Setup
     $ bun install --frozen-lockfile --cwd ~/src/personal/bakery/pi
     $ pipx install --force ~/src/personal/bakery/bakery
     $ bakery state init
+
+Then, for the claws' gateway: ``bakery service install``.
 
 .. _docs/DESIGN.md: docs/DESIGN.md
 .. _pi: https://github.com/earendil-works/pi

@@ -11,7 +11,6 @@ import collections
 import contextlib
 import itertools
 import json
-import os
 import pathlib
 from collections.abc import Mapping
 from collections.abc import Sequence
@@ -57,7 +56,9 @@ class PiProcess:
             'rpc',
             *args,
             cwd=cwd,
-            env={**os.environ, **env},
+            # Deliberately not inherited: the caller decides exactly what a
+            # claw may see.
+            env=dict(env),
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

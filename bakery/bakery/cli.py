@@ -48,6 +48,15 @@ def bakery_dir() -> pathlib.Path:
     )
 
 
+def claw_bakery_dir() -> pathlib.Path:
+    """Sockets of the gateway's claw sessions."""
+    return state.root() / '_gateway' / 'bakery'
+
+
+def bakery_dirs() -> list[pathlib.Path]:
+    return [bakery_dir(), claw_bakery_dir()]
+
+
 def is_safe_name(name: str) -> bool:
     if not name:
         return False
@@ -66,14 +75,35 @@ def alias_map(base: pathlib.Path) -> dict[str, list[str]]:
     return result
 
 
+def all_aliases() -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {}
+    for base in bakery_dirs():
+        if base.is_dir():
+            result.update(alias_map(base))
+    return result
+
+
+def live_sockets() -> list[pathlib.Path]:
+    """Socket files in every bakery dir (live or stale)."""
+    return [
+        socket_path
+        for base in bakery_dirs()
+        if base.is_dir()
+        for socket_path in base.glob(f'*{SOCKET_SUFFIX}')
+    ]
+
+
 def resolve_socket(session: str) -> pathlib.Path:
     if not is_safe_name(session):
         sys.exit(f'invalid session: {session}')
-    base = bakery_dir()
-    alias = base / f'{session}{ALIAS_SUFFIX}'
-    if alias.is_symlink():
-        return pathlib.Path(os.path.normpath(base / os.readlink(alias)))
-    return base / f'{session}{SOCKET_SUFFIX}'
+    for base in bakery_dirs():
+        alias = base / f'{session}{ALIAS_SUFFIX}'
+        if alias.is_symlink():
+            return pathlib.Path(os.path.normpath(base / os.readlink(alias)))
+        socket_path = base / f'{session}{SOCKET_SUFFIX}'
+        if socket_path.exists():
+            return socket_path
+    return bakery_dir() / f'{session}{SOCKET_SUFFIX}'
 
 
 def sessions_dir() -> pathlib.Path:
@@ -85,13 +115,31 @@ def sessions_dir() -> pathlib.Path:
     )
 
 
-def top_level_sessions() -> list[pathlib.Path]:
+def claw_session_dirs() -> list[pathlib.Path]:
+    return sorted(state.root().glob('*/sessions'))
+
+
+def top_level_sessions(*, include_claws: bool = True) -> list[pathlib.Path]:
     # Top-level sessions are `<TIMESTAMP>_<uuid>.jsonl`; subagent sidecar
     # files live under `<TIMESTAMP>_<uuid>/` subdirs.
-    store = sessions_dir()
-    if not store.is_dir():
-        return []
-    return [s for s in store.glob('*.jsonl') if '_' in s.name]
+    stores = [sessions_dir()]
+    if include_claws:
+        stores += claw_session_dirs()
+    return [
+        session
+        for store in stores
+        if store.is_dir()
+        for session in store.glob('*.jsonl')
+        if '_' in session.name
+    ]
+
+
+def claw_of_session(session_id: str) -> str | None:
+    """The claw whose state dir holds this session, if any."""
+    for store in claw_session_dirs():
+        if any(store.glob(f'*_{session_id}.jsonl')):
+            return store.parent.name
+    return None
 
 
 def path_to_id(path: pathlib.Path) -> str:
@@ -225,9 +273,8 @@ def state_dot(status: str) -> str:
 
 
 def live_session_ids() -> set[str]:
-    base = bakery_dir()
     ids: set[str] = set()
-    for socket_path in base.glob(f'*{SOCKET_SUFFIX}') if base.is_dir() else []:
+    for socket_path in live_sockets():
         if query_status(socket_path) is None:
             continue
         session_id = socket_path.name[: -len(SOCKET_SUFFIX)]
@@ -238,12 +285,11 @@ def live_session_ids() -> set[str]:
 
 def list_entries() -> list[tuple[str, bool, str]]:
     """Return (name, pinned, status) for live and pinned sessions."""
-    base = bakery_dir()
-    aliases = alias_map(base) if base.is_dir() else {}
+    aliases = all_aliases()
 
     live_status: dict[str, str] = {}
     live_name: dict[str, str] = {}
-    for socket_path in base.glob(f'*{SOCKET_SUFFIX}') if base.is_dir() else []:
+    for socket_path in live_sockets():
         status = query_status(socket_path)
         if status is None:
             continue
@@ -288,8 +334,11 @@ def do_list(args: argparse.Namespace) -> int:
 def status_for_id(session_id: str) -> str:
     if not session_id:
         return 'dead'
-    status = query_status(bakery_dir() / f'{session_id}{SOCKET_SUFFIX}')
-    return status if status is not None else 'dead'
+    for base in bakery_dirs():
+        status = query_status(base / f'{session_id}{SOCKET_SUFFIX}')
+        if status is not None:
+            return status
+    return 'dead'
 
 
 ShowRecord = tuple[str, str, str | None, str]
@@ -303,13 +352,12 @@ def show_record(session: str) -> ShowRecord | None:
         sid = info.get('sessionId', '')
         return (sid, session, info.get('cwd'), status_for_id(sid))
 
-    base = bakery_dir()
     if is_safe_name(session):
         socket_path = resolve_socket(session)
         status = query_status(socket_path)
         if status is not None:
             sid = socket_path.name[: -len(SOCKET_SUFFIX)]
-            names = alias_map(base).get(str(socket_path), [])
+            names = all_aliases().get(str(socket_path), [])
             alias_name = names[0] if names else '(none)'
             return (sid, alias_name, cwd_for_id(sid), status)
 
@@ -509,10 +557,14 @@ def protected_session_ids() -> set[str]:
 
 
 def gc_targets() -> list[pathlib.Path]:
-    """Stale session files plus their `<TIMESTAMP>_<uuid>/` sidecar dirs."""
+    """
+    Stale interactive session files plus their `<TIMESTAMP>_<uuid>/` sidecar
+    dirs. Claw sessions are never collected: a unit of work resumes from its
+    session file, possibly days later.
+    """
     protected = protected_session_ids()
     targets: list[pathlib.Path] = []
-    for path in top_level_sessions():
+    for path in top_level_sessions(include_claws=False):
         if path_to_id(path) in protected:
             continue
         targets.append(path)
@@ -645,9 +697,25 @@ def do_attach(args: argparse.Namespace) -> int:
     # it `pi --session-id` would silently start a fresh session instead.
     if not has_session_file(session_id):
         sys.exit(f'no saved history yet for {args.session}; nothing to attach')
+    command = ['pi', '--session-id', session_id]
+    claw = claw_of_session(session_id)
+    if claw is not None:
+        # The gateway's child owns a live claw session; a second pi on the
+        # same session would interleave writes.
+        if status_for_id(session_id) != 'dead':
+            sys.exit(
+                f'{args.session} is running in the gateway; use read/send'
+            )
+        try:
+            os.environ['PI_CODING_AGENT_DIR'] = str(
+                paths.repo() / 'claws' / claw
+            )
+        except paths.PathError as e:
+            sys.exit(str(e))
+        command += ['--session-dir', str(state.root() / claw / 'sessions')]
     if cwd:
         os.chdir(pathlib.Path(cwd).expanduser())
-    os.execvp('pi', ('pi', '--session-id', session_id))
+    os.execvp('pi', command)
 
 
 def do_state_init(args: argparse.Namespace) -> int:

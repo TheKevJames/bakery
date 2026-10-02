@@ -75,6 +75,9 @@ class Gateway:
         self.paused: set[str] = set()
         self._wake = asyncio.Event()
         self._dispatcher: asyncio.Task[None] | None = None
+        self._notices: set[asyncio.Task[None]] = set()
+        # (day, claw) pairs already announced as out of budget.
+        self._broke: set[tuple[datetime.date, str]] = set()
 
     @property
     def tz(self) -> zoneinfo.ZoneInfo:
@@ -87,9 +90,11 @@ class Gateway:
         self.pool.start()
         self.scheduler.start(self.config.claws.values(), self.tz)
         self._dispatcher = asyncio.create_task(self._dispatch_loop())
+        self._notify('gateway started')
 
     async def stop(self) -> None:
         self.scheduler.stop()
+        await self._notice('gateway stopping')
         if self._dispatcher:
             self._dispatcher.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -102,6 +107,18 @@ class Gateway:
         await self.pool.close()
         self.runs.mark_interrupted()
         self.runs.close()
+
+    async def _notice(self, text: str) -> None:
+        try:
+            await self.channel.notice(text)
+        except Exception:
+            log.exception('channel failed posting notice: %s', text)
+
+    def _notify(self, text: str) -> None:
+        log.info('notice: %s', text)
+        task = asyncio.create_task(self._notice(text))
+        self._notices.add(task)
+        task.add_done_callback(self._notices.discard)
 
     # Dispatch
 
@@ -208,6 +225,7 @@ class Gateway:
             if budget.cost_usd <= 0:
                 info.status = ledger.Status.parked
                 info.reason = 'daily budget exhausted'
+                self._announce_broke(claw.name)
                 return
             proc = await self.pool.acquire(claw, request.work_key)
             # Events left over from this child's previous run must go before
@@ -242,6 +260,12 @@ class Gateway:
             await self.channel.run_finished(info)
         except Exception:
             log.exception('channel failed reporting %s', info.work_key)
+
+    def _announce_broke(self, claw: str) -> None:
+        key = (datetime.datetime.now(self.tz).date(), claw)
+        if key not in self._broke:
+            self._broke.add(key)
+            self._notify(f'{claw} has exhausted its daily budget')
 
     def _abort(
         self, active: Active, status: ledger.Status, reason: str
@@ -309,8 +333,28 @@ class Gateway:
             raise GatewayError(f'{target} is already running or queued')
         self.submit(Request(claw, target, RESUME_PROMPT, 'resume'))
 
+    def message(self, claw: str, work_key: str, text: str) -> str:
+        """
+        Deliver a message from me to a unit of work.
+
+        Steers the unit's run if one is in flight, else queues a run with the
+        message as its prompt. Returns 'steered' or 'queued'.
+        """
+        if not self.config.claw(claw).enabled:
+            raise GatewayError(f'{claw} is disabled')
+        active = self.active.get(work_key)
+        if active is not None and active.proc is not None:
+            runner.request_steer(active.proc, text)
+            return 'steered'
+        self.submit(Request(claw, work_key, text, 'message'))
+        return 'queued'
+
     def reload(self) -> None:
-        self.config = config.load(self.claws_dir)
+        try:
+            self.config = config.load(self.claws_dir)
+        except config.ConfigError as e:
+            self._notify(f'config reload rejected: {e}')
+            raise
         self.scheduler.start(self.config.claws.values(), self.tz)
         self._wake.set()
 
