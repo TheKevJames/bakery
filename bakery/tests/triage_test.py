@@ -68,7 +68,7 @@ def test_works_through_the_queue_one_ticket_per_unit(
     fake_llm.queue(
         call(id=1, claim=True),
         call(id=1, priority='high', size='small', description_append='notes'),
-        call(id=1, tag='Bakery/build/high', release=True),
+        call(id=1, tag='Bakery/build', release=True),
         Reply(text='1 to build'),
         call(id=3, claim=True),
         call(id=3, tag='Bakery/wontfix', priority='low', size='small'),
@@ -100,7 +100,7 @@ def test_works_through_the_queue_one_ticket_per_unit(
         first['priority'],
         first['size'],
         first['owner'],
-    ) == ('Bakery/build/high', 'high', 'small', None)
+    ) == ('Bakery/build', 'high', 'small', None)
     assert first['description'] == 'notes'
     assert (second['tag'], second['priority'], second['owner']) == (
         'Bakery/wontfix',

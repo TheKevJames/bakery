@@ -47,10 +47,9 @@ Always set `priority` (`low`, `medium`, `high`) and `size` (`small`,
 
 Move it with `task_set(id, tag=...)`, then `task_set(id, release=true)`:
 
-- `Bakery/build/<priority>` (eg. `Bakery/build/high`) when all hold: the
-  change is in a TheKevJames repository checked out under `~/src/personal`;
-  the scope is clear and needs no decision from Kevin; and success can be
-  checked by tests, lint, or CI.
+- `Bakery/build` when all hold: the change is in a TheKevJames repository
+  checked out under `~/src/personal`; the scope is clear and needs no
+  decision from Kevin; and success can be checked by tests, lint, or CI.
 - `Bakery/human` when it needs a decision, a preference, reproduction,
   credentials, access to systems outside the repositories, or anything you
   are unsure about.
