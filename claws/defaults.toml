@@ -6,7 +6,10 @@
 timezone = "Europe/Lisbon"  # cron schedules and the daily budget reset
 max_processes = 4           # live pi children across all claws
 daily_cost_usd = 50.0       # across all claws
-# [gateway.discord] (guild_id, owner_id) is appended by bin/discord-setup.
+
+[gateway.discord]
+guild_id = 1465773145427280065  # my private server
+owner_id = 523678345662300161   # the only user the bot acts on
 
 [claw]
 enabled = true
