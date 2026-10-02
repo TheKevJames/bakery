@@ -3,6 +3,7 @@
 /interactive/models-store.json
 /interactive/npm/
 /interactive/trust.json
+/claws/*/auth.json
 /claws/*/mcp-auth.json
 /claws/*/models-store.json
 /claws/*/npm/

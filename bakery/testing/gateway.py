@@ -150,7 +150,8 @@ def _make_profile(
         'prompts': [str(harness.REPO / 'pi' / 'claw-prompts')],
     } | settings
     (profile / 'settings.json').write_text(json.dumps(profile_settings))
+    extra = textwrap.dedent(extra)
     toml = 'model = "fake/echo"\nthinking = "off"\n'
     if not re.search(r'^secrets\s*=', extra, re.MULTILINE):
         toml += 'secrets = ["BAKERY_FAKE_LLM_URL"]\n'
-    (profile / 'claw.toml').write_text(toml + textwrap.dedent(extra))
+    (profile / 'claw.toml').write_text(toml + extra)

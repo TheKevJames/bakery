@@ -78,6 +78,7 @@ def child_env(claw: config.Claw, job: config.Job | None) -> dict[str, str]:
                 allow_read=[claw.state_dir, state.root() / state.SHARED],
                 secret_names=claw.secrets,
             ),
+            'BAKERY_CLAW': claw.name,
             'PI_CODING_AGENT_DIR': str(claw.profile),
             'PI_CODING_AGENT_BAKERY_DIR': bakery_dir(),
             'BAKERY_ASK_POLICY': claw.ask.policy,

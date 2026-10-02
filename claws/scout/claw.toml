@@ -1,0 +1,28 @@
+# scout: finds things in my repos that belong on my task list (CI failures
+# and warnings, issues and PRs, TODO comments) and adds them for triage.
+# Candidates are gathered deterministically by bakery/bakery/collectors/
+# scout.py from scout.toml; the model only writes them up.
+
+model = "anthropic/claude-sonnet-5-5"
+thinking = "medium"
+
+[limits]
+cost_usd = 2.0
+
+[ask]
+policy = "assume"  # never interrupt me; note assumptions in the report
+
+[policy]
+# Read-only, and no bash: the collector gathers everything scout needs.
+tools = [
+    "read", "grep", "find", "ls",
+    "web_fetch", "github", "mcp__context7__*",
+    "memory_append", "memory_search", "memory_get",
+    "task_list", "task_add",
+]
+
+[[job]]
+name = "daily"
+cron = "0 7 * * *"
+prompt = "Add today's candidates to the task list."
+collector = "scout"

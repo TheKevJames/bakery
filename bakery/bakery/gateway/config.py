@@ -18,6 +18,7 @@ from typing import Any
 
 import croniter
 
+from .. import collectors
 from .. import state
 from . import policy as policy_
 from . import toml
@@ -76,6 +77,8 @@ class Job:
     model: str | None
     thinking: str | None
     tools: tuple[str, ...]
+    # A bakery.collectors name: gathers input first; nothing found, no run.
+    collector: str | None
     # Defined in defaults.toml for every claw, rather than by this claw.
     shared: bool
 
@@ -170,6 +173,13 @@ def _active_hours(raw: str, where: str) -> ActiveHours:
     return ActiveHours(start, end)
 
 
+def _collector(table: toml.Table) -> str | None:
+    if not table.optional('collector'):
+        return None
+    name = table.string('collector', tuple(collectors.COLLECTORS))
+    return name
+
+
 def _job(table: toml.Table, names: set[str], shared: set[str]) -> Job:
     name = table.string('name')
     if not NAME_RE.fullmatch(name) or name in names:
@@ -195,6 +205,7 @@ def _job(table: toml.Table, names: set[str], shared: set[str]) -> Job:
             table.string('thinking') if table.optional('thinking') else None
         ),
         tools=table.strings('tools') if table.optional('tools') else (),
+        collector=_collector(table),
         shared=name in shared,
     )
     table.done()
