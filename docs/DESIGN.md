@@ -210,7 +210,14 @@ transcripts.
   candidates are never handed over twice (a manual trigger while one is
   under way is refused). `bakery status` shows collections in progress, and
   a manual trigger says when it is collecting. Problems are posted to
-  `#bakery`.
+  `#bakery`. A collector may also name the run's unit of work (eg. one per
+  ticket, `triage/task-151`), so a ticket keeps one thread and session.
+  Job starting lives in `bakery/bakery/gateway/jobs.py`.
+- **repeat**: a job with `repeat = true` starts again after each settled run
+  (not after replies or resumes), until its collector finds nothing, the
+  claw is paused, or its budget runs out; for working through a queue. If
+  the collector hands back the unit that just settled, the run did not get
+  anywhere: the repeat stops with a notice rather than looping.
 - **cron**: 5-field expressions in `claw.toml`, Europe/Lisbon, optional
   `active_hours`. Missed runs (Mac asleep, gateway down) are skipped. Jobs in
   `defaults.toml`'s `[claw]` table apply to every claw (a claw's job of the
@@ -221,8 +228,10 @@ transcripts.
 - **heartbeat**: a cron job flagged `silent_ok`; a run whose only reply is
   `NO_REPLY` posts nothing and creates no thread. (Built, unused by the v1
   claws.) A `NO_REPLY` message never becomes any run's reply.
-- **queue pollers**: e.g. `task` filters, GitHub PR state.
-- **file watch**: with debounce.
+- **file watch**: `watch = "<path>"` starts the job once files under the
+  path have changed and then been quiet for `debounce_seconds` (default
+  120). The gateway polls names, sizes, and modification times every 10s
+  (`bakery/bakery/gateway/watcher.py`); nothing fires at startup.
 - **manual**: `bakery trigger <claw>` or the Discord equivalent.
 - **Discord messages**: top-level messages and thread replies.
 
@@ -443,7 +452,10 @@ Claws share my existing `task` tool (`~/src/personal/tools/task`, data in
   into its own `<id>.md` file (the rule becomes: description, owner, or link);
 - `set --owner X` is a compare-and-set (fails if owned by someone else unless
   `--force`); `unset owner` releases;
-- `set --description-append`, `add --link`, `owner`/`link` filters, `--json`
+- `priority` (low, medium, high) and `size` (small, medium, large) fields,
+  also frontmatter, set by triage;
+- `set --description-append`, `add --link`, `owner`/`link`/`priority`/`size`
+  filters, `--json`
   on `list` and `show`;
 - property tests (parse/render round-trip; concurrent writers lose nothing).
 
@@ -456,10 +468,11 @@ gets; claims are always made as the claw itself (`BAKERY_CLAW`).
 
 1. `scout` adds tasks (auto-tagged `Triage`) with a `link`.
 2. `triage` claims `tag=triage` tasks (including ones I add by hand),
-   researches, appends notes and a priority tag, then re-tags to
-   `Bakery/build`, `Bakery/human`, or `Bakery/wontfix` and releases.
-3. `build` claims `Bakery/build` tasks, moves them to `Bakery/review` once a
-   PR is open, and runs `done` after merge.
+   researches, appends notes, sets `priority` and `size`, then re-tags to
+   `Bakery/build/<priority>`, `Bakery/human`, or `Bakery/wontfix` and
+   releases.
+3. `build` claims `Bakery/build/*` tasks (high priority first), moves them to
+   `Bakery/review` once a PR is open, and runs `done` after merge.
 
 I delete `Bakery/wontfix` tasks myself.
 
@@ -505,17 +518,36 @@ Finds things in my repos that belong on my task list. Profile:
 
 ### triage — read-only + web
 
-- Research only: code locations, root-cause hypothesis, acceptance criteria,
-  size, priority, route. Anything needing reproduction routes to
-  `Bakery/human`.
-- `task` allowlist: `list`, `show`, `set` (tag, owner, description-append).
-- Ask policy: `ask`; on timeout, move to `Bakery/human` and report failure.
-- One ticket at a time. Triggered by a file watch on `$TASK_FOLDER` (2-minute
-  debounce), an hourly catch-up cron, or manually.
+Profile: `claws/triage/`. Sonnet, medium thinking, $3 per ticket.
+
+- The `queue` job's `triage` collector (`bakery/bakery/collectors/triage.py`)
+  hands over the lowest-numbered unowned task tagged `Triage`, skipping
+  scheduled (recurring) ones, as the unit `triage/task-<id>`. It runs hourly,
+  within two minutes of `$TASK_FOLDER` changing (scout or I add tickets),
+  manually, and on repeat until the queue is empty.
+- Per ticket: claim it, check the source still exists, research (code,
+  history, issues, docs, web; no reproduction, tests, or edits), append notes
+  (route and reason, source check, code locations, hypothesis, approach,
+  acceptance criteria, open questions), always set `priority` and `size`,
+  then re-tag and release:
+  - `Bakery/build/<priority>`: a TheKevJames repo checked out under
+    `~/src/personal`, clear scope, checkable by tests, lint, or CI;
+  - `Bakery/human`: needs a decision, reproduction, credentials, outside
+    systems, or anything uncertain;
+  - `Bakery/wontfix`: false positive, done, obsolete, or duplicate, with
+    what to change at the source.
+- Tools: read-only defaults (bash without network or writes), web, `github`,
+  context7, memory, `ask_user`, and `task_list`, `task_show`, `task_set`.
+- Ask policy `ask`, falling back to `assume`; every question's assumption is
+  "route this ticket to Bakery/human", so an unanswered question routes it
+  there and the reply says triage could not finish.
+- A ticket left claimed by a failed or parked run is not picked up again;
+  its thread's Resume button continues it.
 
 ### build — worktree + push
 
-- Picks `Bakery/build` tasks: `highpri` first, then lowest id.
+- Picks `Bakery/build/*` tasks: `high`, then `medium`, then `low`, then
+  lowest id.
 - Works in `$XDG_STATE_HOME/claws/build/worktrees/<repo>/<task-id>`, created
   with `git worktree add` from the checkouts listed in `build.toml`; removed
   after merge/close. Full network (package registries).

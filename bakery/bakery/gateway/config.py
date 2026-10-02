@@ -26,6 +26,7 @@ from . import toml
 DEFAULTS_NAME = 'defaults.toml'
 CLAW_NAME = 'claw.toml'
 ConfigError = toml.ConfigError
+DEFAULT_DEBOUNCE_SECONDS = 120.0
 NAME_RE = re.compile(r'[a-z][a-z0-9-]*')
 ASK_POLICIES = ('ask', 'assume', 'park')
 TIMEOUT_POLICIES = ('assume', 'park')
@@ -79,6 +80,13 @@ class Job:
     tools: tuple[str, ...]
     # A bakery.collectors name: gathers input first; nothing found, no run.
     collector: str | None
+    # After a run settles, start the next (until the collector finds
+    # nothing): for working through a queue.
+    repeat: bool
+    # Also run when files under this path change, once quiet for
+    # debounce_seconds.
+    watch: pathlib.Path | None
+    debounce_seconds: float
     # Defined in defaults.toml for every claw, rather than by this claw.
     shared: bool
 
@@ -206,6 +214,17 @@ def _job(table: toml.Table, names: set[str], shared: set[str]) -> Job:
         ),
         tools=table.strings('tools') if table.optional('tools') else (),
         collector=_collector(table),
+        repeat=table.boolean('repeat') if table.optional('repeat') else False,
+        watch=(
+            toml.expand(table.string('watch'), pathlib.Path.home())
+            if table.optional('watch')
+            else None
+        ),
+        debounce_seconds=(
+            table.positive('debounce_seconds')
+            if table.optional('debounce_seconds')
+            else DEFAULT_DEBOUNCE_SECONDS
+        ),
         shared=name in shared,
     )
     table.done()

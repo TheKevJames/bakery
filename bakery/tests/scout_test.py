@@ -297,7 +297,7 @@ def test_scout_adds_tasks_then_finds_nothing_new(
             await asyncio.sleep(0.05)
 
     testing_gateway.run_gateway(claws, fake, scenario)
-    [added] = json.loads(task('list', '-p', 'all', '--json'))
+    [added] = json.loads(task('list', '--json'))
     assert (added['summary'], added['link'], added['tag']) == (
         'Fix CI',
         ci_link,
@@ -353,12 +353,19 @@ def test_task_claims(
     assert os.environ['TASK_FOLDER'] == str(root / 'tasks')
 
 
-def test_repo_claws_load() -> None:
+def test_repo_claws_load(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv('TASK_FOLDER', str(tmp_path))  # triage watches it
     claw = config.load(harness.REPO / 'claws').claw('scout')
     settings = scout.load_settings(claw.profile)
     assert claw.job('daily').collector == 'scout'
     assert {r.name for r in settings.repos} >= {f'{OWNER}/bakery'}
     assert f'{OWNER}/core' not in {r.name for r in settings.repos}
-    profile = json.loads((claw.profile / 'settings.json').read_text())
-    for path in profile['extensions'] + profile['prompts']:
-        assert (claw.profile / path).exists(), path
+    for name in ('scout', 'triage'):
+        profile = harness.REPO / 'claws' / name
+        settings = json.loads((profile / 'settings.json').read_text())
+        for path in settings['extensions'] + settings['prompts']:
+            assert (profile / path).exists(), path
+    queue = config.load(harness.REPO / 'claws').claw('triage').job('queue')
+    assert (queue.collector, queue.repeat) == ('triage', True)

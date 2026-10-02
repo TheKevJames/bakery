@@ -10,10 +10,14 @@ from typing import TYPE_CHECKING
 
 from . import base
 from . import scout
+from . import triage
 
 if TYPE_CHECKING:
     from ..gateway import config
 
 Collector = Callable[['config.Claw'], base.Collection]
 
-COLLECTORS: dict[str, Collector] = {'scout': scout.collect}
+COLLECTORS: dict[str, Collector] = {
+    'scout': scout.collect,
+    'triage': triage.collect,
+}

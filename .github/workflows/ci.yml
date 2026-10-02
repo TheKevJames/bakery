@@ -54,6 +54,6 @@ jobs:
           # renovate: datasource=github-releases depName=astral-sh/uv
           version: 0.12.22
       # The shared task list CLI, used by claws.
-      - run: uv tool install "task @ git+https://github.com/TheKevJames/tools@7a42103ef81bb2570f59dc4c257eb547a5e8fc17#subdirectory=task"
+      - run: uv tool install "task @ git+https://github.com/TheKevJames/tools@bb637760dc1cdf63fe0ee424a6771ca572de0678#subdirectory=task"
       - run: uv run --frozen pytest
         working-directory: bakery

@@ -363,10 +363,7 @@ def _repo_candidates(
 def tracked_links() -> set[str]:
     """Links of every task, without fragments (line anchors move)."""
     out = subprocess.run(
-        ('task', 'list', '-p', 'all', '--json'),
-        capture_output=True,
-        text=True,
-        check=True,
+        ('task', 'list', '--json'), capture_output=True, text=True, check=True
     ).stdout
     return {
         str(task['link']).split('#', 1)[0]

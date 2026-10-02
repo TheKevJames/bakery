@@ -32,16 +32,14 @@ export default function tasks(pi: ExtensionAPI) {
       name: "task_list",
       label: "List Tasks",
       description:
-        "List tasks as JSON. Filters are comma-separated `field<op>value` on summary, tag, owner, or " +
-        "link, with = (equals), != , ~ (contains), !~; eg. `tag=bakery/build,owner=` (unowned).",
+        "List tasks as JSON. Filters are comma-separated `field<op>value` on summary, tag, owner, " +
+        "link, priority, or size, with = (equals), != , ~ (contains), !~; eg. " +
+        "`tag=bakery/build,owner=` (unowned).",
       parameters: Type.Object({
         filter: Type.Optional(Type.String()),
-        preset: Type.Optional(
-          Type.Union([Type.Literal("all"), Type.Literal("due"), Type.Literal("triage"), Type.Literal("highpri")]),
-        ),
       }),
       async execute(_id, params, signal) {
-        const args = ["list", "-p", params.preset ?? "all", "--json"];
+        const args = ["list", "--json"];
         if (params.filter) args.push("-f", params.filter);
         return text(await task(pi, args, signal));
       },
@@ -75,7 +73,7 @@ export default function tasks(pi: ExtensionAPI) {
       async execute(_id, params, signal) {
         const args = ["add", "--description", params.description, "--link", params.link, "--", params.summary];
         await task(pi, args, signal);
-        const added = JSON.parse(await task(pi, ["list", "-p", "all", "--json", "-f", `link=${params.link}`], signal));
+        const added = JSON.parse(await task(pi, ["list", "--json", "-f", `link=${params.link}`], signal));
         return text(`Added: ${JSON.stringify(added.at(-1) ?? {})}`);
       },
     }),
@@ -86,13 +84,16 @@ export default function tasks(pi: ExtensionAPI) {
       name: "task_set",
       label: "Update Task",
       description:
-        "Update a task: move it to a section (`tag`, eg. `Bakery/build`), claim it for yourself " +
-        "(fails if someone else owns it), release your claim, or append notes to its description.",
+        "Update a task: move it to a section (`tag`, eg. `Bakery/build`), set its priority or size, " +
+        "claim it for yourself (fails if someone else owns it), release your claim, or append notes " +
+        "to its description.",
       parameters: Type.Object({
         id: Id,
         tag: Type.Optional(Type.String({ description: "Section path, eg. Bakery/human" })),
         claim: Type.Optional(Type.Boolean()),
         release: Type.Optional(Type.Boolean()),
+        priority: Type.Optional(Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high")])),
+        size: Type.Optional(Type.Union([Type.Literal("small"), Type.Literal("medium"), Type.Literal("large")])),
         description_append: Type.Optional(Type.String()),
       }),
       async execute(_id, params, signal) {
@@ -105,6 +106,8 @@ export default function tasks(pi: ExtensionAPI) {
         const args = ["set", id];
         if (params.tag) args.push("--tag", params.tag);
         if (params.claim) args.push("--owner", claw());
+        if (params.priority) args.push("--priority", params.priority);
+        if (params.size) args.push("--size", params.size);
         if (params.description_append) args.push("--description-append", params.description_append);
         if (args.length > 2) await task(pi, args, signal);
         if (params.release) await task(pi, ["unset", id, "owner"], signal);

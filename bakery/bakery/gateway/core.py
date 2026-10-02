@@ -15,17 +15,21 @@ import logging
 import pathlib
 import zoneinfo
 
-from .. import collectors
 from .. import state
 from . import channel as channel_
 from . import config
+from . import jobs
 from . import ledger
 from . import pool
 from . import rpc
 from . import runner
 from . import scheduler
+from . import watcher
 
 RESUME_PROMPT = 'Continue where you left off.'
+# Triggers that start a job's run (as opposed to resumes and replies).
+JOB_TRIGGERS = frozenset({'cron', 'manual', 'watch', 'repeat'})
+Request = jobs.Request
 SHUTDOWN_GRACE = 30.0
 
 log = logging.getLogger(__name__)
@@ -33,16 +37,6 @@ log = logging.getLogger(__name__)
 
 class GatewayError(Exception):
     """A rejected control request."""
-
-
-@dataclasses.dataclass(frozen=True)
-class Request:
-    claw: str
-    work_key: str
-    prompt: str
-    trigger: str
-    # The job that started the unit of work; its later runs inherit it.
-    job: str | None = None
 
 
 @dataclasses.dataclass
@@ -57,10 +51,6 @@ class Active:
     abort: tuple[ledger.Status, str] | None = None
 
 
-def _stamp() -> str:
-    return datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
-
-
 class Gateway:
     # pylint: disable=too-many-instance-attributes
     def __init__(
@@ -72,16 +62,16 @@ class Gateway:
         self.runs = ledger.Ledger(state.root() / '_gateway' / 'runs.db')
         self.pool = pool.Pool()
         self.scheduler = scheduler.Scheduler(self._fire)
+        self.watcher = watcher.Watcher(
+            lambda claw, job: self.jobs.start(claw, job, 'watch')
+        )
+        self.jobs = jobs.Jobs(self.submit, self._notify, self._busy)
         self.queue: list[Request] = []
         self.active: dict[str, Active] = {}
         self.paused: set[str] = set()
         self._wake = asyncio.Event()
         self._dispatcher: asyncio.Task[None] | None = None
         self._notices: set[asyncio.Task[None]] = set()
-        # (claw, job) -> the collection under way, by its unit's work key.
-        self._collections: dict[
-            tuple[str, str], tuple[str, asyncio.Task[None]]
-        ] = {}
         # (day, claw) pairs already announced as out of budget.
         self._broke: set[tuple[datetime.date, str]] = set()
 
@@ -96,13 +86,14 @@ class Gateway:
             log.warning('marked %d unfinished runs interrupted', interrupted)
         self.pool.start()
         self.scheduler.start(self.config.claws.values(), self.tz)
+        self.watcher.start(self.config.claws.values())
         self._dispatcher = asyncio.create_task(self._dispatch_loop())
         self._notify('gateway started')
 
     async def stop(self) -> None:
         self.scheduler.stop()
-        for _, task in list(self._collections.values()):
-            task.cancel()
+        self.watcher.stop()
+        self.jobs.stop()
         await self._notice('gateway stopping')
         if self._dispatcher:
             self._dispatcher.cancel()
@@ -139,78 +130,16 @@ class Gateway:
     def _fire(
         self, claw: config.Claw, job: config.Job, due: datetime.datetime
     ) -> None:
-        self._start_job(
-            claw,
-            job,
-            Request(
-                claw.name,
-                scheduler.work_key(claw, job, due),
-                job.prompt,
-                trigger=f'cron:{job.name}',
-                job=job.name,
-            ),
-            manual=False,
+        self.jobs.start(
+            claw, job, 'cron', work_key=scheduler.work_key(claw, job, due)
         )
 
-    def _start_job(
-        self,
-        claw: config.Claw,
-        job: config.Job,
-        request: Request,
-        *,
-        manual: bool,
-    ) -> None:
-        if job.collector is None:
-            self.submit(request)
-            return
-        key = (claw.name, job.name)
-        busy = [
-            r
-            for r in (*self.queue, *(a.request for a in self.active.values()))
-            if (r.claw, r.job) == key
-        ]
-        # A second collection would hand over the same candidates again.
-        if key in self._collections or busy:
-            if manual:
-                raise GatewayError(
-                    f'{claw.name}/{job.name} is already running'
-                )
-            return
-        task = asyncio.create_task(self._collect(claw, job, request, manual))
-        self._collections[key] = (request.work_key, task)
-        task.add_done_callback(lambda _: self._collections.pop(key, None))
+    def _busy(self, claw: str, job: str) -> bool:
+        requests = (*self.queue, *(a.request for a in self.active.values()))
+        return any((r.claw, r.job) == (claw, job) for r in requests)
 
     def collecting(self, work_key: str) -> bool:
-        """Whether `work_key` is waiting on its job's collector."""
-        return any(key == work_key for key, _ in self._collections.values())
-
-    async def _collect(
-        self,
-        claw: config.Claw,
-        job: config.Job,
-        request: Request,
-        manual: bool,
-    ) -> None:
-        assert job.collector is not None
-        collector = collectors.COLLECTORS[job.collector]
-        try:
-            collection = await asyncio.to_thread(collector, claw)
-        except Exception as e:
-            log.exception('collecting for %s/%s failed', claw.name, job.name)
-            self._notify(f'{claw.name}/{job.name}: collecting failed: {e}')
-            return
-        if collection.errors:
-            self._notify(
-                f'{claw.name}/{job.name} collection problems:\n'
-                + '\n'.join(collection.errors)
-            )
-        if collection.text is None:
-            log.info('%s/%s: nothing new', claw.name, job.name)
-            if manual:
-                self._notify(f'{claw.name}/{job.name}: nothing new')
-            return
-        prompt = f'{request.prompt}\n\n{collection.text}'
-        self.submit(dataclasses.replace(request, prompt=prompt))
+        return self.jobs.collecting(work_key)
 
     async def _dispatch_loop(self) -> None:
         while True:
@@ -317,6 +246,16 @@ class Gateway:
             info.status, info.reason = ledger.Status.failed, str(e)
         finally:
             await self._finish(info)
+            if info.status == ledger.Status.settled:
+                self._repeat(claw, job, request)
+
+    def _repeat(
+        self, claw: config.Claw, job: config.Job | None, request: Request
+    ) -> None:
+        """Start a `repeat` job's next run after one settles."""
+        kind = request.trigger.split(':', 1)[0]
+        if job is not None and job.repeat and kind in JOB_TRIGGERS:
+            self.jobs.start(claw, job, 'repeat', after=request.work_key)
 
     async def _finish(self, info: channel_.RunInfo) -> None:
         self.runs.record(info.run_id, cost_usd=info.cost_usd, turns=info.turns)
@@ -368,7 +307,7 @@ class Gateway:
         if not claw.enabled:
             raise GatewayError(f'{claw.name} is disabled')
         if prompt is not None and job_name is None:
-            work_key = f'{claw.name}/manual-{_stamp()}'
+            work_key = f'{claw.name}/manual-{jobs.stamp()}'
             self.submit(Request(claw.name, work_key, prompt, 'manual'))
             return work_key
         if job_name is None:
@@ -377,21 +316,12 @@ class Gateway:
             if len(own) != 1:
                 raise GatewayError(f'{claw.name}: name a job or a --prompt')
             job_name = own[0].name
-        job = claw.job(job_name)
-        work_key = f'{claw.name}/{job.name}-{_stamp()}'
-        self._start_job(
-            claw,
-            job,
-            Request(
-                claw.name,
-                work_key,
-                prompt or job.prompt,
-                f'manual:{job.name}',
-                job.name,
-            ),
-            manual=True,
-        )
-        return work_key
+        try:
+            return self.jobs.start(
+                claw, claw.job(job_name), 'manual', prompt=prompt
+            )
+        except jobs.JobError as e:
+            raise GatewayError(str(e)) from None
 
     def pause(self, target: str, *, abort: bool) -> None:
         self.paused.add(self._target(target))
@@ -441,6 +371,7 @@ class Gateway:
             self._notify(f'config reload rejected: {e}')
             raise
         self.scheduler.start(self.config.claws.values(), self.tz)
+        self.watcher.start(self.config.claws.values())
         self._wake.set()
 
     def status(self) -> dict[str, object]:
@@ -457,11 +388,7 @@ class Gateway:
                 'queued': [
                     r.work_key for r in self.queue if r.claw == claw.name
                 ],
-                'collecting': [
-                    work_key
-                    for (name, _), (work_key, _) in self._collections.items()
-                    if name == claw.name
-                ],
+                'collecting': self.jobs.collecting_for(claw.name),
                 'next': {
                     job: due.isoformat()
                     for (name, job), due in self.scheduler.upcoming.items()
