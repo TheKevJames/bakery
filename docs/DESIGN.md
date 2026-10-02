@@ -134,11 +134,33 @@ Each unit of work is a `pi --mode rpc` child with a persisted session, run
 with the claw's profile as `PI_CODING_AGENT_DIR`. The gateway speaks pi's
 JSONL RPC protocol directly, waits for `agent_settled` to detect completion,
 and forwards `extension_ui_request` dialogs to Discord as buttons. The bakery
-extension still loads, so `bakery list|read|send` keep working on claw runs.
+extension still loads (sockets under `$XDG_STATE_HOME/claws/_gateway/bakery`).
+
+Code lives in `bakery/bakery/gateway/`: `config` (claw.toml), `rpc` (the pi
+child), `runner` (one run and its limits), `pool` (warm children), `ledger`,
+`scheduler`, `core` (queueing and control operations), `control` (socket),
+and `channel` (the interface Discord implements).
+
+### Configuration
+
+`claws/defaults.toml` holds a `[gateway]` table (timezone, global process
+cap, global daily budget) and a `[claw]` table of defaults. Each
+`claws/<name>/claw.toml` overrides any `[claw]` value (tables merge key by
+key) and declares its `[[job]]`s. Loading is strict: unknown keys and bad
+values are errors. Changes apply on `bakery gateway reload`; an invalid
+config is rejected and the running one kept. In-flight runs keep the config
+they started with.
 
 ### Units of work
 
 One unit of work = one pi session = one Discord thread in the claw's channel.
+
+Each unit has a work key, eg. `scout/daily-20261002-0700`,
+`triage/task-151`, or `discord/<thread-id>`; its pi session id is the key with
+`/` replaced by `-`, which is also the session's name (so `bakery read
+triage-task-151` works). Resuming a unit starts pi again with the same
+`--session-id`, which restores it from the claw's `sessions/` dir. A unit's
+first run is new work; later runs are resumes. Runs of one unit never overlap.
 
 - A cron, heartbeat, queue, or manual trigger starts a fresh session and opens
   a thread; replies in that thread continue the same session.
@@ -172,9 +194,22 @@ Configurable in `claw.toml`; defaults:
 
 ### Limits and accounting
 
-A SQLite run ledger at `$XDG_STATE_HOME/claws/_gateway/runs.db`. Defaults,
-all configurable per claw: $5, 30 minutes, and 50 turns per run; $20 per claw
-per day; $50 per day globally. On breach: abort, park, notify.
+A SQLite run ledger at `$XDG_STATE_HOME/claws/_gateway/runs.db`, one row
+per run (one prompt until pi settles). Defaults, all configurable per claw:
+$5, 30 minutes, and 50 turns per run; $20 per claw per day; $50 per day
+globally. Daily budgets reset at midnight in the gateway timezone.
+
+A run's cost budget is the smallest of its per-run limit and what remains of
+the claw's and the global daily budgets. Cost comes from pi's per-message
+usage; the time limit excludes time spent waiting on me in a dialog.
+
+Run outcomes:
+
+- `settled` — finished normally.
+- `parked` — a limit was hit, the daily budget was exhausted, or the claw was
+  paused with `--abort`. `bakery resume <work-key>` continues it.
+- `failed` — an extension error, a model error after retries, or pi exiting.
+- `interrupted` — the gateway stopped mid-run. Not restarted automatically.
 
 ### Ask policy
 
@@ -187,10 +222,11 @@ Configurable per claw:
 
 ### Control
 
-The control socket backs both `bakery trigger|pause|resume|status` and the
-slash commands in `#bakery`: `/pause [claw|all]`, `/resume`, `/status`,
-`/budget`. `/pause all` stops new runs; `/pause all --abort` also aborts
-in-flight runs.
+The control socket backs `bakery trigger|pause|resume|status|budget` and
+`bakery gateway reload`; the slash commands in `#bakery` (`/pause [claw|all]`,
+`/resume`, `/status`, `/budget`) call the same operations in-process.
+`pause` stops new runs; `pause --abort` also parks in-flight ones. `resume`
+takes a claw, `all`, or a work key (re-running a parked unit).
 
 ## Discord
 
@@ -343,7 +379,8 @@ for build. The gateway runs whatever `pi` is on `PATH`.
    `owner`/`link`, filters, `--json`, `--description-append`, tests.
 4. `context` extension and `USER.md`.
 5. Gateway core: RPC client, scheduler, ledger, control socket, CLI.
-6. Discord adapter and setup wizard.
+6. Discord adapter and setup wizard; `bakery gateway run` and
+   `bakery service install|uninstall` (launchd).
 7. Policy extension, sandbox, pre-push hook, secrets.
 8. Memory tools, flush, dream job.
 9. scout.
