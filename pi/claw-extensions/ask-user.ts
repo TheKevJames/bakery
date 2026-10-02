@@ -5,8 +5,8 @@
  * the gateway as BAKERY_ASK_POLICY (ask | assume | park),
  * BAKERY_ASK_TIMEOUT_HOURS, and BAKERY_ASK_ON_TIMEOUT (assume | park).
  *
- * "Parking" ends the tool call with `details.park`; the gateway sees it on the
- * tool result, stops the run, and resumes it when the question is answered.
+ * "Parking" ends the run (`terminate`) with `details.park` on the result; the
+ * gateway marks the run parked and resumes it when the question is answered.
  */
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -31,10 +31,15 @@ function assume(reason: string, assumption: string) {
 }
 
 function park(question: string) {
-  return text("Stopping until the user answers. Do not continue working on this task.", {
-    park: true,
-    question,
-  });
+  // terminate ends the run without another model call (unless sibling tool
+  // calls in the same batch continue it; the gateway then aborts the run).
+  return {
+    ...text("Stopping until the user answers. Do not continue working on this task.", {
+      park: true,
+      question,
+    }),
+    terminate: true,
+  };
 }
 
 const askUser = defineTool({

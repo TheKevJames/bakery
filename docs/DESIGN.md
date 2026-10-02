@@ -270,9 +270,11 @@ Configurable per claw:
 `ask_user` (`pi/claw-extensions/ask-user.ts`) reads the policy from
 `BAKERY_ASK_*` variables the gateway sets per child. It asks through a pi
 `input` dialog with the timeout attached; cancelling counts as no answer.
-Parking returns `details.park` on the tool result, which the runner turns
-into a parked run (`waiting for an answer: …`); replying in the thread then
-resumes the unit with my reply as the prompt.
+Parking ends the run without another model call (`terminate`) and returns
+`details.park`, which the runner turns into a parked run (`waiting for an
+answer: …`); replying in the thread then resumes the unit with my reply as
+the prompt. A question that times out is labelled `timed out` in Discord even
+when pi's own dialog timeout, which starts earlier, ends the run first.
 
 ### Claw environment
 
