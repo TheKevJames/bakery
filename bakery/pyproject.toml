@@ -1,0 +1,37 @@
+[project]
+name = "bakery"
+version = "0.1.0"
+description = "agentic harness: pi control plane and claw gateway"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+bakery = "bakery.cli:main"
+
+[dependency-groups]
+dev = [
+    "flake8-broken-line==1.0.0",
+    "flake8-complicated-walrus==2.1.0",
+    "flake8-import-restrictions==2.1",
+    "flake8-requirements==2.3.0",
+    "flake8==7.4.1",
+    "pylint==4.0.10",
+    "pytest==9.1.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["bakery"]
+
+[tool.ty.rules]
+dynamic-function-decorator-return = "error"
+missing-type-argument = "error"
+possibly-unresolved-reference = "warn"
+unsound-return-statement = "error"
+
+[build-system]
+requires = ["hatchling==1.32.4"]
+build-backend = "hatchling.build"
