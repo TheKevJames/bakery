@@ -47,6 +47,32 @@ def test_repo_defaults_with_claw_overrides(tmp_path: pathlib.Path) -> None:
     )
 
 
+def test_default_jobs_apply_to_every_claw(tmp_path: pathlib.Path) -> None:
+    template = 'name = "{}"\ncron = "0 7 * * *"\nprompt = "p"\n'
+    claws = testing_gateway.make_claws(
+        tmp_path,
+        {
+            'plain': '',
+            'own': f'[[job]]\n{template.format("daily")}model = "m"\n',
+            'replaced': f'[[job]]\n{template.format("dream")}',
+        },
+    )
+
+    loaded = config.load(claws)
+
+    dream = loaded.claw('plain').job('dream')
+    assert (dream.shared, dream.tools, dream.prompt) == (
+        True,
+        ('memory_edit',),
+        '/dream',
+    )
+    own = loaded.claw('own')
+    assert [j.name for j in own.jobs] == ['dream', 'daily']
+    assert (own.job('daily').model, own.job('daily').shared) == ('m', False)
+    replaced = loaded.claw('replaced').job('dream')
+    assert (replaced.shared, replaced.tools) == (False, ())
+
+
 @pytest.mark.parametrize(
     ('claw_toml', 'error'),
     [
@@ -70,6 +96,12 @@ def test_repo_defaults_with_claw_overrides(tmp_path: pathlib.Path) -> None:
         ('[policy]\nconfirm = ["("]', 'bad regex'),
         ('[policy]\nnetwork = ["https://x.com"]', 'is not a domain'),
         ('[policy]\ntool = []', 'unknown keys tool'),
+        ('[memory]\nmax_chars = 0', 'max_chars: must be >= 1'),
+        (
+            '[[job]]\nname = "x"\ncron = "* * * * *"\nprompt = "p"\n'
+            'tools = "t"',
+            'list of strings',
+        ),
     ],
 )
 def test_invalid_config_is_rejected(
@@ -89,7 +121,17 @@ def job(cron: str, hours: str | None = None) -> config.Job:
             datetime.time.fromisoformat(start),
             datetime.time.fromisoformat(end),
         )
-    return config.Job('j', cron, 'p', active, silent_ok=False)
+    return config.Job(
+        'j',
+        cron,
+        'p',
+        active,
+        silent_ok=False,
+        model=None,
+        thinking=None,
+        tools=(),
+        shared=False,
+    )
 
 
 def at(hour: int, minute: int = 0, second: int = 0) -> datetime.datetime:

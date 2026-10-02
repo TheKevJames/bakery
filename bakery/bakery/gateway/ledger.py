@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS runs (
     status TEXT NOT NULL,
     reason TEXT,
     cost_usd REAL NOT NULL DEFAULT 0,
-    turns INTEGER NOT NULL DEFAULT 0
+    turns INTEGER NOT NULL DEFAULT 0,
+    job TEXT
 );
 CREATE INDEX IF NOT EXISTS runs_work_key ON runs (work_key);
 CREATE INDEX IF NOT EXISTS runs_started_at ON runs (started_at);
@@ -51,15 +52,23 @@ class Ledger:
         self.db = sqlite3.connect(path, isolation_level=None)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
+        columns = {
+            row['name'] for row in self.db.execute('PRAGMA table_info(runs)')
+        }
+        if 'job' not in columns:
+            self.db.execute('ALTER TABLE runs ADD COLUMN job TEXT')
 
     def close(self) -> None:
         self.db.close()
 
-    def start(self, claw: str, work_key: str, trigger: str) -> int:
+    def start(
+        self, claw: str, work_key: str, trigger: str, job: str | None
+    ) -> int:
         cursor = self.db.execute(
-            'INSERT INTO runs (claw, work_key, trigger, started_at, status)'
-            ' VALUES (?, ?, ?, ?, ?)',
-            (claw, work_key, trigger, time.time(), Status.running),
+            'INSERT INTO runs'
+            ' (claw, work_key, trigger, started_at, status, job)'
+            ' VALUES (?, ?, ?, ?, ?, ?)',
+            (claw, work_key, trigger, time.time(), Status.running, job),
         )
         assert cursor.lastrowid is not None
         return cursor.lastrowid
@@ -105,6 +114,15 @@ class Ledger:
             (work_key,),
         ).fetchone()
         return None if row is None else str(row['claw'])
+
+    def last_job(self, work_key: str) -> str | None:
+        """The job a unit of work was started by, if any."""
+        row = self.db.execute(
+            'SELECT job FROM runs WHERE work_key = ? AND job IS NOT NULL'
+            ' ORDER BY id DESC',
+            (work_key,),
+        ).fetchone()
+        return None if row is None else str(row['job'])
 
     def work_key_of(self, run_id: int) -> str | None:
         row = self.db.execute(

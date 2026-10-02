@@ -34,6 +34,7 @@ secrets = [
 tools = [
     "read", "grep", "find", "ls", "bash",
     "ask_user", "web_search", "web_fetch", "github", "mcp__context7__*",
+    "memory_append", "memory_search", "memory_get", "propose_user_update",
 ]
 # Writable by bash and edit/write, besides $TMPDIR. Memory is only written
 # through the memory tools.
@@ -67,11 +68,27 @@ policy = "ask"         # ask | assume | park
 timeout_hours = 4
 on_timeout = "park"    # assume | park
 
-# Jobs are per claw:
+[claw.memory]
+flush_margin_tokens = 8000  # flush memory this close to compaction
+max_chars = 20000           # MEMORY.md's cap; match its context.toml budget
+
+# Jobs here apply to every claw; a claw's job of the same name replaces one.
+[[claw.job]]
+name = "dream"
+cron = "0 3 * * *"
+prompt = "/dream"  # pi/claw-prompts/dream.md
+model = "anthropic/claude-sonnet-5-5"
+silent_ok = true
+tools = ["memory_edit"]  # only dream runs may rewrite MEMORY.md
+
+# A claw's own jobs, in its claw.toml:
 #
 # [[job]]
 # name = "daily"
 # cron = "0 7 * * *"
 # prompt = "..."
 # active_hours = "07:00-23:00"  # optional
-# silent_ok = false             # true: a NO_REPLY result posts nothing
+# silent_ok = false             # true: no thread unless it has news
+# model = "..."                 # optional overrides for the job's runs
+# thinking = "..."
+# tools = []                    # added to the claw's policy.tools

@@ -40,7 +40,8 @@ class Request:
     work_key: str
     prompt: str
     trigger: str
-    silent_ok: bool = False
+    # The job that started the unit of work; its later runs inherit it.
+    job: str | None = None
 
 
 @dataclasses.dataclass
@@ -84,6 +85,7 @@ class Gateway:
         return self.config.gateway.timezone
 
     async def start(self) -> None:
+        await asyncio.to_thread(state.init)
         interrupted = self.runs.mark_interrupted()
         if interrupted:
             log.warning('marked %d unfinished runs interrupted', interrupted)
@@ -136,7 +138,7 @@ class Gateway:
                 scheduler.work_key(claw, job, due),
                 job.prompt,
                 trigger=f'cron:{job.name}',
-                silent_ok=job.silent_ok,
+                job=job.name,
             )
         )
 
@@ -210,15 +212,17 @@ class Gateway:
         request = active.request
         claw = self.config.claw(request.claw)
         budget = self._budget(claw)
+        job_name = request.job or self.runs.last_job(request.work_key)
+        job = next((j for j in claw.jobs if j.name == job_name), None)
         info = channel_.RunInfo(
             run_id=self.runs.start(
-                claw.name, request.work_key, request.trigger
+                claw.name, request.work_key, request.trigger, job_name
             ),
             claw=claw.name,
             work_key=request.work_key,
             session_id=pool.session_id(request.work_key),
             trigger=request.trigger,
-            silent_ok=request.silent_ok,
+            silent_ok=job is not None and job.silent_ok,
         )
         active.info = info
         try:
@@ -227,7 +231,7 @@ class Gateway:
                 info.reason = 'daily budget exhausted'
                 self._announce_broke(claw.name)
                 return
-            proc = await self.pool.acquire(claw, request.work_key)
+            proc = await self.pool.acquire(claw, request.work_key, job)
             # Events left over from this child's previous run must go before
             # any abort is queued, or the abort would be dropped with them.
             proc.drain_events()
@@ -260,6 +264,12 @@ class Gateway:
             await self.channel.run_finished(info)
         except Exception:
             log.exception('channel failed reporting %s', info.work_key)
+        try:
+            await asyncio.to_thread(
+                state.commit, f'{info.work_key}: {info.status}'
+            )
+        except Exception:
+            log.exception('committing state after %s failed', info.work_key)
 
     def _announce_broke(self, claw: str) -> None:
         key = (datetime.datetime.now(self.tz).date(), claw)
@@ -292,9 +302,11 @@ class Gateway:
             self.submit(Request(claw.name, work_key, prompt, 'manual'))
             return work_key
         if job_name is None:
-            if len(claw.jobs) != 1:
+            # Shared jobs (eg. dream) must be named.
+            own = [job for job in claw.jobs if not job.shared]
+            if len(own) != 1:
                 raise GatewayError(f'{claw.name}: name a job or a --prompt')
-            job_name = claw.jobs[0].name
+            job_name = own[0].name
         job = claw.job(job_name)
         work_key = f'{claw.name}/{job.name}-{_stamp()}'
         self.submit(
@@ -303,7 +315,7 @@ class Gateway:
                 work_key,
                 prompt or job.prompt,
                 f'manual:{job.name}',
-                job.silent_ok,
+                job.name,
             )
         )
         return work_key
