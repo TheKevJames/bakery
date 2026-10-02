@@ -14,15 +14,16 @@ from testing import harness
 
 @pytest.fixture(name='fake_llm', scope='function')
 def fixture_fake_llm() -> Iterator[harness.FakeLLM]:
-    requests: list[dict[str, object]] = []
+    llm = harness.FakeLLM(url='', requests=[])
     server = http.server.ThreadingHTTPServer(
-        ('127.0.0.1', 0), harness.handler(requests)
+        ('127.0.0.1', 0), harness.handler(llm)
     )
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    llm.url = f'http://127.0.0.1:{server.server_port}/v1'
+    thread = threading.Thread(
+        target=server.serve_forever, args=(0.01,), daemon=True
+    )
     thread.start()
-    yield harness.FakeLLM(
-        f'http://127.0.0.1:{server.server_port}/v1', requests
-    )
+    yield llm
     server.shutdown()
 
 

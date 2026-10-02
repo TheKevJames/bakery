@@ -1,0 +1,39 @@
+# Gateway settings, and defaults for every claw. Each claws/<name>/claw.toml
+# may override any [claw] value (tables merge key by key) and adds its jobs.
+# Apply changes with `bakery gateway reload`.
+
+[gateway]
+timezone = "Europe/Lisbon"  # cron schedules and the daily budget reset
+max_processes = 4           # live pi children across all claws
+daily_cost_usd = 50.0       # across all claws
+
+[claw]
+enabled = true
+model = "anthropic/claude-sonnet-5-5"
+thinking = "high"
+# cwd defaults to the claw's state dir, $XDG_STATE_HOME/claws/<name>.
+
+[claw.limits]
+cost_usd = 5.0        # per run
+minutes = 30          # per run, excluding time waiting on me
+turns = 50            # per run
+daily_cost_usd = 20.0
+
+[claw.concurrency]
+max_active = 1         # concurrent new units of work
+max_resumes = 0        # extra slots for resumed units (eg. PR feedback)
+idle_exit_minutes = 15 # idle pi children exit; resume reloads the session
+
+[claw.ask]
+policy = "ask"         # ask | assume | park
+timeout_hours = 4
+on_timeout = "park"    # assume | park
+
+# Jobs are per claw:
+#
+# [[job]]
+# name = "daily"
+# cron = "0 7 * * *"
+# prompt = "..."
+# active_hours = "07:00-23:00"  # optional
+# silent_ok = false             # true: a NO_REPLY result posts nothing

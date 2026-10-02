@@ -26,6 +26,7 @@ from collections.abc import Callable
 
 from . import paths
 from . import state
+from .gateway import cli as gateway_cli
 
 WAIT_POLL_INTERVAL = 0.25
 # pi runs an interactive TUI that exits immediately without a terminal, so a
@@ -759,6 +760,8 @@ def build_parser() -> argparse.ArgumentParser:
     state_sub.add_parser(
         'init', help=f'create the claw state repo at {state.root()}'
     ).set_defaults(func=do_state_init)
+
+    gateway_cli.add_parsers(sub.add_parser)
 
     return parser
 
