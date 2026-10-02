@@ -37,32 +37,10 @@ STYLES = {
     'success': discord.ButtonStyle.success,
     'danger': discord.ButtonStyle.danger,
 }
-# Read and post in the bakery channels and their threads, manage them, and
-# manage their webhooks.
-PERMISSIONS = discord.Permissions(
-    view_channel=True,
-    manage_channels=True,
-    manage_webhooks=True,
-    send_messages=True,
-    send_messages_in_threads=True,
-    create_public_threads=True,
-    manage_threads=True,
-    read_message_history=True,
-    attach_files=True,
-    add_reactions=True,
-)
 
 
 def channel_name(claw: str) -> str:
     return f'{CONTROL_CHANNEL}-{claw}'
-
-
-def invite_url(application_id: int) -> str:
-    return discord.utils.oauth_url(
-        application_id,
-        permissions=PERMISSIONS,
-        scopes=('bot', 'applications.commands'),
-    )
 
 
 def _items(handler: transport.Handler) -> tuple[type[Any], type[Any]]:

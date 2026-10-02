@@ -12,7 +12,6 @@ Layout
 - ``bakery/``: the ``bakery`` CLI (Python, ``uv``)
 - ``claws/``: claw profiles and gateway configuration (``defaults.toml``)
 - ``bin/vendor``: refresh vendored skills under ``pi/skills/vendor``
-- ``bin/discord-setup``: set up Discord and secrets for the gateway
 
 Setup
 -----
@@ -24,7 +23,7 @@ Setup
     $ pipx install --force ~/src/personal/bakery/bakery
     $ bakery state init
 
-Then, for the claws' gateway: ``bin/discord-setup``.
+Then, for the claws' gateway: ``bakery service install``.
 
 .. _docs/DESIGN.md: docs/DESIGN.md
 .. _pi: https://github.com/earendil-works/pi

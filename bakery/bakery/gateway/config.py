@@ -117,7 +117,7 @@ class Gateway:
     timezone: zoneinfo.ZoneInfo
     max_processes: int
     daily_cost_usd: float
-    # Absent until `bin/discord-setup` has run.
+    # None without a [gateway.discord] table; only the gateway needs it.
     discord: Discord | None
 
 

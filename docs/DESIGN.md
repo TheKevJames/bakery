@@ -12,7 +12,7 @@ gateway daemon and controlled over Discord.
 | `interactive/` | The interactive profile; used directly as `PI_CODING_AGENT_DIR`. |
 | `claws/<name>/` | One profile per claw: `claw.toml`, `context.toml`, `settings.json`, `SOUL.md`, `IDENTITY.md`, `AGENTS.md`. |
 | `bakery/` | Python project: the `bakery` CLI and the gateway. |
-| `bin/` | Helper scripts: `bin/vendor`, `bin/discord-setup` (the setup wizard). |
+| `bin/` | Helper scripts (eg. `bin/vendor`). |
 
 Every profile directory is a pi agent dir. Its `settings.json` loads shared
 resources from `../pi/...` (or `../../pi/...` for claws). Pi writes some
@@ -302,11 +302,14 @@ gateway's `Channel`), `transport` (the interface), `discord_transport`
 
 ### Running it
 
-1. `bin/discord-setup` walks through creating the application and bot
-   (Message Content intent on, Public Bot off), storing the token and model
-   keys in the Keychain, inviting the bot, and writing `[gateway.discord]`.
-   It ends with `bakery gateway check` (connects, creates the layout, posts
-   to `#bakery`) and optionally installs the service.
+1. One-time Discord setup (done by hand): a `bakery` application whose bot
+   has Public Bot off and the Message Content intent on; the bot invited to
+   my server with the `bot` and `applications.commands` scopes and
+   permissions to view, manage, and post in channels and public threads,
+   manage webhooks, read history, attach files, and add reactions; its token
+   stored as the `DISCORD_BOT_TOKEN` Keychain secret; and the server and my
+   user IDs in `[gateway.discord]`. `bakery gateway check` verifies it
+   (connects, creates the layout, posts to `#bakery`).
 2. `bakery service install|uninstall|restart` manages the launchd agent
    `in.thekev.bakery` (`~/Library/LaunchAgents/in.thekev.bakery.plist`):
    `bakery gateway run`, kept alive, with `PATH`, `HOME`, `LANG`,

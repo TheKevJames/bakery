@@ -45,7 +45,7 @@ def transport(
     settings = loaded.gateway.discord
     if settings is None:
         raise config.ConfigError(
-            'gateway.discord is not configured; run bin/discord-setup'
+            'gateway.discord is not configured in claws/defaults.toml'
         )
     avatars = {
         name: claws_dir / name / 'avatar.png'
