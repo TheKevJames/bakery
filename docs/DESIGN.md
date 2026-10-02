@@ -8,10 +8,10 @@ gateway daemon and controlled over Discord.
 
 | Path | Contents |
 | --- | --- |
-| `pi/` | Shared pi resources: `extensions/`, `claw-extensions/` (claws only: `policy/`, `memory/`, `ask-user.ts`, `github.ts`), `claw-prompts/` (claws only, eg. `/dream`), `skills/` (incl. vendored), `prompts/`, `agents/`, `rules/` (instruction fragments). |
+| `pi/` | Shared pi resources: `extensions/`, `claw-extensions/` (claws only: `policy/`, `memory/`, `task.ts`, `ask-user.ts`, `github.ts`), `claw-prompts/` (claws only, eg. `/dream`), `skills/` (incl. vendored), `prompts/`, `agents/`, `rules/` (instruction fragments). |
 | `interactive/` | The interactive profile; used directly as `PI_CODING_AGENT_DIR`. |
 | `claws/<name>/` | One profile per claw: `claw.toml`, `context.toml`, `settings.json`, `SOUL.md`, `IDENTITY.md`, `AGENTS.md`. |
-| `bakery/` | Python project: the `bakery` CLI and the gateway. |
+| `bakery/` | Python project: the `bakery` CLI, the gateway, and collectors. |
 | `bin/` | Helper scripts (eg. `bin/vendor`). |
 
 Every profile directory is a pi agent dir. Its `settings.json` loads shared
@@ -203,6 +203,11 @@ transcripts.
 
 ### Triggers
 
+- **collectors**: a job may name a `collector` (`bakery/bakery/collectors/`),
+  deterministic Python run in a worker thread before the job's run. Its
+  output is appended to the job's prompt; if it finds nothing, there is no
+  run. One collection or run per claw and job at a time, so the same
+  candidates are never handed over twice. Problems are posted to `#bakery`.
 - **cron**: 5-field expressions in `claw.toml`, Europe/Lisbon, optional
   `active_hours`. Missed runs (Mac asleep, gateway down) are skipped. Jobs in
   `defaults.toml`'s `[claw]` table apply to every claw (a claw's job of the
@@ -437,8 +442,10 @@ Claws share my existing `task` tool (`~/src/personal/tools/task`, data in
   on `list` and `show`;
 - property tests (parse/render round-trip; concurrent writers lose nothing).
 
-Claws access it through a `task` pi tool with a per-claw subcommand
-allowlist.
+Claws use it through tools in `pi/claw-extensions/task.ts`: `task_list`,
+`task_show`, `task_add`, `task_set` (tag, claim, release, append notes),
+`task_link`, and `task_done`. Each claw's `policy.tools` selects which it
+gets; claims are always made as the claw itself (`BAKERY_CLAW`).
 
 ### Ticket flow
 
@@ -458,22 +465,37 @@ in each claw's `claw.toml`.
 
 ### scout — read-only
 
-Finds third-party TODOs and syncs them into `task`.
+Finds things in my repos that belong on my task list. Profile:
+`claws/scout/` (`claw.toml`, `scout.toml`, `AGENTS.md`, `SOUL.md`,
+`IDENTITY.md`, `context.toml`).
 
-- Deterministic Python collectors in the gateway, over `TheKevJames` repos
-  listed in `scout.toml`: TODO comments in checked-out repos (one task per
-  comment), GitHub issues and PRs, CI failures, and deprecation/other warnings
-  grepped from CI logs on the default branch.
-- Dedup key: `link` + summary. TODO links are
-  `https://github.com/TheKevJames/<repo>/blob/HEAD/<path>` with the TODO text
-  in the summary; issues/PRs use their URL; CI uses the workflow URL with the
-  job/test in the summary. A changed TODO text is a new task; triage handles
-  the stale one.
-- Already-tracked candidates are filtered in Python; the LLM only sees new
-  ones (to write summaries/descriptions and call `task add`) and is not
-  invoked at all when there are none.
-- `task` allowlist: `list`, `add`.
-- Runs daily at 07:00, or manually.
+- The `daily` job (07:00, or `bakery trigger scout`) uses the `scout`
+  collector (`bakery/bakery/collectors/scout.py`) over the repos in
+  `scout.toml` (every checked-out `TheKevJames` repo except `core`):
+  - **CI**: the latest completed default-branch run of each workflow failed
+    (Dependabot's own update jobs excluded). Link: the first failed run of
+    the current failure streak, so a fresh failure after a fix is new.
+  - **Warnings**: `DeprecationWarning`, `FutureWarning`,
+    `PendingDeprecationWarning`, and `::warning` lines in the logs of each
+    workflow's latest passing run, deduplicated, at most 20 per repo. Link:
+    the workflow URL with `?warning=<fingerprint>`.
+  - **Issues and PRs**: all open issues, and PRs not by bots, except those
+    labelled `ready-for-human`. Link: their URL.
+  - **TODO/FIXME comments** on the default branch, fetched with the read
+    token over HTTPS into `refs/bakery/scout/<branch>` (my checkout and its
+    `origin` refs are untouched), minus per-repo `exclude` globs. One task
+    per comment. Link: `…/blob/<branch>/<path>?todo=<fingerprint>#L<line>`;
+    the fingerprint is of the comment's text, so the line can move.
+- **Lineage, not memory**: a candidate is new unless an existing task has its
+  link (ignoring the `#L…` anchor). There is no separate "seen" store, so a
+  task I delete comes back if its source still exists: before deleting a
+  `Bakery/wontfix` task, I fix its source. Scout therefore never merges or
+  drops candidates and copies links verbatim.
+- At most `max_candidates` (25) per run, ordered CI, PRs, issues, warnings,
+  TODOs; the rest wait for the next run. Repos that cannot be read are
+  reported in `#bakery` and in scout's report; the others still run.
+- The model (Sonnet, medium thinking, $2 per run, ask policy `assume`, no
+  bash) writes each candidate up with `task_add` and reports what it added.
 
 ### triage — read-only + web
 

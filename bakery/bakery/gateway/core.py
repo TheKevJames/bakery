@@ -15,6 +15,7 @@ import logging
 import pathlib
 import zoneinfo
 
+from .. import collectors
 from .. import state
 from . import channel as channel_
 from . import config
@@ -77,6 +78,7 @@ class Gateway:
         self._wake = asyncio.Event()
         self._dispatcher: asyncio.Task[None] | None = None
         self._notices: set[asyncio.Task[None]] = set()
+        self._collections: dict[tuple[str, str], asyncio.Task[None]] = {}
         # (day, claw) pairs already announced as out of budget.
         self._broke: set[tuple[datetime.date, str]] = set()
 
@@ -96,6 +98,8 @@ class Gateway:
 
     async def stop(self) -> None:
         self.scheduler.stop()
+        for task in list(self._collections.values()):
+            task.cancel()
         await self._notice('gateway stopping')
         if self._dispatcher:
             self._dispatcher.cancel()
@@ -132,15 +136,72 @@ class Gateway:
     def _fire(
         self, claw: config.Claw, job: config.Job, due: datetime.datetime
     ) -> None:
-        self.submit(
+        self._start_job(
+            claw,
+            job,
             Request(
                 claw.name,
                 scheduler.work_key(claw, job, due),
                 job.prompt,
                 trigger=f'cron:{job.name}',
                 job=job.name,
-            )
+            ),
+            manual=False,
         )
+
+    def _start_job(
+        self,
+        claw: config.Claw,
+        job: config.Job,
+        request: Request,
+        *,
+        manual: bool,
+    ) -> None:
+        if job.collector is None:
+            self.submit(request)
+            return
+        key = (claw.name, job.name)
+        busy = [
+            r
+            for r in (*self.queue, *(a.request for a in self.active.values()))
+            if (r.claw, r.job) == key
+        ]
+        # A second collection would hand over the same candidates again.
+        if key in self._collections or busy:
+            if manual:
+                self._notify(f'{claw.name}/{job.name} is already running')
+            return
+        task = asyncio.create_task(self._collect(claw, job, request, manual))
+        self._collections[key] = task
+        task.add_done_callback(lambda _: self._collections.pop(key, None))
+
+    async def _collect(
+        self,
+        claw: config.Claw,
+        job: config.Job,
+        request: Request,
+        manual: bool,
+    ) -> None:
+        assert job.collector is not None
+        collector = collectors.COLLECTORS[job.collector]
+        try:
+            collection = await asyncio.to_thread(collector, claw)
+        except Exception as e:
+            log.exception('collecting for %s/%s failed', claw.name, job.name)
+            self._notify(f'{claw.name}/{job.name}: collecting failed: {e}')
+            return
+        if collection.errors:
+            self._notify(
+                f'{claw.name}/{job.name} collection problems:\n'
+                + '\n'.join(collection.errors)
+            )
+        if collection.text is None:
+            log.info('%s/%s: nothing new', claw.name, job.name)
+            if manual:
+                self._notify(f'{claw.name}/{job.name}: nothing new')
+            return
+        prompt = f'{request.prompt}\n\n{collection.text}'
+        self.submit(dataclasses.replace(request, prompt=prompt))
 
     async def _dispatch_loop(self) -> None:
         while True:
@@ -309,14 +370,17 @@ class Gateway:
             job_name = own[0].name
         job = claw.job(job_name)
         work_key = f'{claw.name}/{job.name}-{_stamp()}'
-        self.submit(
+        self._start_job(
+            claw,
+            job,
             Request(
                 claw.name,
                 work_key,
                 prompt or job.prompt,
                 f'manual:{job.name}',
                 job.name,
-            )
+            ),
+            manual=True,
         )
         return work_key
 

@@ -130,6 +130,7 @@ def job(cron: str, hours: str | None = None) -> config.Job:
         model=None,
         thinking=None,
         tools=(),
+        collector=None,
         shared=False,
     )
 

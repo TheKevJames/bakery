@@ -1,0 +1,17 @@
+{
+  "quietStartup": true,
+  "extensions": [
+    "../../pi/extensions/context",
+    "../../pi/extensions/bakery.ts",
+    "../../pi/extensions/time-awareness.ts",
+    "../../pi/extensions/web.ts",
+    "../../pi/extensions/mcp-servers.ts",
+    "../../pi/claw-extensions/ask-user.ts",
+    "../../pi/claw-extensions/github.ts",
+    "../../pi/claw-extensions/memory",
+    "../../pi/claw-extensions/task.ts"
+  ],
+  "prompts": [
+    "../../pi/claw-prompts"
+  ]
+}
