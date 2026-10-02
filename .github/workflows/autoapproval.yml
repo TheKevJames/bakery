@@ -1,0 +1,20 @@
+name: autoapproval
+
+on:
+  pull_request:
+    types: [opened, reopened, labeled]
+  pull_request_review:
+    types: [dismissed]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  autoapproval:
+    runs-on: ubuntu-24.04
+    steps:
+      # TODO: very out-of-date (still uses nodejs 20), look into updating
+      - uses: dkhmelenko/autoapproval@v1.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
