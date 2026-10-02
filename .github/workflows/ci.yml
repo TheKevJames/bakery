@@ -25,12 +25,18 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7.0.1
-      # sandbox-runtime's Linux backend; Ubuntu's AppArmor otherwise denies
-      # bubblewrap the unprivileged user namespaces it needs.
+      # sandbox-runtime's Linux backend. Ubuntu's AppArmor otherwise strips
+      # capabilities from bubblewrap's user namespaces, and its
+      # bwrap-userns-restrict profile from the nested one sandbox-runtime's
+      # seccomp helper creates.
       - run: |
           sudo apt-get update -q
           sudo apt-get install -qy bubblewrap socat ripgrep
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          ls /etc/apparmor.d | grep -i -e bwrap -e userns || true
+          if [ -f /etc/apparmor.d/bwrap-userns-restrict ]; then
+            sudo apparmor_parser -R /etc/apparmor.d/bwrap-userns-restrict
+          fi
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: 24.21.0
