@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+cd "$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
+
 declare -A REPO_SOURCES
 declare -A REPO_FOLDERS
 
@@ -10,41 +12,22 @@ vendor_file() {
     echo "Updating ${fname} from ${repo}..."
     mkdir -p "$(dirname "${fname}")"
 
-    curl -s "https://raw.githubusercontent.com/${repo}/${sha}/${rpath}" > "${fname}"
-
-    # TODO: would be great to do this via override file
-    if [[ "${fname}" == "root/~/.config/zsh/plugins/async-git-prompt.plugin.zsh" ]]; then
-        sed -i~ 's#^GIT_PROMPT_FIFO_DIR=.*#GIT_PROMPT_FIFO_DIR="/tmp/zsh-git-prompt"#' "${fname}"
-        rm -f "${fname}~"
-    fi
+    local url="https://raw.githubusercontent.com/${repo}/${sha}/${rpath}"
+    curl -s "${url}" > "${fname}"
 }
 
 declare -A SOURCES
 declare -A FOLDERS
 
 SOURCES=()
-SOURCES["root/~/.config/zsh/plugins/_extract"]="plugins/extract/_extract"  # TODO: add *.epub (unzip)
-SOURCES["root/~/.config/zsh/plugins/completion.zsh"]="lib/completion.zsh"
-SOURCES["root/~/.config/zsh/plugins/extract.plugin.zsh"]="plugins/extract/extract.plugin.zsh"
-SOURCES["root/~/.config/zsh/plugins/shrink-path.plugin.zsh"]="plugins/shrink-path/shrink-path.plugin.zsh"
 FOLDERS=()
-REPO_SOURCES["ohmyzsh/ohmyzsh:master"]=$(declare -p SOURCES)
-REPO_FOLDERS["ohmyzsh/ohmyzsh:master"]=$(declare -p FOLDERS)
-
-SOURCES=()
-SOURCES["root/~/.config/zsh/plugins/async-git-prompt.plugin.zsh"]="async-git-prompt.plugin.zsh"
-FOLDERS=()
-REPO_SOURCES["pawel-slowik/zsh-async-git-prompt:master"]=$(declare -p SOURCES)
-REPO_FOLDERS["pawel-slowik/zsh-async-git-prompt:master"]=$(declare -p FOLDERS)
-
-SOURCES=()
-FOLDERS=()
-FOLDERS["root/~/.config/pi/skills/vendor/codebase-design"]="skills/engineering/codebase-design"
-FOLDERS["root/~/.config/pi/skills/vendor/domain-modeling"]="skills/engineering/domain-modeling"
-FOLDERS["root/~/.config/pi/skills/vendor/grill-with-docs"]="skills/engineering/grill-with-docs"
-FOLDERS["root/~/.config/pi/skills/vendor/grilling"]="skills/productivity/grilling"
-FOLDERS["root/~/.config/pi/skills/vendor/improve-codebase-architecture"]="skills/engineering/improve-codebase-architecture"
-FOLDERS["root/~/.config/pi/skills/vendor/wizard"]="skills/engineering/wizard"
+FOLDERS["pi/skills/vendor/codebase-design"]="skills/engineering/codebase-design"
+FOLDERS["pi/skills/vendor/domain-modeling"]="skills/engineering/domain-modeling"
+FOLDERS["pi/skills/vendor/grill-with-docs"]="skills/engineering/grill-with-docs"
+FOLDERS["pi/skills/vendor/grilling"]="skills/productivity/grilling"
+FOLDERS["pi/skills/vendor/improve-codebase-architecture"]=\
+"skills/engineering/improve-codebase-architecture"
+FOLDERS["pi/skills/vendor/wizard"]="skills/engineering/wizard"
 # TODO: version management
 REPO_SOURCES["mattpocock/skills:v1.2.3"]=$(declare -p SOURCES)
 REPO_FOLDERS["mattpocock/skills:v1.2.3"]=$(declare -p FOLDERS)
@@ -67,7 +50,8 @@ for repo_ref in "${!REPO_SOURCES[@]}"; do
             remote_dir="${FOLDERS[${local_dir}]%/}"
             while IFS= read -r rpath; do
                 [ -z "${rpath}" ] && continue
-                vendor_file "${local_dir}/${rpath#"${remote_dir}"/}" "${rpath}" "${repo}" "${SHA}"
+                vendor_file "${local_dir}/${rpath#"${remote_dir}"/}" \
+                    "${rpath}" "${repo}" "${SHA}"
             done < <(grep "^${remote_dir}/" <<< "${TREE}" || true)
         done
     fi
