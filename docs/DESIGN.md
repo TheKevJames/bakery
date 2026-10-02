@@ -207,7 +207,10 @@ transcripts.
   deterministic Python run in a worker thread before the job's run. Its
   output is appended to the job's prompt; if it finds nothing, there is no
   run. One collection or run per claw and job at a time, so the same
-  candidates are never handed over twice. Problems are posted to `#bakery`.
+  candidates are never handed over twice (a manual trigger while one is
+  under way is refused). `bakery status` shows collections in progress, and
+  a manual trigger says when it is collecting. Problems are posted to
+  `#bakery`.
 - **cron**: 5-field expressions in `claw.toml`, Europe/Lisbon, optional
   `active_hours`. Missed runs (Mac asleep, gateway down) are skipped. Jobs in
   `defaults.toml`'s `[claw]` table apply to every claw (a claw's job of the
@@ -492,7 +495,8 @@ Finds things in my repos that belong on my task list. Profile:
   `Bakery/wontfix` task, I fix its source. Scout therefore never merges or
   drops candidates and copies links verbatim.
 - At most `max_candidates` (25) per run, ordered CI, PRs, issues, warnings,
-  TODOs; the rest wait for the next run. Repos that cannot be read are
+  TODOs; the rest wait for the next run. Repos are collected in parallel
+  (8 at a time; about 13s for all 17). Repos that cannot be read are
   reported in `#bakery` and in scout's report; the others still run.
 - The model (Sonnet, medium thinking, $2 per run, ask policy `assume`, no
   bash) writes each candidate up with `task_add` and reports what it added.

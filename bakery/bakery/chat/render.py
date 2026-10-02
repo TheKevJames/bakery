@@ -83,12 +83,22 @@ def status(data: Mapping[str, Any]) -> str:
         state = 'paused' if claw['paused'] else state
         lines.append(f'{name}: {state}')
         lines.extend(_run_line(run) for run in claw['active'])
+        lines.extend(f'    {key} (collecting)' for key in claw['collecting'])
         lines.extend(f'    {key} (queued)' for key in claw['queued'])
         lines.extend(
             f'    next {job}: {due}'
             for job, due in sorted(claw['next'].items())
         )
     return '\n'.join(lines)
+
+
+def triggered(work_key: str, *, collecting: bool) -> str:
+    if collecting:
+        return (
+            f'collecting input for {work_key}; this can take a minute or two'
+            ' (see status)'
+        )
+    return f'queued {work_key}'
 
 
 def budget(data: Mapping[str, Any]) -> str:

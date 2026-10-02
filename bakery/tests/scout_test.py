@@ -7,8 +7,10 @@ from collections.abc import Iterator
 
 import pytest
 
+from bakery.chat import render
 from bakery.collectors import scout
 from bakery.gateway import config
+from bakery.gateway import control
 from bakery.gateway import core
 from testing import fake_github
 from testing import gateway as testing_gateway
@@ -260,7 +262,22 @@ def test_scout_adds_tasks_then_finds_nothing_new(
     fake = testing_gateway.FakeChannel()
 
     async def scenario(gateway: core.Gateway) -> None:
-        first = await fake.wait(gateway.trigger('scout', None, None))
+        github.delay = 0.3
+        triggered = await asyncio.to_thread(
+            control.send, {'type': 'trigger', 'claw': 'scout'}
+        )
+        assert isinstance(triggered, dict)
+        key = triggered['work_key']
+        assert triggered['collecting']
+        status = await asyncio.to_thread(control.send, {'type': 'status'})
+        assert isinstance(status, dict)
+        assert f'{key} (collecting)' in render.status(status)
+        with pytest.raises(control.ControlError, match='already running'):
+            await asyncio.to_thread(
+                control.send, {'type': 'trigger', 'claw': 'scout'}
+            )
+        github.delay = 0.0
+        first = await fake.wait(key)
         assert first.status == 'settled', first.reason
         assert 'actions/runs/7' in fake_llm.transcript(0)
         # Everything left is still new, but one per run: the next run

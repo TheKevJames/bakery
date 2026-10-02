@@ -42,13 +42,20 @@ def _required(request: dict[str, object], key: str) -> str:
     return value
 
 
+def _trigger(
+    gateway: core.Gateway, request: dict[str, object]
+) -> dict[str, object]:
+    work_key = gateway.trigger(
+        _required(request, 'claw'),
+        _str(request, 'job'),
+        _str(request, 'prompt'),
+    )
+    return {'work_key': work_key, 'collecting': gateway.collecting(work_key)}
+
+
 def handlers(gateway: core.Gateway) -> dict[str, Handler]:
     return {
-        'trigger': lambda r: {
-            'work_key': gateway.trigger(
-                _required(r, 'claw'), _str(r, 'job'), _str(r, 'prompt')
-            )
-        },
+        'trigger': lambda r: _trigger(gateway, r),
         'pause': lambda r: gateway.pause(
             _required(r, 'target'), abort=bool(r.get('abort'))
         ),

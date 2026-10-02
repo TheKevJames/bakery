@@ -382,7 +382,9 @@ class Relay:
             _optional(options, 'job'),
             _optional(options, 'prompt'),
         )
-        return f'queued {work_key}'
+        return render.triggered(
+            work_key, collecting=self.gateway.collecting(work_key)
+        )
 
     def _pause(self, options: Mapping[str, object]) -> str:
         target = _required(options, 'target')
