@@ -8,7 +8,7 @@ gateway daemon and controlled over Discord.
 
 | Path | Contents |
 | --- | --- |
-| `pi/` | Shared pi resources: `extensions/`, `claw-extensions/` (claws only: `policy/`, `ask-user.ts`, `github.ts`), `skills/` (incl. vendored), `prompts/`, `agents/`, `rules/` (instruction fragments). |
+| `pi/` | Shared pi resources: `extensions/`, `claw-extensions/` (claws only: `policy/`, `memory/`, `ask-user.ts`, `github.ts`), `claw-prompts/` (claws only, eg. `/dream`), `skills/` (incl. vendored), `prompts/`, `agents/`, `rules/` (instruction fragments). |
 | `interactive/` | The interactive profile; used directly as `PI_CODING_AGENT_DIR`. |
 | `claws/<name>/` | One profile per claw: `claw.toml`, `context.toml`, `settings.json`, `SOUL.md`, `IDENTITY.md`, `AGENTS.md`. |
 | `bakery/` | Python project: the `bakery` CLI and the gateway. |
@@ -23,8 +23,9 @@ that is gitignored. Pi also rewrites `settings.json` (e.g.
 Claw profiles list their extensions explicitly rather than loading all of
 `pi/extensions/`: they need `context/`, `bakery.ts`, `time-awareness.ts`,
 `web.ts`, `mcp-servers.ts`, and `pi/claw-extensions/` (the gateway adds
-`policy/` itself), but not the TUI-only extensions or `subagent/` (its child
-pi runs would escape the gateway's cost ledger).
+`policy/` itself), and load `pi/claw-prompts/` as prompts, but not the
+TUI-only extensions or `subagent/` (its child pi runs would escape the
+gateway's cost ledger).
 
 ## State
 
@@ -105,30 +106,48 @@ cloning or when the lockfile changes (dotsystem's `sync` does this).
 
 ## Memory
 
-Memory is only written through tools, never via bash:
+Memory lives in the claw's state dir and is only written through tools
+(`pi/claw-extensions/memory/`), which run in pi's process; the bash sandbox
+cannot write the state dir.
 
-- `memory_append` — append to today's daily note.
-- `memory_search` — keyword (ripgrep) search across the claw's memory files.
-- `memory_get` — read a memory file or line range.
-- `memory_edit` — edit `MEMORY.md`; only used by the flush and dream jobs.
+- `memory_append(text, source)` — a timestamped entry in today's
+  `memory/YYYY-MM-DD.md`, tagged with its source: `owner` (I said it),
+  `self` (the claw's own work or conclusions), or `external` (issue/PR text,
+  web pages, logs).
+- `memory_search(query)` — case-insensitive keyword search (ripgrep) over
+  `MEMORY.md` and the daily notes, newest first, capped at 50 lines.
+- `memory_get(file, offset?, limit?)` — read `MEMORY.md` or a daily note.
+- `memory_edit(edits | content)` — `MEMORY.md` only: exact replacements or a
+  full rewrite, capped at `[memory] max_chars` (20k, its context budget). Not
+  in the default tools; only the dream job adds it.
 
 Curation:
 
-- **Pre-compaction flush**: before compaction, a silent turn writes durable
-  facts to the daily note (hooked into pi's compaction lifecycle, falling back
-  to a context-usage threshold checked at `turn_end`).
-- **Dream job**: a nightly cron per claw (03:00) distills daily notes into
-  `MEMORY.md`.
-- Content from untrusted sources (issues, PR comments, web pages, CI logs) is
-  recorded as evidence only, never promoted to durable memory without my
-  confirmation.
+- **Pre-compaction flush**: once the context is within
+  `[memory] flush_margin_tokens` (8k) of pi's compaction threshold, the
+  memory extension injects a hidden message at `turn_end` asking the model to
+  save anything durable with `memory_append` and reply `NO_REPLY`. It fires
+  once per compaction cycle, as an ordinary model turn using the claw's own
+  model and context, so its cost is accounted.
+- **Dream job**: defined once in `claws/defaults.toml` (03:00 daily,
+  `prompt = "/dream"` from `pi/claw-prompts/dream.md`, Sonnet, `silent_ok`,
+  `tools = ["memory_edit"]`). It distills recent daily notes into `MEMORY.md`
+  and never promotes `external` notes, which stay in the daily notes as
+  evidence; its report lists what it held back. This rule is in the prompt:
+  a tool cannot judge text.
+- **Commits**: after every run the gateway commits the state repo
+  (`<work_key>: <status>`), so every memory change can be reviewed and
+  reverted.
 
 Identity changes need my approval:
 
-- `USER.md` edits are proposed in Discord; applied and auto-committed on
-  approval.
-- `SOUL.md` / `AGENTS.md` edits are proposed in Discord and opened as a
-  `kjames/bakery-identity-*` PR on this repo; merging is the approval.
+- `propose_user_update(edits, reason)` shows the diff as a confirm dialog
+  (Discord Approve/Deny); approved edits are applied to `_shared/USER.md`
+  (capped at 4000 characters) and committed after the run. Unapproved or
+  timed-out (`ask.timeout_hours`) proposals change nothing.
+- `SOUL.md` / `AGENTS.md` edits are to be proposed as
+  `kjames/bakery-identity-*` PRs on this repo, merging being the approval.
+  This needs build's push mechanism and lands after step 11.
 
 ## Gateway
 
@@ -185,9 +204,15 @@ transcripts.
 ### Triggers
 
 - **cron**: 5-field expressions in `claw.toml`, Europe/Lisbon, optional
-  `active_hours`. Missed runs (Mac asleep, gateway down) are skipped.
-- **heartbeat**: a cron job flagged `silent_ok`; a `NO_REPLY` result posts
-  nothing and creates no thread. (Built, unused by the v1 claws.)
+  `active_hours`. Missed runs (Mac asleep, gateway down) are skipped. Jobs in
+  `defaults.toml`'s `[claw]` table apply to every claw (a claw's job of the
+  same name replaces one); a job may override `model` and `thinking` and add
+  `tools` for its units of work, which keep them on later runs (eg. replies).
+  `bakery trigger <claw>` runs the claw's only own job; shared jobs (eg.
+  `dream`) must be named.
+- **heartbeat**: a cron job flagged `silent_ok`; a run whose only reply is
+  `NO_REPLY` posts nothing and creates no thread. (Built, unused by the v1
+  claws.) A `NO_REPLY` message never becomes any run's reply.
 - **queue pollers**: e.g. `task` filters, GitHub PR state.
 - **file watch**: with debounce.
 - **manual**: `bakery trigger <claw>` or the Discord equivalent.
@@ -211,8 +236,11 @@ $5, 30 minutes, and 50 turns per run; $20 per claw per day; $50 per day
 globally. Daily budgets reset at midnight in the gateway timezone.
 
 A run's cost budget is the smallest of its per-run limit and what remains of
-the claw's and the global daily budgets. Cost comes from pi's per-message
-usage; the time limit excludes time spent waiting on me in a dialog.
+the claw's and the global daily budgets. Cost is the change in pi's session
+stats (`get_session_stats`) over the run, reconciled after every turn and
+compaction, so compaction summaries count too; each assistant message is also
+charged provisionally so a costly reply stops the run before its tool calls
+execute. The time limit excludes time spent waiting on me in a dialog.
 
 Run outcomes:
 
@@ -498,7 +526,7 @@ for build. The gateway runs whatever `pi` is on `PATH`.
 6. Discord adapter and setup wizard; `bakery gateway run` and
    `bakery service install|uninstall` (launchd).
 7. Policy extension, sandbox, secrets, web/context7/github tools.
-8. Memory tools, flush, dream job.
+8. Memory tools, flush, dream job, `USER.md` proposals.
 9. scout.
 10. triage.
 11. build, with its `git_push` tool, `github` write access, and the

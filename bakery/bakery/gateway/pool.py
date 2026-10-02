@@ -54,8 +54,12 @@ async def _check_startup(proc: rpc.PiProcess) -> None:
         raise rpc.RpcError('; '.join(errors))
 
 
-def child_env(claw: config.Claw) -> dict[str, str]:
+def child_env(claw: config.Claw, job: config.Job | None) -> dict[str, str]:
     """Raises secrets.SecretError if a configured secret is missing."""
+    tools = job.tools if job is not None else ()
+    claw_policy = dataclasses.replace(
+        claw.policy, tools=(*claw.policy.tools, *tools)
+    )
     env = {
         name: value
         for name, value in os.environ.items()
@@ -69,7 +73,7 @@ def child_env(claw: config.Claw) -> dict[str, str]:
             # Claws may read neither the gateway's files nor each other's
             # state (memory, transcripts, the state repo's history).
             'BAKERY_POLICY': policy.serialize(
-                claw.policy,
+                claw_policy,
                 extra_deny_read=[state.root()],
                 allow_read=[claw.state_dir, state.root() / state.SHARED],
                 secret_names=claw.secrets,
@@ -79,6 +83,10 @@ def child_env(claw: config.Claw) -> dict[str, str]:
             'BAKERY_ASK_POLICY': claw.ask.policy,
             'BAKERY_ASK_TIMEOUT_HOURS': f'{claw.ask.timeout_hours:g}',
             'BAKERY_ASK_ON_TIMEOUT': claw.ask.on_timeout,
+            'BAKERY_MEMORY_DIR': str(claw.state_dir),
+            'BAKERY_SHARED_DIR': str(state.root() / state.SHARED),
+            'BAKERY_MEMORY_MAX_CHARS': str(claw.memory.max_chars),
+            'BAKERY_FLUSH_MARGIN_TOKENS': str(claw.memory.flush_margin_tokens),
         }
     )
     return env
@@ -108,7 +116,10 @@ class Pool:
         child = self.children.get(work_key)
         return child is not None and child.proc.alive
 
-    async def acquire(self, claw: config.Claw, work_key: str) -> rpc.PiProcess:
+    async def acquire(
+        self, claw: config.Claw, work_key: str, job: config.Job | None
+    ) -> rpc.PiProcess:
+        """A child for `work_key`; `job` (its unit's job) sets overrides."""
         child = self.children.get(work_key)
         if child is not None and child.proc.alive:
             child.idle_since = None
@@ -116,19 +127,21 @@ class Pool:
         sid = session_id(work_key)
         claw.cwd.mkdir(parents=True, exist_ok=True)
         claw.sessions_dir.mkdir(parents=True, exist_ok=True)
+        model = job.model if job and job.model else claw.model
+        thinking = job.thinking if job and job.thinking else claw.thinking
         proc = await rpc.PiProcess.start(
             [
                 '--session-id', sid,
                 '--session-dir', str(claw.sessions_dir),
                 '--name', sid,
-                '--model', claw.model,
-                '--thinking', claw.thinking,
+                '--model', model,
+                '--thinking', thinking,
                 # Loaded by the gateway, not the profile, so no profile can
                 # run a claw without its policy.
                 '--extension', str(policy_extension()),
             ],
             cwd=claw.cwd,
-            env=child_env(claw),
+            env=child_env(claw, job),
         )  # fmt: skip
         await _check_startup(proc)
         self.children[work_key] = Child(

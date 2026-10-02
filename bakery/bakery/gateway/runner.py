@@ -63,6 +63,12 @@ def _text(message: dict[str, object]) -> str:
     )
 
 
+async def session_cost(proc: rpc.PiProcess) -> float:
+    stats = await proc.command({'type': 'get_session_stats'})
+    cost = stats.get('cost')
+    return float(cost) if isinstance(cost, (int, float)) else 0.0
+
+
 def _cost(message: dict[str, object]) -> float:
     usage = message.get('usage')
     cost = usage.get('cost') if isinstance(usage, dict) else None
@@ -82,8 +88,11 @@ class _Run:
         budget: Budget,
         channel: channel_.Channel,
         runs: ledger.Ledger,
+        baseline: float,
     ) -> None:
         self.proc = proc
+        # The session's cost before this run; runs of a unit share a session.
+        self.baseline = baseline
         self.info = info
         self.budget = budget
         self.channel = channel
@@ -111,16 +120,32 @@ class _Run:
             task.cancel()
 
     async def _on_assistant(self, message: dict[str, object]) -> None:
-        self.info.cost_usd += _cost(message)
-        self.info.final_text = _text(message)
+        # A NO_REPLY message (eg. after a memory flush, or a quiet heartbeat)
+        # never replaces the run's reply.
+        text = _text(message).strip()
+        if text and text != SILENT_REPLY:
+            self.info.final_text = text
         if message.get('stopReason') == 'error':
             self.model_error = str(message.get('errorMessage', 'model error'))
+        # Provisional, so a costly message stops the run before its tool
+        # calls execute; reconciled with pi's own accounting at turn ends.
+        await self._charge(self.info.cost_usd + _cost(message))
+
+    async def reconcile_cost(self, *, enforce: bool = True) -> None:
+        """
+        Take the run's cost from pi's session stats, which also count
+        model calls outside assistant messages (eg. compaction summaries).
+        """
+        if self.proc.alive:
+            cost = await session_cost(self.proc) - self.baseline
+            await self._charge(cost, enforce=enforce)
+
+    async def _charge(self, cost: float, *, enforce: bool = True) -> None:
+        self.info.cost_usd = cost
         self.runs.record(
-            self.info.run_id,
-            cost_usd=self.info.cost_usd,
-            turns=self.info.turns,
+            self.info.run_id, cost_usd=cost, turns=self.info.turns
         )
-        if self.info.cost_usd >= self.budget.cost_usd:
+        if enforce and cost >= self.budget.cost_usd:
             await self._halt(
                 ledger.Status.parked,
                 f'cost limit reached (${self.budget.cost_usd:.2f})',
@@ -129,11 +154,7 @@ class _Run:
     async def _on_turn_end(self, event: dict[str, object]) -> None:
         self.info.turns += 1
         self.info.current_tool = None
-        self.runs.record(
-            self.info.run_id,
-            cost_usd=self.info.cost_usd,
-            turns=self.info.turns,
-        )
+        await self.reconcile_cost()
         await self.channel.run_progress(self.info)
         if self.info.turns >= self.budget.turns and event.get('toolResults'):
             await self._halt(
@@ -186,6 +207,7 @@ class _Run:
         return {
             'message_end': self._on_message_end,
             'turn_end': self._on_turn_end,
+            'compaction_end': self._on_compaction_end,
             'tool_execution_start': self._on_tool_start,
             'tool_execution_end': self._on_tool_end,
             'extension_error': self._on_extension_error,
@@ -198,6 +220,10 @@ class _Run:
         message = event.get('message')
         if isinstance(message, dict) and message.get('role') == 'assistant':
             await self._on_assistant(message)
+
+    async def _on_compaction_end(self, event: dict[str, object]) -> None:
+        del event
+        await self.reconcile_cost()
 
     async def _on_tool_start(self, event: dict[str, object]) -> None:
         self.info.current_tool = str(event.get('toolName'))
@@ -284,14 +310,15 @@ async def execute(
 
     The caller must drain events left over from earlier runs first.
     """
-    run = _Run(proc, info, budget, channel, runs)
+    run = _Run(proc, info, budget, channel, runs, await session_cost(proc))
     try:
         data = await proc.command({'type': 'prompt', 'message': prompt})
         if data.get('disposition') != 'handled':
             await run.follow()
+        # Settled runs are not stopped retroactively; their full cost still
+        # counts towards the daily budgets.
+        await run.reconcile_cost(enforce=False)
     finally:
         run.cancel_dialogs()
     info.status, info.reason = run.outcome()
     info.current_tool = None
-    if info.silent_ok and (info.final_text or '').strip() == SILENT_REPLY:
-        info.final_text = None

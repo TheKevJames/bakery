@@ -1,5 +1,6 @@
 import asyncio
 import pathlib
+import sqlite3
 import time
 from collections.abc import Mapping
 
@@ -295,3 +296,23 @@ def test_secrets_reach_pi_but_not_bash(
         )
 
     testing_gateway.run_gateway(claws, fake, scenario)
+
+
+def test_ledger_gains_the_job_column(root: pathlib.Path) -> None:
+    path = root / 'runs.db'
+    with sqlite3.connect(path) as db:
+        db.execute(
+            'CREATE TABLE runs (id INTEGER PRIMARY KEY, claw TEXT NOT NULL,'
+            ' work_key TEXT NOT NULL, trigger TEXT NOT NULL,'
+            ' started_at REAL NOT NULL, ended_at REAL, status TEXT NOT NULL,'
+            ' reason TEXT, cost_usd REAL NOT NULL DEFAULT 0,'
+            ' turns INTEGER NOT NULL DEFAULT 0)'
+        )
+        db.execute(
+            'INSERT INTO runs (claw, work_key, trigger, started_at, status)'
+            " VALUES ('a', 'a/old', 'manual', 0, 'settled')"
+        )
+    runs = ledger.Ledger(path)
+    runs.start('a', 'a/new', 'cron:dream', 'dream')
+    assert (runs.last_job('a/old'), runs.last_job('a/new')) == (None, 'dream')
+    runs.close()

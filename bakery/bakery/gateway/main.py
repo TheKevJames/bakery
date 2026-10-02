@@ -62,7 +62,6 @@ def _enabled(loaded: config.Config) -> list[str]:
 
 
 async def run(claws_dir: pathlib.Path) -> None:
-    state.init()
     loaded = config.load(claws_dir)
     chat = transport(claws_dir, loaded)
     assert loaded.gateway.discord is not None

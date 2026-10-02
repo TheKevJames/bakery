@@ -78,36 +78,36 @@ def make_claws(
     *,
     extensions: dict[str, list[str]] | None = None,
     gateway: dict[str, object] | None = None,
+    settings: dict[str, dict[str, object]] | None = None,
 ) -> pathlib.Path:
     """
     A claws dir: the repo's real defaults.toml, plus one profile per claw.
 
     `claws` maps names to extra claw.toml text; every claw uses the fake
-    model. `gateway` overrides values in defaults.toml's [gateway] table.
+    model and loads the claw prompts. `gateway` overrides values in
+    defaults.toml's [gateway] table; `settings` adds to a claw's settings.json.
     """
     claws_dir = root / 'claws'
     claws_dir.mkdir()
     defaults = (harness.REPO / 'claws' / 'defaults.toml').read_text()
     for key, value in (gateway or {}).items():
+        # [gateway] comes first, so its key is the first match.
         defaults, count = re.subn(
-            rf'^{key} = \S+', f'{key} = {value}', defaults, flags=re.MULTILINE
+            rf'^{key} = \S+',
+            f'{key} = {value}',
+            defaults,
+            count=1,
+            flags=re.MULTILINE,
         )
         assert count == 1, key
     (claws_dir / 'defaults.toml').write_text(defaults)
     for name, extra in claws.items():
-        profile = claws_dir / name
-        profile.mkdir()
-        # Test-only extensions live here; others are repo paths.
-        paths = [harness.FAKE_PROVIDER] + [
-            TESTING / ext if (TESTING / ext).exists() else harness.REPO / ext
-            for ext in (extensions or {}).get(name, [])
-        ]
-        settings = {'extensions': [str(p) for p in paths]}
-        (profile / 'settings.json').write_text(json.dumps(settings))
-        toml = 'model = "fake/echo"\nthinking = "off"\n'
-        if not re.search(r'^secrets\s*=', extra, re.MULTILINE):
-            toml += 'secrets = ["BAKERY_FAKE_LLM_URL"]\n'
-        (profile / 'claw.toml').write_text(toml + textwrap.dedent(extra))
+        _make_profile(
+            claws_dir / name,
+            extra,
+            (extensions or {}).get(name, []),
+            (settings or {}).get(name, {}),
+        )
     return claws_dir
 
 
@@ -131,3 +131,26 @@ def run_gateway(
             await gateway.stop()
 
     asyncio.run(main())
+
+
+def _make_profile(
+    profile: pathlib.Path,
+    extra: str,
+    extensions: list[str],
+    settings: dict[str, object],
+) -> None:
+    profile.mkdir()
+    # Test-only extensions live here; others are repo paths.
+    paths = [harness.FAKE_PROVIDER] + [
+        TESTING / ext if (TESTING / ext).exists() else harness.REPO / ext
+        for ext in extensions
+    ]
+    profile_settings: dict[str, object] = {
+        'extensions': [str(p) for p in paths],
+        'prompts': [str(harness.REPO / 'pi' / 'claw-prompts')],
+    } | settings
+    (profile / 'settings.json').write_text(json.dumps(profile_settings))
+    toml = 'model = "fake/echo"\nthinking = "off"\n'
+    if not re.search(r'^secrets\s*=', extra, re.MULTILINE):
+        toml += 'secrets = ["BAKERY_FAKE_LLM_URL"]\n'
+    (profile / 'claw.toml').write_text(toml + textwrap.dedent(extra))
