@@ -9,6 +9,7 @@ normal source.
 """
 
 import os
+import shutil
 import subprocess
 
 KEYCHAIN_ACCOUNT = 'bakery'
@@ -19,6 +20,9 @@ class SecretError(Exception):
 
 
 def keychain(name: str) -> str | None:
+    # No Keychain off macOS (eg. CI): only the environment applies.
+    if shutil.which('security') is None:
+        return None
     result = subprocess.run(
         (
             'security',
