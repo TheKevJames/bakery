@@ -24,7 +24,7 @@
 
 Before implementing a workaround, building a regex hack, or guessing at tool/framework API behavior:
 
-1. **Search documentation first.** Use the context7 skill or read official docs to check whether a built-in feature already solves the problem.
+1. **Search documentation first.** Use the context7 tools or read official docs to check whether a built-in feature already solves the problem.
 2. **Verify assumptions.** Do not assume system state, API limits, or framework behavior - look it up or test it. If you cannot verify, say so explicitly rather than guessing.
 3. **Prefer built-in features.** If a framework provides a purpose-built solution (eg. stage.truncate, lifecycle ignore_changes), always prefer it over custom workarounds.
 4. **Admit uncertainty.** When you don't know something, say "I'm not sure — let me check" rather than confidently stating something that might be wrong.
