@@ -88,8 +88,9 @@ Every profile uses the same rule fragments, including the "ask me" rules in
 `pi/rules/workflow.md`. Each claw's `AGENTS.md` defines what asking means
 for it (see [Ask policy](#ask-policy)).
 
-Shared extensions' npm dependencies are declared in `pi/package.json`; run
-`npm ci --prefix pi` after cloning or when the lockfile changes.
+Shared extensions' npm dependencies are declared in `pi/package.json` and
+locked in `pi/bun.lock`; run `bun install --frozen-lockfile --cwd pi` after
+cloning or when the lockfile changes (dotsystem's `sync` does this).
 
 ## Memory
 
