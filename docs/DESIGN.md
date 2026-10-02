@@ -469,9 +469,8 @@ gets; claims are always made as the claw itself (`BAKERY_CLAW`).
 1. `scout` adds tasks (auto-tagged `Triage`) with a `link`.
 2. `triage` claims `tag=triage` tasks (including ones I add by hand),
    researches, appends notes, sets `priority` and `size`, then re-tags to
-   `Bakery/build/<priority>`, `Bakery/human`, or `Bakery/wontfix` and
-   releases.
-3. `build` claims `Bakery/build/*` tasks (high priority first), moves them to
+   `Bakery/build`, `Bakery/human`, or `Bakery/wontfix` and releases.
+3. `build` claims `Bakery/build` tasks (high priority first), moves them to
    `Bakery/review` once a PR is open, and runs `done` after merge.
 
 I delete `Bakery/wontfix` tasks myself.
@@ -530,7 +529,7 @@ Profile: `claws/triage/`. Sonnet, medium thinking, $3 per ticket.
   (route and reason, source check, code locations, hypothesis, approach,
   acceptance criteria, open questions), always set `priority` and `size`,
   then re-tag and release:
-  - `Bakery/build/<priority>`: a TheKevJames repo checked out under
+  - `Bakery/build`: a TheKevJames repo checked out under
     `~/src/personal`, clear scope, checkable by tests, lint, or CI;
   - `Bakery/human`: needs a decision, reproduction, credentials, outside
     systems, or anything uncertain;
@@ -546,8 +545,8 @@ Profile: `claws/triage/`. Sonnet, medium thinking, $3 per ticket.
 
 ### build — worktree + push
 
-- Picks `Bakery/build/*` tasks: `high`, then `medium`, then `low`, then
-  lowest id.
+- Picks `Bakery/build` tasks by `priority` (`high`, then `medium`, then
+  `low`), then lowest id.
 - Works in `$XDG_STATE_HOME/claws/build/worktrees/<repo>/<task-id>`, created
   with `git worktree add` from the checkouts listed in `build.toml`; removed
   after merge/close. Full network (package registries).
