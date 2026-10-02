@@ -25,6 +25,7 @@ import time
 from collections.abc import Callable
 
 from . import paths
+from . import state
 
 WAIT_POLL_INTERVAL = 0.25
 # pi runs an interactive TUI that exits immediately without a terminal, so a
@@ -322,12 +323,12 @@ def do_show(args: argparse.Namespace) -> int:
     record = show_record(args.session)
     if record is None:
         sys.exit(f'session not found: {args.session}')
-    session_id, name, cwd, state = record
+    session_id, name, cwd, status = record
     rows = [
         ('ID', session_id),
         ('Name', name),
         ('Working Directory', cwd or '(unknown)'),
-        ('State', f'{state_dot(state)} {state}'),
+        ('State', f'{state_dot(status)} {status}'),
     ]
     width = max(len(label) for label, _ in rows)
     for label, value in rows:
@@ -648,6 +649,13 @@ def do_attach(args: argparse.Namespace) -> int:
     os.execvp('pi', ('pi', '--session-id', session_id))
 
 
+def do_state_init(args: argparse.Namespace) -> int:
+    _ = args
+    state.init()
+    print(f'initialized {state.root()}')
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog='bakery', description=__doc__)
     sub = parser.add_subparsers(dest='command')
@@ -744,6 +752,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     attach.add_argument('session', help='pin name, live alias, or session id')
     attach.set_defaults(func=do_attach)
+
+    state_sub = sub.add_parser(
+        'state', help='manage claw state'
+    ).add_subparsers(dest='state_command')
+    state_sub.add_parser(
+        'init', help=f'create the claw state repo at {state.root()}'
+    ).set_defaults(func=do_state_init)
 
     return parser
 
