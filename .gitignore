@@ -1,0 +1,4 @@
+# pi runtime state written into the profile's agent dir
+/interactive/models-store.json
+/interactive/npm/
+/interactive/trust.json

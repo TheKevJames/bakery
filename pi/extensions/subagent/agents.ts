@@ -4,7 +4,11 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { getAgentDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
+import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
+
+// Agents are shared by every profile (interactive and each claw), so they live
+// beside the shared extensions rather than in the per-profile agent dir.
+export const AGENTS_DIR = path.resolve(import.meta.dirname, "..", "..", "agents");
 
 export interface AgentConfig {
   name: string;
@@ -97,5 +101,5 @@ function loadAgentsFromDir(dir: string): AgentConfig[] {
 }
 
 export function discoverAgents(): AgentConfig[] {
-  return loadAgentsFromDir(path.join(getAgentDir(), "agents"));
+  return loadAgentsFromDir(AGENTS_DIR);
 }

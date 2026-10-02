@@ -24,7 +24,13 @@
   ],
   "hideThinkingBlock": false,
   "packages": [],
+  "extensions": [
+    "../pi/extensions"
+  ],
+  "prompts": [
+    "../pi/prompts"
+  ],
   "skills": [
-    "~/.config/pi/skills/vendor"
+    "../pi/skills"
   ]
 }

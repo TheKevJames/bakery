@@ -20,13 +20,12 @@ import type { AgentToolResult, ThinkingLevel } from "@earendil-works/pi-agent-co
 import type { Message } from "@earendil-works/pi-ai";
 import {
   type ExtensionAPI,
-  getAgentDir,
   getMarkdownTheme,
   withFileMutationQueue,
 } from "@earendil-works/pi-coding-agent";
 import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { type AgentConfig, discoverAgents } from "./agents.ts";
+import { AGENTS_DIR, type AgentConfig, discoverAgents } from "./agents.ts";
 
 const MAX_PARALLEL_TASKS = 8;
 const MAX_CONCURRENCY = 4;
@@ -459,7 +458,7 @@ export default function (pi: ExtensionAPI) {
     description: [
       "Delegate tasks to specialized subagents with isolated context.",
       "Modes: single (agent + task), parallel (tasks array), chain (sequential with {previous} placeholder).",
-      `Agents are discovered from ${path.join(getAgentDir(), "agents")}.`,
+      `Agents are discovered from ${AGENTS_DIR}.`,
     ].join(" "),
     parameters: SubagentParams,
 
