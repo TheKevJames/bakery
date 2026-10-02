@@ -34,7 +34,7 @@ def do_trigger(args: argparse.Namespace) -> int:
             'prompt': args.prompt,
         }
     )
-    print(f'queued {data["work_key"]}')
+    print(render.triggered(data['work_key'], collecting=data['collecting']))
     return 0
 
 

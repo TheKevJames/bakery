@@ -78,7 +78,10 @@ class Gateway:
         self._wake = asyncio.Event()
         self._dispatcher: asyncio.Task[None] | None = None
         self._notices: set[asyncio.Task[None]] = set()
-        self._collections: dict[tuple[str, str], asyncio.Task[None]] = {}
+        # (claw, job) -> the collection under way, by its unit's work key.
+        self._collections: dict[
+            tuple[str, str], tuple[str, asyncio.Task[None]]
+        ] = {}
         # (day, claw) pairs already announced as out of budget.
         self._broke: set[tuple[datetime.date, str]] = set()
 
@@ -98,7 +101,7 @@ class Gateway:
 
     async def stop(self) -> None:
         self.scheduler.stop()
-        for task in list(self._collections.values()):
+        for _, task in list(self._collections.values()):
             task.cancel()
         await self._notice('gateway stopping')
         if self._dispatcher:
@@ -169,11 +172,17 @@ class Gateway:
         # A second collection would hand over the same candidates again.
         if key in self._collections or busy:
             if manual:
-                self._notify(f'{claw.name}/{job.name} is already running')
+                raise GatewayError(
+                    f'{claw.name}/{job.name} is already running'
+                )
             return
         task = asyncio.create_task(self._collect(claw, job, request, manual))
-        self._collections[key] = task
+        self._collections[key] = (request.work_key, task)
         task.add_done_callback(lambda _: self._collections.pop(key, None))
+
+    def collecting(self, work_key: str) -> bool:
+        """Whether `work_key` is waiting on its job's collector."""
+        return any(key == work_key for key, _ in self._collections.values())
 
     async def _collect(
         self,
@@ -447,6 +456,11 @@ class Gateway:
                 ],
                 'queued': [
                     r.work_key for r in self.queue if r.claw == claw.name
+                ],
+                'collecting': [
+                    work_key
+                    for (name, _), (work_key, _) in self._collections.items()
+                    if name == claw.name
                 ],
                 'next': {
                     job: due.isoformat()

@@ -6,6 +6,7 @@ import http.server
 import io
 import json
 import threading
+import time
 import zipfile
 from collections.abc import Generator
 
@@ -22,6 +23,8 @@ class FakeGitHub:
     requests: list[tuple[str, str | None]] = dataclasses.field(
         default_factory=list
     )
+    # Seconds each response takes, to keep a collection in progress.
+    delay: float = 0.0
 
 
 def logs_zip(files: dict[str, str]) -> bytes:
@@ -35,6 +38,7 @@ def logs_zip(files: dict[str, str]) -> bytes:
 def _handler(fake: FakeGitHub) -> type:
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self) -> None:
+            time.sleep(fake.delay)
             auth = self.headers.get('Authorization')
             fake.requests.append((self.path, auth))
             if self.path in fake.redirects:

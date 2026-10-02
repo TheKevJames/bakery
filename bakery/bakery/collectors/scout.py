@@ -9,6 +9,7 @@ is deterministic: the link is the task's lineage.
 """
 
 import base64
+import concurrent.futures
 import dataclasses
 import hashlib
 import io
@@ -53,6 +54,7 @@ LOG_TIMESTAMP_RE = re.compile(r'^\d{4}-\d\d-\d\dT[\d:.]+Z\s*')
 WARNINGS_PER_REPO = 20
 BODY_CHARS = 1500
 CONTEXT_LINES = 3
+WORKERS = 8
 
 
 @dataclasses.dataclass(frozen=True)
@@ -396,10 +398,14 @@ def collect(claw: 'config.Claw') -> base.Collection:
     gh = github.GitHub(settings.api, token)
     found: list[Candidate] = []
     errors: list[str] = []
-    for repo in settings.repos:
-        repo_found, repo_errors = _repo_candidates(gh, repo, settings, token)
-        found += repo_found
-        errors += repo_errors
+    # Mostly waiting on GitHub and git fetches; map keeps repo order.
+    with concurrent.futures.ThreadPoolExecutor(WORKERS) as pool:
+        for repo_found, repo_errors in pool.map(
+            lambda repo: _repo_candidates(gh, repo, settings, token),
+            settings.repos,
+        ):
+            found += repo_found
+            errors += repo_errors
     tracked = tracked_links()
     new = [c for c in found if c.link.split('#', 1)[0] not in tracked]
     new.sort(key=lambda c: KINDS.index(c.kind))

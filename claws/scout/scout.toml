@@ -8,10 +8,6 @@ max_candidates = 25                # handed over per run; the rest wait
 opt_out_label = "ready-for-human"  # issues and PRs with it are skipped
 
 [[repo]]
-name = "TheKevJames/akuma"
-path = "~/src/personal/akuma"
-
-[[repo]]
 name = "TheKevJames/bakery"
 path = "~/src/personal/bakery"
 exclude = [
