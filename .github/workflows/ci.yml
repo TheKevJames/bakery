@@ -19,3 +19,24 @@ jobs:
           # renovate: datasource=pypi depName=prek
           prek-version: v0.5.4
           extra-args: --all-files
+
+  test:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24.21.0
+      - run: npm install -g "@earendil-works/pi-coding-agent@${pi_version}"
+        env:
+          # renovate: datasource=npm depName=@earendil-works/pi-coding-agent
+          pi_version: 1.0.0
+      - run: npm ci
+        working-directory: pi
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          # renovate: datasource=github-releases depName=astral-sh/uv
+          version: 0.12.21
+      - run: uv run --frozen pytest
+        working-directory: bakery
