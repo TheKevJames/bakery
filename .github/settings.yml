@@ -2,7 +2,7 @@ repository:
   name: bakery
   description: my personal agent harness and claws
   topics: pi, agentic, claw, harness
-  private: true
+  private: false
 
   has_issues: true
   has_projects: false
