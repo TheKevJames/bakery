@@ -18,7 +18,7 @@ Setup
 .. code-block:: console
 
     $ export PI_CODING_AGENT_DIR=~/src/personal/bakery/interactive
-    $ npm ci --prefix ~/src/personal/bakery/pi
+    $ bun install --frozen-lockfile --cwd ~/src/personal/bakery/pi
     $ pipx install --force ~/src/personal/bakery/bakery
     $ bakery state init
 
