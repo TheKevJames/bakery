@@ -53,6 +53,12 @@ class FakeLLM:
             str(m['content']) for m in messages if m['role'] == 'system'
         )
 
+    def tool_results(self, index: int = -1) -> list[str]:
+        """The text of every tool result the model has seen, in order."""
+        messages = self.requests[index]['messages']
+        assert isinstance(messages, list)
+        return [str(m['content']) for m in messages if m['role'] == 'tool']
+
     def transcript(self, index: int = -1) -> str:
         messages = self.requests[index]['messages']
         assert isinstance(messages, list)

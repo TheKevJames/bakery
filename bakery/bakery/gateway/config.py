@@ -9,7 +9,6 @@ ConfigError, so a typo can never silently change a limit.
 
 import dataclasses
 import datetime
-import os
 import pathlib
 import re
 import tomllib
@@ -20,17 +19,15 @@ from typing import Any
 import croniter
 
 from .. import state
+from . import policy as policy_
+from . import toml
 
 DEFAULTS_NAME = 'defaults.toml'
 CLAW_NAME = 'claw.toml'
+ConfigError = toml.ConfigError
 NAME_RE = re.compile(r'[a-z][a-z0-9-]*')
-ENV_NAME_RE = re.compile(r'[A-Z_][A-Z0-9_]*')
 ASK_POLICIES = ('ask', 'assume', 'park')
 TIMEOUT_POLICIES = ('assume', 'park')
-
-
-class ConfigError(Exception):
-    pass
 
 
 @dataclasses.dataclass(frozen=True)
@@ -88,7 +85,9 @@ class Claw:
     limits: Limits
     concurrency: Concurrency
     ask: Ask
-    secrets: tuple[str, ...]
+    # Environment variable name -> Keychain item (see bakery/secrets.py).
+    secrets: Mapping[str, str]
+    policy: policy_.Policy
     jobs: tuple[Job, ...]
 
     @property
@@ -132,82 +131,6 @@ class Config:
         return self.claws[name]
 
 
-class _Table:
-    """Typed, strict access to one TOML table; reports unused keys."""
-
-    def __init__(self, data: Mapping[str, Any], where: str) -> None:
-        self.data = data
-        self.where = where
-        self.used: set[str] = set()
-
-    def _get(self, key: str) -> object:
-        self.used.add(key)
-        if key not in self.data:
-            raise ConfigError(f'{self.where}: missing {key}')
-        return self.data[key]
-
-    def _wrong_type(self, key: str) -> ConfigError:
-        return ConfigError(f'{self.where}.{key}: wrong type')
-
-    def string(self, key: str, choices: tuple[str, ...] = ()) -> str:
-        value = self._get(key)
-        if not isinstance(value, str):
-            raise self._wrong_type(key)
-        if choices and value not in choices:
-            raise ConfigError(
-                f'{self.where}.{key}: must be one of {", ".join(choices)}'
-            )
-        return value
-
-    def boolean(self, key: str) -> bool:
-        value = self._get(key)
-        if not isinstance(value, bool):
-            raise self._wrong_type(key)
-        return value
-
-    def positive(self, key: str) -> float:
-        value = self._get(key)
-        # bool is an int subclass; `true` is not a number here.
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise self._wrong_type(key)
-        if value <= 0:
-            raise ConfigError(f'{self.where}.{key}: must be positive')
-        return float(value)
-
-    def count(self, key: str, *, minimum: int = 1) -> int:
-        value = self._get(key)
-        if isinstance(value, bool) or not isinstance(value, int):
-            raise self._wrong_type(key)
-        if value < minimum:
-            raise ConfigError(f'{self.where}.{key}: must be >= {minimum}')
-        return value
-
-    def names(self, key: str) -> tuple[str, ...]:
-        """A list of environment-variable names."""
-        value = self._get(key)
-        if not isinstance(value, list) or not all(
-            isinstance(x, str) and ENV_NAME_RE.fullmatch(x) for x in value
-        ):
-            raise ConfigError(f'{self.where}.{key}: must be a list of names')
-        return tuple(str(x) for x in value)
-
-    def table(self, key: str) -> '_Table':
-        value = self._get(key)
-        if not isinstance(value, dict):
-            raise self._wrong_type(key)
-        return _Table(value, f'{self.where}.{key}')
-
-    def optional(self, key: str) -> bool:
-        return key in self.data
-
-    def done(self) -> None:
-        unknown = set(self.data) - self.used
-        if unknown:
-            raise ConfigError(
-                f'{self.where}: unknown keys {", ".join(sorted(unknown))}'
-            )
-
-
 def _merge(
     base: Mapping[str, Any], override: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -218,17 +141,6 @@ def _merge(
         else:
             merged[key] = value
     return merged
-
-
-def _expand(raw: str, base: pathlib.Path) -> pathlib.Path:
-    def env(match: re.Match[str]) -> str:
-        value = os.environ.get(match.group(1))
-        if not value:
-            raise ConfigError(f'${{{match.group(1)}}} is not set (in {raw})')
-        return value
-
-    expanded = re.sub(r'\$\{([A-Za-z_][A-Za-z0-9_]*)\}', env, raw)
-    return (base / pathlib.Path(expanded).expanduser()).resolve()
 
 
 def _active_hours(raw: str, where: str) -> ActiveHours:
@@ -242,7 +154,7 @@ def _active_hours(raw: str, where: str) -> ActiveHours:
     return ActiveHours(start, end)
 
 
-def _job(table: _Table, names: set[str]) -> Job:
+def _job(table: toml.Table, names: set[str]) -> Job:
     name = table.string('name')
     if not NAME_RE.fullmatch(name) or name in names:
         raise ConfigError(f'{table.where}.name: invalid or duplicate')
@@ -268,7 +180,7 @@ def _job(table: _Table, names: set[str]) -> Job:
 
 
 def _claw(name: str, profile: pathlib.Path, data: Mapping[str, Any]) -> Claw:
-    table = _Table(data, name)
+    table = toml.Table(data, name)
     limits = table.table('limits')
     concurrency = table.table('concurrency')
     ask = table.table('ask')
@@ -278,11 +190,11 @@ def _claw(name: str, profile: pathlib.Path, data: Mapping[str, Any]) -> Claw:
         raise ConfigError(f'{name}.job: must be an array of tables')
     names: set[str] = set()
     jobs = tuple(
-        _job(_Table(job, f'{name}.job[{i}]'), names)
+        _job(toml.Table(job, f'{name}.job[{i}]'), names)
         for i, job in enumerate(jobs_raw)
     )
     cwd = (
-        _expand(table.string('cwd'), profile)
+        toml.expand(table.string('cwd'), profile)
         if table.optional('cwd')
         else state.root() / name
     )
@@ -304,7 +216,8 @@ def _claw(name: str, profile: pathlib.Path, data: Mapping[str, Any]) -> Claw:
             max_resumes=concurrency.count('max_resumes', minimum=0),
             idle_exit_minutes=concurrency.positive('idle_exit_minutes'),
         ),
-        secrets=table.names('secrets'),
+        secrets=table.secrets('secrets'),
+        policy=policy_.parse(table.table('policy'), profile),
         ask=Ask(
             policy=ask.string('policy', ASK_POLICIES),
             timeout_hours=ask.positive('timeout_hours'),
@@ -318,7 +231,7 @@ def _claw(name: str, profile: pathlib.Path, data: Mapping[str, Any]) -> Claw:
 
 
 def _gateway(data: Mapping[str, Any]) -> Gateway:
-    table = _Table(data, 'gateway')
+    table = toml.Table(data, 'gateway')
     try:
         tz = zoneinfo.ZoneInfo(table.string('timezone'))
     except zoneinfo.ZoneInfoNotFoundError:

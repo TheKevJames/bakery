@@ -1,10 +1,7 @@
 import asyncio
 import pathlib
-import shutil
 import subprocess
 import sys
-import tempfile
-from collections.abc import Iterator
 
 import pytest
 
@@ -13,17 +10,6 @@ from testing import gateway as testing_gateway
 from testing import harness
 
 Reply = harness.Reply
-
-
-@pytest.fixture(name='root', scope='function')
-def fixture_root(
-    fake_llm: harness.FakeLLM, monkeypatch: pytest.MonkeyPatch
-) -> Iterator[pathlib.Path]:
-    root = pathlib.Path(tempfile.mkdtemp(prefix='bk', dir='/tmp'))
-    monkeypatch.setenv('XDG_STATE_HOME', str(root / 'state'))
-    monkeypatch.setenv('BAKERY_FAKE_LLM_URL', fake_llm.url)
-    yield root
-    shutil.rmtree(root)
 
 
 def test_bakery_cli_sees_claw_sessions(

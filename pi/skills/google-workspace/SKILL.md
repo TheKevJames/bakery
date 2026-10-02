@@ -5,7 +5,7 @@ description: Read, write, and manage Google Docs, Sheets, and Drive files using 
 
 # Google Workspace (via gog CLI)
 
-**Always use the `gog` CLI tool** for Google Workspace interactions. Do not attempt to use web-fetch, curl, or browser-based access for Google Docs — they require authentication and will fail.
+**Always use the `gog` CLI tool** for Google Workspace interactions. Do not attempt to use web_fetch, curl, or browser-based access for Google Docs — they require authentication and will fail.
 
 ## Google Docs
 
@@ -90,7 +90,7 @@ gog doc update DOC_ID --input /tmp/doc.md
 ```
 
 ## Tips
-- When a user shares a Google Doc URL, **use `gog doc get`** — do not try web-fetch or ask them to download it
+- When a user shares a Google Doc URL, **use `gog doc get`** — do not try web_fetch or ask them to download it
 - The `gog` tool handles authentication automatically
 - Google Doc IDs are the long alphanumeric string in the URL after `/d/`
 - Use `gog drive upload` with `--mime-type application/vnd.google-apps.document` to convert markdown to Google Docs format on upload

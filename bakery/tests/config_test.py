@@ -64,8 +64,12 @@ def test_repo_defaults_with_claw_overrides(tmp_path: pathlib.Path) -> None:
         ),
         ('[[job]]\nname = "x"\ncron = "* * * * *"', 'missing prompt'),
         ('cwd = "${BAKERY_UNSET_VAR}/x"', 'is not set'),
-        ('secrets = ["lower"]', 'must be a list of names'),
-        ('secrets = "X"', 'must be a list of names'),
+        ('secrets = ["lower"]', 'is not NAME or NAME=ITEM'),
+        ('secrets = ["A=b-c"]', 'is not NAME or NAME=ITEM'),
+        ('secrets = "X"', 'must be a list of strings'),
+        ('[policy]\nconfirm = ["("]', 'bad regex'),
+        ('[policy]\nnetwork = ["https://x.com"]', 'is not a domain'),
+        ('[policy]\ntool = []', 'unknown keys tool'),
     ],
 )
 def test_invalid_config_is_rejected(

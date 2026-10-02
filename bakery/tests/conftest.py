@@ -55,3 +55,30 @@ def fixture_run_pi(
 
     yield make
     shutil.rmtree(sockets)
+
+
+@pytest.fixture(name='claw_tmp', scope='session')
+def fixture_claw_tmp() -> Iterator[pathlib.Path]:
+    path = pathlib.Path(tempfile.mkdtemp(prefix='bakery-tmp-'))
+    yield path
+    shutil.rmtree(path)
+
+
+@pytest.fixture(name='root', scope='function')
+def fixture_root(
+    fake_llm: harness.FakeLLM,
+    claw_tmp: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[pathlib.Path]:
+    """A gateway's world: state dir, fake model, and the repo's extensions."""
+    # Short, because the state dir holds unix sockets (104-byte path cap).
+    root = pathlib.Path(tempfile.mkdtemp(prefix='bk', dir='/tmp'))
+    monkeypatch.setenv('XDG_STATE_HOME', str(root / 'state'))
+    monkeypatch.setenv('BAKERY_FAKE_LLM_URL', fake_llm.url)
+    monkeypatch.setenv('BAKERY_REPO', str(harness.REPO))
+    # Claws may always write $TMPDIR; keep it apart from `root` (on Linux it
+    # would otherwise be /tmp, which holds `root` itself). Shared across tests
+    # so pi's compiled-extension cache there stays warm.
+    monkeypatch.setenv('TMPDIR', str(claw_tmp))
+    yield root
+    shutil.rmtree(root)

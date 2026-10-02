@@ -133,6 +133,21 @@ class PiProcess:
             raise ChildExited(self.describe_exit())
         return record
 
+    def extension_errors(self) -> list[str]:
+        """Drain buffered events, returning any extension errors."""
+        errors = []
+        while not self.events.empty():
+            record = self.events.get_nowait()
+            if record is None:
+                self.events.put_nowait(None)
+                break
+            if record.get('type') == 'extension_error':
+                errors.append(
+                    f'extension error in {record.get("extensionPath")}'
+                    f' ({record.get("event")}): {record.get("error")}'
+                )
+        return errors
+
     def drain_events(self) -> None:
         """Drop buffered events left over from a previous run."""
         while not self.events.empty():
