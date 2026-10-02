@@ -9,7 +9,9 @@ from testing import gateway as testing_gateway
 from testing import harness
 
 Reply = harness.Reply
-DENIED = 'Operation not permitted'
+# Denials read differently per platform (macOS: Operation not permitted;
+# Linux: the path is hidden or read-only), so assert on what got through.
+FAILED = 'Command exited with code'
 
 
 def call(tool: str, **args: object) -> harness.Reply:
@@ -86,9 +88,11 @@ def test_file_access_follows_the_policy(
 
     assert run.status == 'settled', run.reason
     assert 'is protected and cannot be read' in results[0]
-    assert DENIED in results[1]
+    assert FAILED in results[1]
+    assert 'hunter2' not in results[1]
     assert 'is protected and cannot be read' in results[2]
-    assert DENIED in results[3]
+    assert FAILED in results[3]
+    assert 'hunter3' not in results[3]
     assert 'fine' in results[4]
     assert 'is protected and cannot be read' in results[5]
     assert 'memory of a' in results[6]
@@ -97,7 +101,7 @@ def test_file_access_follows_the_policy(
     assert (out / 'w.txt').read_text() == 'w'
     assert 'is not writable' in results[10]
     assert results[11].strip().endswith('b')
-    assert DENIED in results[12]
+    assert FAILED in results[12]
     # Undeclared, so pi itself refuses it; the policy would block it too.
     assert 'Tool edit not found' in results[13]
     assert not (root / 'w.txt').exists()
