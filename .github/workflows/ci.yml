@@ -40,6 +40,6 @@ jobs:
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           # renovate: datasource=github-releases depName=astral-sh/uv
-          version: 0.12.21
+          version: 0.12.22
       - run: uv run --frozen pytest
         working-directory: bakery
