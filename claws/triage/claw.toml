@@ -1,0 +1,32 @@
+# triage: researches each ticket tagged Triage on my task list, records its
+# priority, size, and notes, and routes it to Bakery/build/<priority>,
+# Bakery/human, or Bakery/wontfix. Research only: no reproduction, no edits.
+
+model = "anthropic/claude-sonnet-5-5"
+thinking = "medium"
+
+[limits]
+cost_usd = 3.0  # per ticket
+
+[ask]
+policy = "ask"
+on_timeout = "assume"  # AGENTS.md: the assumption is always "route to human"
+
+[policy]
+tools = [
+    "read", "grep", "find", "ls", "bash",
+    "ask_user", "web_search", "web_fetch", "github", "mcp__context7__*",
+    "memory_append", "memory_search", "memory_get", "propose_user_update",
+    "task_list", "task_show", "task_set",
+]
+
+# One ticket per run, working through the queue. Also runs within two
+# minutes of the task list changing (eg. scout or I add tickets).
+[[job]]
+name = "queue"
+cron = "0 * * * *"
+prompt = "Triage this ticket."
+collector = "triage"
+repeat = true
+watch = "${TASK_FOLDER}"
+debounce_seconds = 120

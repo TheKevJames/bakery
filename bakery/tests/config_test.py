@@ -131,6 +131,9 @@ def job(cron: str, hours: str | None = None) -> config.Job:
         thinking=None,
         tools=(),
         collector=None,
+        repeat=False,
+        watch=None,
+        debounce_seconds=120.0,
         shared=False,
     )
 
