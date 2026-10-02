@@ -1,0 +1,26 @@
+# Files injected into every session by pi/extensions/context. Paths are
+# relative to this profile; `${VAR}` and `~` are expanded.
+
+[[file]]
+path = "../pi/rules/code-style.md"
+
+[[file]]
+path = "../pi/rules/git.md"
+
+[[file]]
+path = "../pi/rules/workflow.md"
+
+[[file]]
+path = "../pi/rules/tools.md"
+
+[[file]]
+path = "../pi/rules/testing.md"
+
+[[file]]
+path = "../pi/rules/file-types.md"
+
+# Shared with every claw; created by `bakery state init`.
+[[file]]
+path = "${XDG_STATE_HOME}/claws/_shared/USER.md"
+max_chars = 4000
+optional = true

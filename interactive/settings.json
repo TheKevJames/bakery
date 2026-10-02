@@ -15,7 +15,7 @@
   },
   "shellCommandPrefix": "export GIT_EDITOR=true\nexport MANPAGER=cat",
   "quietStartup": true,
-  "lastChangelogVersion": "0.99.2",
+  "lastChangelogVersion": "1.0.0",
   "enabledModels": [
     "anthropic/claude-opus-5-5",
     "anthropic/claude-opus-4-8",

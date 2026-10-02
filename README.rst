@@ -7,7 +7,7 @@ gateway that runs autonomous agents ("claws"). See `docs/DESIGN.md`_.
 Layout
 ------
 
-- ``pi/``: shared extensions, skills, prompts, and agents
+- ``pi/``: shared extensions, skills, prompts, agents, and rules
 - ``interactive/``: the interactive pi profile (``PI_CODING_AGENT_DIR``)
 - ``bakery/``: the ``bakery`` CLI (Python, ``uv``)
 - ``bin/vendor``: refresh vendored skills under ``pi/skills/vendor``
@@ -18,7 +18,9 @@ Setup
 .. code-block:: console
 
     $ export PI_CODING_AGENT_DIR=~/src/personal/bakery/interactive
+    $ npm ci --prefix ~/src/personal/bakery/pi
     $ pipx install --force ~/src/personal/bakery/bakery
+    $ bakery state init
 
 .. _docs/DESIGN.md: docs/DESIGN.md
 .. _pi: https://github.com/earendil-works/pi

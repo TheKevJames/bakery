@@ -42,18 +42,54 @@ The interactive profile keeps using `$XDG_STATE_HOME/pi/{sessions,bakery}`.
 
 ## Context assembly
 
-A `context` extension (loaded by every profile, including `interactive/`)
-reads the profile's `context.toml`: an ordered list of files, each with a
-character budget and an injection mode (`every_turn` or `session_start`),
-plus a total budget. It injects them at `before_agent_start`. Defaults:
-20k chars per file, 60k total, 4k for `USER.md`.
+A `context` extension (`pi/extensions/context/`, loaded by every profile)
+reads the profile's `context.toml`:
 
-Typical claw order: shared rule fragments from `pi/rules/` → the claw's
-`AGENTS.md` → `SOUL.md` → `IDENTITY.md` → `_shared/USER.md` (every turn), then
-`MEMORY.md` and the two most recent daily notes (session start only).
+```toml
+file_max_chars = 20000   # default per-file budget
+total_max_chars = 60000  # default budget across all files, in order
 
-The interactive profile uses the same mechanism; its "ask me before choosing
-an approach" rules are an interactive-only fragment.
+[[file]]
+path = "../../pi/rules/workflow.md"  # relative to the profile; ~ and ${VAR} expand
+
+[[file]]
+path = "${XDG_STATE_HOME}/claws/_shared/USER.md"
+max_chars = 4000
+optional = true          # missing is fine; otherwise a missing file is an error
+
+[[file]]
+path = "${XDG_STATE_HOME}/claws/scout/memory/*.md"
+latest = 2               # glob; the N lexicographically-last matches
+inject = "session_start" # default: every_turn
+```
+
+- `every_turn` files are re-read before each agent run and added to pi's
+  context files (rendered like `AGENTS.md`), so edits apply on the next
+  prompt.
+- `session_start` files are sent once as a hidden custom message, and re-sent
+  whenever that message is no longer in the model's context (resumed
+  sessions, compaction).
+- Over-budget files are truncated with a notice telling the model to read the
+  file directly. Budgets are allocated over all entries in order regardless
+  of mode, so a file's share is stable across turns.
+- Config errors and missing required files are reported as pi extension
+  errors; the gateway treats any extension error as fatal for a claw run.
+
+Pi itself still loads `<profile>/AGENTS.md` natively, after the
+`context.toml` files and before any project `AGENTS.md`. So a claw's own
+instructions live in `claws/<name>/AGENTS.md` and are not listed in its
+`context.toml`; the interactive profile has no `AGENTS.md`.
+
+Typical claw order: shared rule fragments from `pi/rules/` → `SOUL.md` →
+`IDENTITY.md` → `_shared/USER.md` → the claw's `AGENTS.md` (every turn),
+then `MEMORY.md` and the two most recent daily notes (session start only).
+
+Every profile uses the same rule fragments, including the "ask me" rules in
+`pi/rules/workflow.md`. Each claw's `AGENTS.md` defines what asking means
+for it (see [Ask policy](#ask-policy)).
+
+Shared extensions' npm dependencies are declared in `pi/package.json`; run
+`npm ci --prefix pi` after cloning or when the lockfile changes.
 
 ## Memory
 
@@ -289,8 +325,11 @@ for build. The gateway runs whatever `pi` is on `PATH`.
 ## Testing
 
 - `task`: property tests (hypothesis).
-- Gateway: a fake pi RPC child replaying JSONL recorded from real pi, and the
-  Discord adapter behind an interface with a fake implementation.
+- Extensions and the gateway: real `pi` against a fake OpenAI-compatible
+  model (`bakery/testing/harness.py` plus `fake_provider.ts`), which records
+  every request so tests can assert on the exact system prompt and
+  transcript. The Discord adapter sits behind an interface with a fake
+  implementation.
 - One manual end-to-end smoke test against real pi on a cheap model.
 
 ## Delivery plan
