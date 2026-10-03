@@ -440,24 +440,22 @@ skills in every profile.
 ## Shared task list
 
 Claws share my existing `task` tool (`~/src/personal/tools/task`, data in
-`$TASK_FOLDER`) with me. Required additions to `task`:
+`$TASK_FOLDER`) with me. What claws rely on:
 
-- every command (reads included, since loading may normalize and write) runs
-  under an `fcntl.flock`; writes are atomic (temp file + `os.replace`);
-- refuse to run if a sync conflict file exists (Dropbox `(conflicted copy)`
-  or Syncthing `.sync-conflict`);
-- tag paths: `--tag Bakery/build` writes `## Bakery` / `### build`; filters
-  match full paths or leaves;
-- `owner` and `link` fields, stored as YAML frontmatter, which force a task
-  into its own `<id>.md` file (the rule becomes: description, owner, or link);
-- `set --owner X` is a compare-and-set (fails if owned by someone else unless
-  `--force`); `unset owner` releases;
-- `priority` (low, medium, high) and `size` (small, medium, large) fields,
-  also frontmatter, set by triage;
+- tasks live in `$TASK_FOLDER/tasks.db` (SQLite, rollback journal so the
+  Syncthing backup only ever sees one self-contained file); each description
+  is a plain `$TASK_FOLDER/<id>.txt` beside it, editable by hand;
+- writers take `BEGIN IMMEDIATE`, so concurrent humans and claws serialize
+  and lose nothing; readers take no lock; ids are never reused;
+- tags are lowercase `/` paths (`--tag bakery/build`); filters match any
+  segment or any path from the root; `triage` sorts first;
+- `owner`, `link`, `priority` (low, medium, high), and `size` (small, medium,
+  large) fields; `set --owner X` is a compare-and-set (fails if owned by
+  someone else unless `--force`); `unset owner` releases;
 - `set --description-append`, `add --link`, `owner`/`link`/`priority`/`size`
-  filters, `--json`
-  on `list` and `show`;
-- property tests (parse/render round-trip; concurrent writers lose nothing).
+  filters, `--json` on `list` and `show`;
+- property tests (DB round-trip, SQL filters against a reference; concurrent
+  writers lose nothing).
 
 Claws use it through tools in `pi/claw-extensions/task.ts`: `task_list`,
 `task_show`, `task_add`, `task_set` (tag, claim, release, append notes),
@@ -466,14 +464,15 @@ gets; claims are always made as the claw itself (`BAKERY_CLAW`).
 
 ### Ticket flow
 
-1. `scout` adds tasks (auto-tagged `Triage`) with a `link`.
-2. `triage` claims `tag=triage` tasks (including ones I add by hand),
-   researches, appends notes, sets `priority` and `size`, then re-tags to
-   `Bakery/build`, `Bakery/human`, or `Bakery/wontfix` and releases.
-3. `build` claims `Bakery/build` tasks (high priority first), moves them to
-   `Bakery/review` once a PR is open, and runs `done` after merge.
+1. `scout` adds tasks to `bakery/triage` with a `link`; tasks I add by hand
+   land in `triage`.
+2. `triage` claims those (mine first), researches, appends notes, sets
+   `priority` and `size`, then re-tags to `bakery/build`, `bakery/human`, or
+   `bakery/wontfix` and releases.
+3. `build` claims `bakery/build` tasks (high priority first), moves them to
+   `bakery/review` once a PR is open, and runs `done` after merge.
 
-I delete `Bakery/wontfix` tasks myself.
+I delete `bakery/wontfix` tasks myself.
 
 ## Claws (v1)
 
@@ -506,22 +505,24 @@ Finds things in my repos that belong on my task list. Profile:
 - **Lineage, not memory**: a candidate is new unless an existing task has its
   link (ignoring the `#L…` anchor). There is no separate "seen" store, so a
   task I delete comes back if its source still exists: before deleting a
-  `Bakery/wontfix` task, I fix its source. Scout therefore never merges or
+  `bakery/wontfix` task, I fix its source. Scout therefore never merges or
   drops candidates and copies links verbatim.
 - At most `max_candidates` (25) per run, ordered CI, PRs, issues, warnings,
   TODOs; the rest wait for the next run. Repos are collected in parallel
   (8 at a time; about 13s for all 17). Repos that cannot be read are
   reported in `#bakery` and in scout's report; the others still run.
 - The model (Sonnet, medium thinking, $2 per run, ask policy `assume`, no
-  bash) writes each candidate up with `task_add` and reports what it added.
+  bash) writes each candidate up with `task_add` (into `bakery/triage`) and
+  reports what it added.
 
 ### triage — read-only + web
 
 Profile: `claws/triage/`. Sonnet, medium thinking, $3 per ticket.
 
 - The `queue` job's `triage` collector (`bakery/bakery/collectors/triage.py`)
-  hands over the lowest-numbered unowned task tagged `Triage`, skipping
-  scheduled (recurring) ones, as the unit `triage/task-<id>`. It runs hourly,
+  hands over the lowest-numbered unowned task tagged `triage` (mine), else
+  `bakery/triage` (scout's), skipping scheduled (recurring) ones, as the unit
+  `triage/task-<id>`. It runs hourly,
   within two minutes of `$TASK_FOLDER` changing (scout or I add tickets),
   manually, and on repeat until the queue is empty.
 - Per ticket: claim it, check the source still exists, research (code,
@@ -529,23 +530,23 @@ Profile: `claws/triage/`. Sonnet, medium thinking, $3 per ticket.
   (route and reason, source check, code locations, hypothesis, approach,
   acceptance criteria, open questions), always set `priority` and `size`,
   then re-tag and release:
-  - `Bakery/build`: a TheKevJames repo checked out under
+  - `bakery/build`: a TheKevJames repo checked out under
     `~/src/personal`, clear scope, checkable by tests, lint, or CI;
-  - `Bakery/human`: needs a decision, reproduction, credentials, outside
+  - `bakery/human`: needs a decision, reproduction, credentials, outside
     systems, or anything uncertain;
-  - `Bakery/wontfix`: false positive, done, obsolete, or duplicate, with
+  - `bakery/wontfix`: false positive, done, obsolete, or duplicate, with
     what to change at the source.
 - Tools: read-only defaults (bash without network or writes), web, `github`,
   context7, memory, `ask_user`, and `task_list`, `task_show`, `task_set`.
 - Ask policy `ask`, falling back to `assume`; every question's assumption is
-  "route this ticket to Bakery/human", so an unanswered question routes it
+  "route this ticket to bakery/human", so an unanswered question routes it
   there and the reply says triage could not finish.
 - A ticket left claimed by a failed or parked run is not picked up again;
   its thread's Resume button continues it.
 
 ### build — worktree + push
 
-- Picks `Bakery/build` tasks by `priority` (`high`, then `medium`, then
+- Picks `bakery/build` tasks by `priority` (`high`, then `medium`, then
   `low`), then lowest id.
 - Works in `$XDG_STATE_HOME/claws/build/worktrees/<repo>/<task-id>`, created
   with `git worktree add` from the checkouts listed in `build.toml`; removed
@@ -553,7 +554,7 @@ Profile: `claws/triage/`. Sonnet, medium thinking, $3 per ticket.
 - Pushes `kjames/bakery-*` branches and opens PRs; never merges.
 - Polls its PRs every 10 minutes; new review comments or failing CI resume
   that ticket's session in the same thread.
-- Merged → `done`. Closed unmerged → `Bakery/human` with a note, released.
+- Merged → `done`. Closed unmerged → `bakery/human` with a note, released.
 - `task` allowlist: triage's plus `link` and `done`.
 - Ask policy: `ask`, falling back to `park`.
 

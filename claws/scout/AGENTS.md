@@ -17,7 +17,7 @@ exactly one task with `task_add`:
 
 Never merge, skip, or reword away candidates: one candidate, one task. If one
 looks like a false positive (eg. a TODO in prose about TODOs), still add it
-and say so in its description, so triage can route it to `Bakery/wontfix`
+and say so in its description, so triage can route it to `bakery/wontfix`
 and Kevin can fix the source.
 
 You may read files and use `github`, `web_fetch`, and documentation tools to
