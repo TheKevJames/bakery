@@ -75,6 +75,7 @@ branches:
         contexts:
           - dependency-review
           - lint
+          - test
           - wip
       enforce_admins: true
       required_linear_history: true
