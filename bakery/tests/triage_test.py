@@ -46,10 +46,10 @@ def fixture_tasks(
     folder = root / 'tasks'
     folder.mkdir()
     monkeypatch.setenv('TASK_FOLDER', str(folder))
-    task('add', 'first')
+    task('add', 'from scout', '--tag', 'bakery/triage')
     task('add', 'recurring', '--next', '2030-01-01')
-    task('add', 'second')
-    task('add', 'already routed', '--tag', 'Bakery/build')
+    task('add', 'from kevin')
+    task('add', 'already routed', '--tag', 'bakery/build')
     return folder
 
 
@@ -65,49 +65,50 @@ def test_works_through_the_queue_one_ticket_per_unit(
     root: pathlib.Path, tasks: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     del tasks
+    # Kevin's inbox goes first, though scout's ticket has the lower id.
     fake_llm.queue(
-        call(id=1, claim=True),
-        call(id=1, priority='high', size='small', description_append='notes'),
-        call(id=1, tag='Bakery/build', release=True),
-        Reply(text='1 to build'),
         call(id=3, claim=True),
-        call(id=3, tag='Bakery/wontfix', priority='low', size='small'),
-        call(id=3, release=True),
-        Reply(text='3 to wontfix'),
+        call(id=3, priority='high', size='small', description_append='notes'),
+        call(id=3, tag='bakery/build', release=True),
+        Reply(text='3 to build'),
+        call(id=1, claim=True),
+        call(id=1, tag='bakery/wontfix', priority='low', size='small'),
+        call(id=1, release=True),
+        Reply(text='1 to wontfix'),
     )
     fake = testing_gateway.FakeChannel()
 
     async def scenario(gateway: core.Gateway) -> None:
         gateway.trigger('triage', None, None)
-        first = await fake.wait('triage/task-1')
-        assert (first.status, first.final_text) == ('settled', '1 to build')
-        second = await fake.wait('triage/task-3')
+        first = await fake.wait('triage/task-3')
+        assert (first.status, first.final_text) == ('settled', '3 to build')
+        second = await fake.wait('triage/task-1')
         assert (second.status, second.final_text) == (
             'settled',
-            '3 to wontfix',
+            '1 to wontfix',
         )
         # The repeat after it finds nothing left (#2 is scheduled).
         await asyncio.sleep(0.5)
         assert not gateway.active and not gateway.queue
 
     testing_gateway.run_gateway(triage_claws(root), fake, scenario)
-    assert json.dumps('<ticket id="1" waiting="1">')[1:-1] in (
+    assert json.dumps('<ticket id="3" waiting="1">')[1:-1] in (
         fake_llm.transcript(0)
     )
-    first, second = show(1), show(3)
+    first, second = show(3), show(1)
     assert (
         first['tag'],
         first['priority'],
         first['size'],
         first['owner'],
-    ) == ('Bakery/build', 'high', 'small', None)
+    ) == ('bakery/build', 'high', 'small', None)
     assert first['description'] == 'notes'
     assert (second['tag'], second['priority'], second['owner']) == (
-        'Bakery/wontfix',
+        'bakery/wontfix',
         'low',
         None,
     )
-    assert show(2)['tag'] == 'Triage'  # scheduled tasks are not triaged
+    assert show(2)['tag'] == 'triage'  # scheduled tasks are not triaged
     assert len(fake_llm.requests) == 8
 
 
@@ -120,7 +121,7 @@ def test_a_ticket_left_waiting_is_not_repeated(
 
     async def scenario(gateway: core.Gateway) -> None:
         gateway.trigger('triage', None, None)
-        await fake.wait('triage/task-1')
+        await fake.wait('triage/task-3')
         async with asyncio.timeout(10):
             while not any('still waiting' in n for n in fake.notices):
                 await asyncio.sleep(0.05)

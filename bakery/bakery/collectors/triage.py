@@ -1,8 +1,9 @@
 """
 The triage collector: the next ticket waiting for triage.
 
-That is the lowest-numbered unowned task tagged Triage, ignoring scheduled
-(recurring) ones. Each ticket is its own unit of work, `triage/task-<id>`, so
+That is the lowest-numbered unowned task in a `triage` section, ignoring
+scheduled (recurring) ones: Kevin's inbox (`triage`) before scout's
+(`bakery/triage`). Each ticket is its own unit of work, `triage/task-<id>`, so
 its thread and session last as long as the ticket.
 """
 
@@ -29,7 +30,9 @@ def waiting() -> list[dict[str, object]]:
 
 
 def collect(claw: 'config.Claw') -> base.Collection:
-    tickets = sorted(waiting(), key=lambda t: int(str(t['id'])))
+    tickets = sorted(
+        waiting(), key=lambda t: (t['tag'] != 'triage', int(str(t['id'])))
+    )
     if not tickets:
         return base.Collection(None)
     ticket = tickets[0]

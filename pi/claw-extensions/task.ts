@@ -63,7 +63,7 @@ export default function tasks(pi: ExtensionAPI) {
       name: "task_add",
       label: "Add Task",
       description:
-        "Add a task for triage. `link` is its lineage: the exact source URL, which is also how " +
+        "Add a task for triage (in `bakery/triage`). `link` is its lineage: the exact source URL, which is also how " +
         "duplicates are recognized, so copy it verbatim.",
       parameters: Type.Object({
         summary: Type.String({ maxLength: 120, description: "One line, at most ~80 characters" }),
@@ -71,9 +71,12 @@ export default function tasks(pi: ExtensionAPI) {
         link: Type.String({ description: "The source URL, verbatim" }),
       }),
       async execute(_id, params, signal) {
-        const args = ["add", "--description", params.description, "--link", params.link, "--", params.summary];
+        const args = [
+          "add", "--tag", "bakery/triage", "--description", params.description, "--link", params.link,
+          "--", params.summary,
+        ];
         await task(pi, args, signal);
-        const added = JSON.parse(await task(pi, ["list", "--json", "-f", `link=${params.link}`], signal));
+        const added = JSON.parse(await task(pi, ["list", "--json", "-s", "id", "-f", `link=${params.link}`], signal));
         return text(`Added: ${JSON.stringify(added.at(-1) ?? {})}`);
       },
     }),
@@ -84,12 +87,12 @@ export default function tasks(pi: ExtensionAPI) {
       name: "task_set",
       label: "Update Task",
       description:
-        "Update a task: move it to a section (`tag`, eg. `Bakery/build`), set its priority or size, " +
+        "Update a task: move it to a section (`tag`, eg. `bakery/build`), set its priority or size, " +
         "claim it for yourself (fails if someone else owns it), release your claim, or append notes " +
         "to its description.",
       parameters: Type.Object({
         id: Id,
-        tag: Type.Optional(Type.String({ description: "Section path, eg. Bakery/human" })),
+        tag: Type.Optional(Type.String({ description: "Section path, eg. bakery/human" })),
         claim: Type.Optional(Type.Boolean()),
         release: Type.Optional(Type.Boolean()),
         priority: Type.Optional(Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high")])),

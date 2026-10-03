@@ -1,6 +1,7 @@
-# triage: researches each ticket tagged Triage on my task list, records its
-# priority, size, and notes, and routes it to Bakery/build, Bakery/human,
-# or Bakery/wontfix. Research only: no reproduction, no edits.
+# triage: researches each ticket in my task list's `triage` inbox, then in
+# scout's `bakery/triage`, records its priority, size, and notes, and routes it
+# to bakery/build, bakery/human, or bakery/wontfix. Research only: no
+# reproduction, no edits.
 
 model = "anthropic/claude-sonnet-5-5"
 thinking = "medium"

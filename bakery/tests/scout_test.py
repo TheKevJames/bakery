@@ -301,7 +301,7 @@ def test_scout_adds_tasks_then_finds_nothing_new(
     assert (added['summary'], added['link'], added['tag']) == (
         'Fix CI',
         ci_link,
-        'Triage',
+        'bakery/triage',
     )
     assert len(fake_llm.requests) == 2
 
@@ -323,7 +323,7 @@ def test_task_claims(
     fake_llm.queue(
         Reply(
             tool='task_set',
-            args={'id': 1, 'claim': True, 'tag': 'Bakery/build'},
+            args={'id': 1, 'claim': True, 'tag': 'bakery/build'},
         ),
         Reply(tool='task_set', args={'id': 2, 'claim': True}),
         Reply(tool='task_set', args={'id': 2, 'release': True}),
@@ -347,7 +347,7 @@ def test_task_claims(
     final = json.loads(task('show', '1', '--json'))
     assert (final['owner'], final['tag'], final['description']) == (
         None,
-        'Bakery/build',
+        'bakery/build',
         'n',
     )
     assert os.environ['TASK_FOLDER'] == str(root / 'tasks')

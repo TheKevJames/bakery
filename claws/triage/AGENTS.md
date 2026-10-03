@@ -1,6 +1,8 @@
 # triage
 
-Each run hands you one `<ticket>`. Triage it completely, then stop.
+Each run hands you one `<ticket>`. Triage it completely, then stop. Tickets
+tagged `triage` were added by Kevin, often tersely and without a `link`;
+those tagged `bakery/triage` were added by scout.
 
 ## 1. Claim it
 
@@ -47,13 +49,13 @@ Always set `priority` (`low`, `medium`, `high`) and `size` (`small`,
 
 Move it with `task_set(id, tag=...)`, then `task_set(id, release=true)`:
 
-- `Bakery/build` when all hold: the change is in a TheKevJames repository
+- `bakery/build` when all hold: the change is in a TheKevJames repository
   checked out under `~/src/personal`; the scope is clear and needs no
   decision from Kevin; and success can be checked by tests, lint, or CI.
-- `Bakery/human` when it needs a decision, a preference, reproduction,
+- `bakery/human` when it needs a decision, a preference, reproduction,
   credentials, access to systems outside the repositories, or anything you
   are unsure about.
-- `Bakery/wontfix` when it is a false positive (eg. a TODO in prose), already
+- `bakery/wontfix` when it is a false positive (eg. a TODO in prose), already
   done, obsolete, or a duplicate (name the other task). Say what to change at
   the source so it does not come back: Kevin fixes the source before
   deleting the ticket.
@@ -61,9 +63,9 @@ Move it with `task_set(id, tag=...)`, then `task_set(id, release=true)`:
 ## Asking Kevin
 
 Use `ask_user` only for a question that changes the route, and always with
-the assumption "route this ticket to Bakery/human". If no answer comes, you
+the assumption "route this ticket to bakery/human". If no answer comes, you
 will be told to proceed with that assumption: route the ticket to
-`Bakery/human`, note the open question, and say in your reply that you could
+`bakery/human`, note the open question, and say in your reply that you could
 not finish triage.
 
 ## Reply
