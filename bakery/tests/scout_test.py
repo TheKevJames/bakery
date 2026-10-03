@@ -37,6 +37,15 @@ def task(*args: str) -> str:
     ).stdout
 
 
+def commit(path: pathlib.Path, message: str) -> None:
+    git(path, 'add', '.')
+    git(
+        path,
+        '-c', 'user.name=t', '-c', 'user.email=t@t',
+        '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', message,
+    )  # fmt: skip
+
+
 def make_upstream(root: pathlib.Path) -> pathlib.Path:
     """A repo standing in for GitHub, and a checkout of it on a branch."""
     upstream = root / 'upstream'
@@ -47,20 +56,22 @@ def make_upstream(root: pathlib.Path) -> pathlib.Path:
     )
     (upstream / 'vendor' / 'lib.py').write_text('# TODO: theirs\n')
     git(upstream, 'init', '-q', '-b', 'main')
-    git(upstream, 'add', '.')
-    git(
-        upstream,
-        '-c', 'user.name=t', '-c', 'user.email=t@t',
-        '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'init',
-    )  # fmt: skip
+    commit(upstream, 'init')
+    # Workflow 4 changes after its run, so that run's warnings are stale.
+    (upstream / '.github' / 'workflows').mkdir(parents=True)
+    (upstream / '.github' / 'workflows' / 'w4.yml').write_text('fixed\n')
+    commit(upstream, 'ci')
     checkout = root / 'checkout'
     git(root, 'clone', '-q', str(upstream), str(checkout))
     git(checkout, 'switch', '-q', '-c', 'feature')
     return checkout
 
 
-def run(run_id: int, conclusion: str, workflow: int = 1) -> dict[str, object]:
+def run(
+    run_id: int, conclusion: str, workflow: int = 1, head_sha: str = ''
+) -> dict[str, object]:
     return {
+        'head_sha': head_sha,
         'id': run_id,
         'workflow_id': workflow,
         'name': f'workflow-{workflow}',
@@ -82,19 +93,23 @@ def issue(number: int, **extra: object) -> dict[str, object]:
     } | extra
 
 
-def serve_repo(fake: fake_github.FakeGitHub) -> None:
+def serve_repo(fake: fake_github.FakeGitHub, initial: str) -> None:
     base = f'/repos/{REPO}'
     runs = f'{base}/actions/runs?branch=main&status=completed&per_page=100'
     fake.routes[base] = {'default_branch': 'main'}
     fake.routes[runs] = {
         # Newest first: workflow 1 has failed twice since its last success;
-        # workflow 2 passes, so its logs are scanned for warnings.
+        # workflow 2 passes, so its logs are scanned for warnings. Workflow
+        # 4 changed since its run, and workflow 5's commit is gone, so their
+        # logs (unserved here) are not.
         'workflow_runs': [
             run(10, 'failure', workflow=3) | {'event': 'dynamic'},
             run(9, 'failure'),
-            run(8, 'success', workflow=2),
+            run(8, 'success', workflow=2, head_sha=initial),
             run(7, 'timed_out'),
             run(6, 'success'),
+            run(5, 'success', workflow=4, head_sha=initial),
+            run(4, 'success', workflow=5, head_sha='0' * 40),
         ]
     }
     fake.routes[f'{base}/actions/runs/9/jobs'] = {
@@ -156,8 +171,9 @@ def fixture_github(
     monkeypatch.setenv('TASK_FOLDER', str(root / 'tasks'))
     (root / 'tasks').mkdir()
     make_upstream(root)
+    initial = git(root / 'upstream', 'rev-parse', 'HEAD~').strip()
     with fake_github.serve() as fake:
-        serve_repo(fake)
+        serve_repo(fake, initial)
         yield fake
 
 
@@ -222,8 +238,12 @@ def test_collects_new_candidates_in_priority_order(
         ('todo', f'{REPO}/blob/main/app.py?todo={todo}#L2'),
     ]
     assert 'test: pytest' in found[0]['detail']
+    assert found[4]['detail'].startswith(
+        f'From https://github.com/{REPO}/actions/runs/8 (commit '
+    )
     assert 'def main():' in found[-1]['detail']
-    assert collection.errors and f'{OWNER}/gone' in collection.errors[0]
+    [error] = collection.errors
+    assert f'{OWNER}/gone' in error
     # Log downloads follow a redirect without leaking the token to it.
     assert ('/blob/logs.zip', None) in github.requests
     assert (f'/repos/{REPO}', f'Bearer {TOKEN}') in github.requests
