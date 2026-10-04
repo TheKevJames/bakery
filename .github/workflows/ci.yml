@@ -11,7 +11,7 @@ jobs:
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           # renovate: datasource=github-releases depName=astral-sh/uv
-          version: 0.12.22
+          version: 0.12.23
           # renovate: datasource=docker depName=python
           python-version: 3.14.7
       - uses: j178/prek-action@v3.0.0
@@ -52,7 +52,7 @@ jobs:
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           # renovate: datasource=github-releases depName=astral-sh/uv
-          version: 0.12.22
+          version: 0.12.23
       # The shared task list CLI, used by claws.
       - run: uv tool install "task @ git+https://github.com/TheKevJames/tools@530db1c576772c1de64e9e44bcdbc155b6ff3529#subdirectory=task"
       - run: uv run --frozen pytest
