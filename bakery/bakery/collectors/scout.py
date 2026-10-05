@@ -2,10 +2,11 @@
 The scout collector: things in my repos that should be on my task list.
 
 Repos come from the claw's `scout.toml`. For each: CI failures and warnings
-on the default branch, open issues and non-bot pull requests, and TODO/FIXME
-comments on the default branch (fetched into a private ref, leaving my
-checkout alone). A candidate is new unless a task already has its link, which
-is deterministic: the link is the task's lineage.
+on the default branch (warnings only from runs whose workflow file is still
+current), open issues and non-bot pull requests, and TODO/FIXME comments on
+the default branch (fetched into a private ref, leaving my checkout alone).
+A candidate is new unless a task already has its link, which is
+deterministic: the link is the task's lineage.
 """
 
 import base64
@@ -134,8 +135,8 @@ def _clip(text: str | None, limit: int = BODY_CHARS) -> str:
 
 def _ci(
     gh: github.GitHub, repo: Repo, branch: str
-) -> Iterator[Candidate | tuple[str, int]]:
-    """CI failures, and (workflow path, run id) of passing runs for logs."""
+) -> Iterator[Candidate | dict[str, Any]]:
+    """CI failures, and each workflow's latest run if it passed."""
     runs = gh.get(
         f'repos/{repo.name}/actions/runs',
         {'branch': branch, 'status': 'completed', 'per_page': '100'},
@@ -149,7 +150,7 @@ def _ci(
         latest = history[0]
         if latest['conclusion'] not in FAILED:
             if latest['conclusion'] == 'success':
-                yield (latest['path'], latest['id'])
+                yield latest
             continue
         streak = []
         for run in history:
@@ -180,43 +181,65 @@ def _ci(
         )
 
 
+def _current(repo: Repo, ref: str, run: dict[str, Any]) -> bool:
+    """Whether the run's workflow file is unchanged on the branch since."""
+    sha = run['head_sha']
+    try:
+        _git(repo, 'cat-file', '-e', f'{sha}^{{commit}}')
+    except subprocess.CalledProcessError:
+        return False  # history was rewritten past the run
+    changed = _git(
+        repo, 'rev-list', '-n', '1', f'{sha}..{ref}', '--', run['path']
+    )
+    return not changed.strip()
+
+
+def _log_warnings(logs: bytes) -> Iterator[str]:
+    with zipfile.ZipFile(io.BytesIO(logs)) as archive:
+        for member in sorted(archive.namelist()):
+            lines = archive.read(member).decode(errors='replace')
+            for line in lines.splitlines():
+                if WARNING_RE.search(line):
+                    yield LOG_TIMESTAMP_RE.sub('', line).strip()
+
+
 def _warnings(
-    gh: github.GitHub, repo: Repo, passing: list[tuple[str, int]]
+    gh: github.GitHub, repo: Repo, ref: str, passing: list[dict[str, Any]]
 ) -> Iterator[Candidate]:
     seen: set[str] = set()
-    for workflow_path, run_id in passing:
+    for run in passing:
+        if not _current(repo, ref, run):
+            continue
         try:
             logs = gh.get_bytes(
-                f'repos/{repo.name}/actions/runs/{run_id}/logs'
+                f'repos/{repo.name}/actions/runs/{run["id"]}/logs'
             )
         except github.GitHubError as e:
             if e.status == 410:  # past log retention
                 continue
             raise
-        workflow = pathlib.PurePosixPath(workflow_path).name
-        with zipfile.ZipFile(io.BytesIO(logs)) as archive:
-            for member in sorted(archive.namelist()):
-                lines = archive.read(member).decode(errors='replace')
-                for line in lines.splitlines():
-                    if not WARNING_RE.search(line):
-                        continue
-                    message = LOG_TIMESTAMP_RE.sub('', line).strip()
-                    key = fingerprint(message)
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    yield Candidate(
-                        kind='warning',
-                        repo=repo.name,
-                        link=(
-                            f'https://github.com/{repo.name}/actions/'
-                            f'workflows/{workflow}?warning={key}'
-                        ),
-                        title=f'CI warning in {workflow}',
-                        detail=_clip(message),
-                    )
-                    if len(seen) >= WARNINGS_PER_REPO:
-                        return
+        workflow = pathlib.PurePosixPath(run['path']).name
+        source = (
+            f'From {run["html_url"]} (commit {run["head_sha"][:7]},'
+            f' {run["created_at"]}):\n'
+        )
+        for message in _log_warnings(logs):
+            key = fingerprint(message)
+            if key in seen:
+                continue
+            seen.add(key)
+            yield Candidate(
+                kind='warning',
+                repo=repo.name,
+                link=(
+                    f'https://github.com/{repo.name}/actions/'
+                    f'workflows/{workflow}?warning={key}'
+                ),
+                title=f'CI warning in {workflow}',
+                detail=source + _clip(message),
+            )
+            if len(seen) >= WARNINGS_PER_REPO:
+                return
 
 
 def _issues(
@@ -332,7 +355,7 @@ def _repo_candidates(
     if meta is None:
         return found, attempt.errors
     branch: str = meta['default_branch']
-    passing: list[tuple[str, int]] = []
+    passing: list[dict[str, Any]] = []
     for item in (
         attempt('reading CI', lambda: list(_ci(gh, repo, branch))) or []
     ):
@@ -340,10 +363,6 @@ def _repo_candidates(
             found.append(item)
         else:
             passing.append(item)
-    found += (
-        attempt('reading CI logs', lambda: list(_warnings(gh, repo, passing)))
-        or []
-    )
     found += (
         attempt(
             'reading issues',
@@ -353,6 +372,13 @@ def _repo_candidates(
     )
     ref = attempt('fetching', lambda: _fetch(repo, branch, token))
     if ref is not None:
+        found += (
+            attempt(
+                'reading CI logs',
+                lambda: list(_warnings(gh, repo, ref, passing)),
+            )
+            or []
+        )
         found += (
             attempt('finding TODOs', lambda: list(_todos(repo, branch, ref)))
             or []

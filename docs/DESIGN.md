@@ -493,8 +493,11 @@ Finds things in my repos that belong on my task list. Profile:
     the current failure streak, so a fresh failure after a fix is new.
   - **Warnings**: `DeprecationWarning`, `FutureWarning`,
     `PendingDeprecationWarning`, and `::warning` lines in the logs of each
-    workflow's latest passing run, deduplicated, at most 20 per repo. Link:
-    the workflow URL with `?warning=<fingerprint>`.
+    workflow's latest passing run, deduplicated, at most 20 per repo. A run
+    is skipped if its workflow file has changed on the default branch since
+    its commit (or its commit is gone), so a fix that has not run yet does
+    not resurface its old warnings. The detail names the run, its commit, and
+    its date. Link: the workflow URL with `?warning=<fingerprint>`.
   - **Issues and PRs**: all open issues, and PRs not by bots, except those
     labelled `ready-for-human`. Link: their URL.
   - **TODO/FIXME comments** on the default branch, fetched with the read
