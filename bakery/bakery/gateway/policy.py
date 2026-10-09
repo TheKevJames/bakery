@@ -10,6 +10,7 @@ import pathlib
 import re
 from collections.abc import Iterable
 
+from .. import state
 from . import toml
 
 DOMAIN_RE = re.compile(r'(\*\.)?[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*(:\d+)?')
@@ -24,6 +25,9 @@ class Policy:
     write_paths: tuple[pathlib.Path, ...]
     # Absolute paths or globs the claw may not read.
     deny_read: tuple[str, ...]
+    # Absolute paths under the claw state root the claw may read besides its
+    # own state and _shared (eg. other claws' memory and transcripts).
+    allow_read: tuple[pathlib.Path, ...]
     # Domains bash may reach; empty means no network.
     network: tuple[str, ...]
     # Regexes; a matching tool name or bash command needs my approval.
@@ -57,6 +61,17 @@ def parse(table: toml.Table, profile: pathlib.Path) -> Policy:
             raise toml.ConfigError(
                 f'{table.where}.network: {domain!r} is not a domain'
             )
+    root = state.root()
+    allow_read = tuple(
+        toml.expand(p, profile) for p in table.strings('allow_read')
+    )
+    for path in allow_read:
+        # Re-allowing beats every deny, so anything outside the state root
+        # could expose eg. ~/.ssh.
+        if not path.is_relative_to(root):
+            raise toml.ConfigError(
+                f'{table.where}.allow_read: {path} is not under {root}'
+            )
     policy = Policy(
         tools=table.strings('tools'),
         write_paths=tuple(
@@ -65,6 +80,7 @@ def parse(table: toml.Table, profile: pathlib.Path) -> Policy:
         deny_read=tuple(
             _pattern(p, profile) for p in table.strings('deny_read')
         ),
+        allow_read=allow_read,
         network=network,
         confirm=confirm,
     )
@@ -76,7 +92,7 @@ def serialize(
     policy: Policy,
     *,
     extra_deny_read: Iterable[pathlib.Path],
-    allow_read: Iterable[pathlib.Path],
+    extra_allow_read: Iterable[pathlib.Path],
     secret_names: Iterable[str],
 ) -> str:
     return json.dumps(
@@ -87,7 +103,9 @@ def serialize(
                 *policy.deny_read,
                 *(str(p) for p in extra_deny_read),
             ],
-            'allow_read': [str(p) for p in allow_read],
+            'allow_read': [
+                str(p) for p in (*policy.allow_read, *extra_allow_read)
+            ],
             'network': policy.network,
             'confirm': policy.confirm,
             'secret_names': sorted(secret_names),

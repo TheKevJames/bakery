@@ -46,6 +46,10 @@ deny_read = [
     "~/.config/gh", "~/.config/gcloud", "~/.config/zsh/dropins/nobackup-*",
     "../../interactive/auth.json",
 ]
+# Paths under the claw state root ($XDG_STATE_HOME/claws) readable besides
+# the claw's own state and _shared, eg. other claws' memory. Nothing outside
+# the state root may be re-allowed.
+allow_read = []
 # Domains bash may reach (eg. "pypi.org", "*.githubusercontent.com"); empty
 # means none. web_*, github, and MCP tools run outside bash.
 network = []
