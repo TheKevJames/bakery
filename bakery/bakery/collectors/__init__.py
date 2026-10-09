@@ -8,6 +8,7 @@ text is appended to the job's prompt. Collectors run in a worker thread.
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from . import baker
 from . import base
 from . import scout
 from . import triage
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
 Collector = Callable[['config.Claw'], base.Collection]
 
 COLLECTORS: dict[str, Collector] = {
+    'baker': baker.collect,
     'scout': scout.collect,
     'triage': triage.collect,
 }

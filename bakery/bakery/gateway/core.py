@@ -59,7 +59,7 @@ class Gateway:
         self.claws_dir = claws_dir
         self.channel = channel
         self.config = config.load(claws_dir)
-        self.runs = ledger.Ledger(state.root() / '_gateway' / 'runs.db')
+        self.runs = ledger.Ledger(ledger.default_path())
         self.pool = pool.Pool()
         self.scheduler = scheduler.Scheduler(self._fire)
         self.watcher = watcher.Watcher(
