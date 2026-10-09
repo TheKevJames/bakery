@@ -33,6 +33,7 @@ from .. import github
 from .. import secrets
 from ..gateway import toml
 from . import base
+from . import tasks
 
 if TYPE_CHECKING:
     from ..gateway import config
@@ -387,13 +388,10 @@ def _repo_candidates(
 
 
 def tracked_links() -> set[str]:
-    """Links of every task, without fragments (line anchors move)."""
-    out = subprocess.run(
-        ('task', 'list', '--json'), capture_output=True, text=True, check=True
-    ).stdout
+    """Links of tracked tasks, without fragments (line anchors move)."""
     return {
         str(task['link']).split('#', 1)[0]
-        for task in json.loads(out)
+        for task in tasks.tracked()
         if task.get('link')
     }
 

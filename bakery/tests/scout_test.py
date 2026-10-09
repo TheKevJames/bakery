@@ -220,6 +220,12 @@ def test_collects_new_candidates_in_priority_order(
     blob = f'https://github.com/{REPO}/blob/main/app.py'
     fixme = scout.fingerprint('    # FIXME: slow')
     task('add', 'old', '--link', f'{blob}?todo={fixme}#L99')
+    # Rejections stay tracked once done; other done tasks free their link.
+    issues = f'https://github.com/{REPO}/issues'
+    task('add', 'no', '--tag', 'bakery/wontfix', '--link', f'{issues}/5')
+    task('add', 'fixed', '--tag', 'bakery/build', '--link', f'{issues}/1')
+    task('2', 'done')
+    task('3', 'done')
 
     collection = scout.collect(claw)
 
@@ -234,12 +240,11 @@ def test_collects_new_candidates_in_priority_order(
         ('ci', f'{REPO}/actions/runs/7'),
         ('pr', f'{REPO}/issues/3'),
         ('issue', f'{REPO}/issues/1'),
-        ('issue', f'{REPO}/issues/5'),
         ('warning', f'{REPO}/actions/workflows/w2.yml?warning={warning}'),
         ('todo', f'{REPO}/blob/main/app.py?todo={todo}#L2'),
     ]
     assert 'test: pytest' in found[0]['detail']
-    assert found[4]['detail'].startswith(
+    assert found[3]['detail'].startswith(
         f'From https://github.com/{REPO}/actions/runs/8 (commit '
     )
     assert 'def main():' in found[-1]['detail']

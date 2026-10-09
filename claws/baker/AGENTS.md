@@ -76,10 +76,11 @@ One task per gap, with `task_add` (it files into `bakery/human`):
 - `summary`: one line, at most ~80 characters, saying what to fix.
 - `link`: `baker:<type>/<slug>`, the slug lowercase-kebab and naming the
   gap rather than one instance of it. Never file a link that is already on
-  a task, in any section; check `task_list` (`link~baker:`) and your memory
-  for the same gap under another slug first. Tasks in `bakery/neverfix` are
-  permanent rejections. Other tasks disappear once Kevin fixes or deletes
-  them; file again only if the gap is still there.
+  an open task, in any section, or on a rejection; check `task_list`
+  (`link~baker:`, and with `done` for rejections) and your memory for the
+  same gap under another slug first. Done tasks in `bakery/wontfix` are
+  permanent rejections. Other tasks disappear once Kevin marks them done;
+  file again only if the gap is still there.
 - `priority`: high = broken, blocking, or a security concern, or a
   `false-learning` that changes how tickets are routed; medium = worth
   doing soon; low = nice to have.
@@ -114,5 +115,5 @@ exactly NO_REPLY. Otherwise reply briefly:
 - **Filed:** each new task's id, link, and priority.
 - **Rechecked:** each open task's id and whether its gap is still present or
   fixed.
-- **Skipped:** gaps you found again whose task is in `bakery/neverfix`.
+- **Skipped:** gaps you found again whose task was rejected.
 - Anything filed as `other`, and why.
