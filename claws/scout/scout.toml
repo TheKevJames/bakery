@@ -44,6 +44,14 @@ exclude = [
 [[repo]]
 name = "TheKevJames/experiments"
 path = "~/src/personal/experiments"
+exclude = [
+    "asyncio-http-perf/**",
+    "gw2/**",
+    "league/**",
+    "libspacerep/**",
+    "multilang-lib/**",
+    "tensorflow-perf/**",
+]
 
 [[repo]]
 name = "TheKevJames/fractured-world"
