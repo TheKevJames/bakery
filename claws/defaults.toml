@@ -55,6 +55,8 @@ allow_read = []
 network = []
 # Regexes on tool names or bash commands that need my approval in Discord.
 confirm = []
+# The task list section task_add files into.
+task_tag = "bakery/triage"
 
 [claw.limits]
 cost_usd = 5.0        # per run

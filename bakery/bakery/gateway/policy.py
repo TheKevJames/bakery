@@ -14,6 +14,7 @@ from .. import state
 from . import toml
 
 DOMAIN_RE = re.compile(r'(\*\.)?[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*(:\d+)?')
+TAG_RE = re.compile(r'[a-z0-9][a-z0-9_.-]*(/[a-z0-9][a-z0-9_.-]*)*')
 
 
 @dataclasses.dataclass(frozen=True)
@@ -32,6 +33,8 @@ class Policy:
     network: tuple[str, ...]
     # Regexes; a matching tool name or bash command needs my approval.
     confirm: tuple[str, ...]
+    # The task list section `task_add` files into.
+    task_tag: str
 
 
 def _pattern(raw: str, base: pathlib.Path) -> str:
@@ -61,6 +64,11 @@ def parse(table: toml.Table, profile: pathlib.Path) -> Policy:
             raise toml.ConfigError(
                 f'{table.where}.network: {domain!r} is not a domain'
             )
+    task_tag = table.string('task_tag')
+    if not TAG_RE.fullmatch(task_tag):
+        raise toml.ConfigError(
+            f'{table.where}.task_tag: {task_tag!r} is not a lowercase tag path'
+        )
     root = state.root()
     allow_read = tuple(
         toml.expand(p, profile) for p in table.strings('allow_read')
@@ -83,6 +91,7 @@ def parse(table: toml.Table, profile: pathlib.Path) -> Policy:
         allow_read=allow_read,
         network=network,
         confirm=confirm,
+        task_tag=task_tag,
     )
     table.done()
     return policy

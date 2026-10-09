@@ -80,6 +80,7 @@ def child_env(claw: config.Claw, job: config.Job | None) -> dict[str, str]:
                 secret_names=claw.secrets,
             ),
             'BAKERY_CLAW': claw.name,
+            'BAKERY_TASK_TAG': claw.policy.task_tag,
             'PI_CODING_AGENT_DIR': str(claw.profile),
             'PI_CODING_AGENT_BAKERY_DIR': bakery_dir(),
             'BAKERY_ASK_POLICY': claw.ask.policy,

@@ -97,6 +97,7 @@ def test_default_jobs_apply_to_every_claw(tmp_path: pathlib.Path) -> None:
         ('[policy]\nnetwork = ["https://x.com"]', 'is not a domain'),
         ('[policy]\ntool = []', 'unknown keys tool'),
         ('[policy]\nallow_read = ["~/.ssh"]', 'is not under'),
+        ('[policy]\ntask_tag = "Bakery/Human"', 'not a lowercase tag path'),
         ('[memory]\nmax_chars = 0', 'max_chars: must be >= 1'),
         (
             '[[job]]\nname = "x"\ncron = "* * * * *"\nprompt = "p"\n'
