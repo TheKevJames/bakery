@@ -57,8 +57,8 @@ Move it with `task_set(id, tag=...)`, then `task_set(id, release=true)`:
   are unsure about.
 - `bakery/wontfix` when it is a false positive (eg. a TODO in prose), already
   done, obsolete, or a duplicate (name the other task). Say what to change at
-  the source so it does not come back: Kevin fixes the source before
-  deleting the ticket.
+  the source so similar findings stop: once Kevin closes the ticket, its own
+  link is never filed again.
 
 ## Asking Kevin
 

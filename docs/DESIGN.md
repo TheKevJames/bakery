@@ -462,6 +462,11 @@ Claws share my existing `task` tool (`~/src/personal/tools/task`, data in
 - `owner`, `link`, `priority` (low, medium, high), and `size` (small, medium,
   large) fields; `set --owner X` is a compare-and-set (fails if owned by
   someone else unless `--force`); `unset owner` releases;
+- tasks are never deleted: `done` stamps a one-off task done, hiding it from
+  `list` and `due` (`list --done` lists only done tasks; `reopen` undoes it),
+  and advances a recurring one; done tasks cannot otherwise change;
+- `created` and `updated` timestamps, owned by the store: every change to a
+  task bumps `updated`;
 - `set --description-append`, `add --link`, `owner`/`link`/`priority`/`size`
   filters, `--json` on `list` and `show`;
 - property tests (DB round-trip, SQL filters against a reference; concurrent
@@ -469,7 +474,8 @@ Claws share my existing `task` tool (`~/src/personal/tools/task`, data in
 
 Claws use it through tools in `pi/claw-extensions/task.ts`: `task_list`,
 `task_show`, `task_add` (with an optional priority and size), `task_set`
-(tag, claim, release, append notes), `task_link`, and `task_done`. Each
+(tag, claim, release, append notes), `task_link`, and `task_done`;
+`task_list` takes `done` to list only done tasks. Each
 claw's `policy.tools` selects which it gets; claims are always made as the
 claw itself (`BAKERY_CLAW`), and `task_add` always files into the claw's
 `policy.task_tag`.
@@ -486,10 +492,11 @@ claw itself (`BAKERY_CLAW`), and `task_add` always files into the claw's
 4. `baker` adds tasks about the claws themselves straight to `bakery/human`,
    with their priority and size; I move them on.
 
-I delete `bakery/wontfix` tasks myself. Tasks in `bakery/neverfix` stay
-forever: their link is never filed again by any claw, since scout and baker
-both skip links already on a task. It is for findings I never want fixed,
-where fixing the source is not an option.
+I close `bakery/wontfix` tasks myself, with `done`. A done task in
+`bakery/wontfix` is a permanent rejection: scout and baker skip links on
+open tasks and on rejections (`bakery/collectors/tasks.py`), so its link is
+never filed again. A done task anywhere else frees its link, so a gap which
+comes back after it was fixed is filed again.
 
 ## Claws (v1)
 
@@ -522,10 +529,10 @@ Finds things in my repos that belong on my task list. Profile:
     `origin` refs are untouched), minus per-repo `exclude` globs. One task
     per comment. Link: `…/blob/<branch>/<path>?todo=<fingerprint>#L<line>`;
     the fingerprint is of the comment's text, so the line can move.
-- **Lineage, not memory**: a candidate is new unless an existing task has its
-  link (ignoring the `#L…` anchor). There is no separate "seen" store, so a
-  task I delete comes back if its source still exists: before deleting a
-  `bakery/wontfix` task, I fix its source. Scout therefore never merges or
+- **Lineage, not memory**: a candidate is new unless an open task or a
+  rejection (a done `bakery/wontfix` task) has its link (ignoring the `#L…`
+  anchor). There is no separate "seen" store, so a task done anywhere else
+  comes back if its source still exists. Scout therefore never merges or
   drops candidates and copies links verbatim.
 - At most `max_candidates` (25) per run, ordered CI, PRs, issues, warnings,
   TODOs; the rest wait for the next run. Repos are collected in parallel
@@ -616,7 +623,7 @@ Reviews how the claws learn and files a task for each gap. Profile:
   - No `task_set`: changes to other claws' memory or to tickets are steps
     in a task's **Fix**, for me.
 - It keeps its own memory (the slugs it filed). It never files a link
-  already on a task. Rejected findings live in `bakery/neverfix`.
+  already on an open task or a rejection (a done `bakery/wontfix` task).
 - Ask policy `assume`; `silent_ok`, replying `NO_REPLY` when it filed
   nothing and none of its tasks is still open.
 

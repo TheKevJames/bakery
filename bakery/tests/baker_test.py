@@ -180,11 +180,18 @@ def test_digest_covers_activity_since_the_last_review(
             },
         ],
     )
-    subprocess.run(
-        ('task', 'add', '--tag', 'bakery/neverfix', '--link',
-         'baker:plumbing/x', '--', 'Never this'),
-        check=True,
-    )  # fmt: skip
+    for tag, slug, summary in (
+        ('bakery/wontfix', 'x', 'Never this'),
+        ('bakery/human', 'y', 'Fixed'),
+        ('bakery/human', 'z', 'Still open'),
+    ):
+        subprocess.run(
+            ('task', 'add', '--tag', tag, '--link', f'baker:plumbing/{slug}',
+             '--', summary),
+            check=True,
+        )  # fmt: skip
+    for ident in ('1', '2'):
+        subprocess.run(('task', ident, 'done'), check=True)
 
     text = baker.collect(world).text
 
@@ -210,7 +217,9 @@ def test_digest_covers_activity_since_the_last_review(
     assert 'appended: 1 self' in text
     assert 'scout/dream-x: settled' in text
     assert 'initialize claw state' not in text
-    assert '[bakery/neverfix] None/None Never this (baker:plumbing/x)' in text
+    assert '[rejected] None/None Never this (baker:plumbing/x)' in text
+    assert 'baker:plumbing/y' not in text
+    assert '[bakery/human] None/None Still open (baker:plumbing/z)' in text
     assert 'ERROR bakery.gateway.core: committing state after' in text
     assert 'old trouble' not in text
 

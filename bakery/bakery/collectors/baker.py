@@ -21,6 +21,7 @@ from .. import state
 from .. import transcripts
 from ..gateway import ledger
 from . import base
+from . import tasks
 
 if TYPE_CHECKING:
     from ..gateway import config
@@ -230,23 +231,17 @@ def _memory(
 
 
 def _tasks() -> Section:
-    out = subprocess.run(
-        ('task', 'list', '--json', '-f', f'link~{TASK_LINK_PREFIX}'),
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
-    tasks: list[dict[str, object]] = json.loads(out)
     lines = [
-        f'- #{t["id"]} [{t["tag"]}] {t["priority"]}/{t["size"]}'
-        f' {t["summary"]} ({t["link"]})'
-        for t in tasks
+        f'- #{t["id"]} [{"rejected" if t["done"] else t["tag"]}]'
+        f' {t["priority"]}/{t["size"]} {t["summary"]} ({t["link"]})'
+        for t in tasks.tracked(f'link~{TASK_LINK_PREFIX}')
     ]
     return Section(
-        'Your tasks (open, wontfix, and neverfix)',
+        'Your tasks (open, and rejected)',
         lines,
         5_000,
-        f'task_list with filter link~{TASK_LINK_PREFIX}',
+        f'task_list with filter link~{TASK_LINK_PREFIX}, and with done=true'
+        f' for rejections (tag={tasks.REJECTED})',
     )
 
 
