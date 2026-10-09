@@ -43,7 +43,7 @@ jobs:
       - run: npm install -g "@earendil-works/pi-coding-agent@${pi_version}"
         env:
           # renovate: datasource=npm depName=@earendil-works/pi-coding-agent
-          pi_version: 1.0.0
+          pi_version: 1.0.4
       - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: 1.4.2
