@@ -413,7 +413,12 @@ Enforcement:
    no reads under `deny_read`, and network only through its filtering proxy
    to `network` domains. It also always blocks writes to `.git/hooks`,
    `.git/config`, and shell rc files, and blocks unix sockets (so the
-   ssh-agent too). Secrets are removed from bash's environment.
+   ssh-agent too). Secrets are removed from bash's environment. What the
+   sandbox blocked (its violation log: denied reads and writes on macOS,
+   denied writes on Linux, denied network on both) is appended to the bash
+   result as `<sandbox_violations>`, with a note that it is policy rather
+   than missing auth or files, and kept in the result's
+   `details.sandboxViolations` for later analysis.
 2. **pi's in-process file tools** (`read`, `ls`, `grep`, `find`, `edit`,
    `write`) are checked by the extension against the same rules (paths are
    resolved through symlinks first). `grep` and `find` are refused on a

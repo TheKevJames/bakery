@@ -1,6 +1,7 @@
 import asyncio
 import json
 import pathlib
+import sys
 from collections.abc import Iterator
 
 from bakery.gateway import channel
@@ -93,6 +94,8 @@ def test_file_access_follows_the_policy(
     assert 'is protected and cannot be read' in results[0]
     assert FAILED in results[1]
     assert 'hunter2' not in results[1]
+    if sys.platform == 'darwin':
+        assert f'file-read-data {secret.resolve()}/key' in results[1]
     assert 'is protected and cannot be read' in results[2]
     assert FAILED in results[3]
     assert 'hunter3' not in results[3]
@@ -128,6 +131,8 @@ def test_bash_network_is_allowlisted(
 
     assert run.status == 'settled', run.reason
     assert '403' in results[0]
+    assert 'deny network-outbound github.com:443' in results[0]
+    assert 'sandbox policy blocked' in results[0]
 
 
 def test_confirm_patterns_ask_first(
