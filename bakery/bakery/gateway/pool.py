@@ -70,12 +70,13 @@ def child_env(claw: config.Claw, job: config.Job | None) -> dict[str, str]:
     )
     env.update(
         {
-            # Claws may read neither the gateway's files nor each other's
-            # state (memory, transcripts, the state repo's history).
+            # Unless their policy's allow_read says otherwise, claws may read
+            # neither the gateway's files nor each other's state (memory,
+            # transcripts, the state repo's history).
             'BAKERY_POLICY': policy.serialize(
                 claw_policy,
                 extra_deny_read=[state.root()],
-                allow_read=[claw.state_dir, state.root() / state.SHARED],
+                extra_allow_read=[claw.state_dir, state.root() / state.SHARED],
                 secret_names=claw.secrets,
             ),
             'BAKERY_CLAW': claw.name,

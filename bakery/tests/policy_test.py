@@ -53,7 +53,7 @@ def test_file_access_follows_the_policy(
     out = root / 'out'
     out.mkdir()
     state = root / 'state' / 'claws'
-    for claw in ('a', 'b'):
+    for claw in ('a', 'b', 'c'):
         (state / claw).mkdir(parents=True)
         (state / claw / 'MEMORY.md').write_text(f'memory of {claw}')
     claws = testing_gateway.make_claws(
@@ -64,6 +64,7 @@ def test_file_access_follows_the_policy(
                 tools = ["read", "grep", "write", "bash"]
                 write_paths = {toml_list([out])}
                 deny_read = {toml_list([secret, root / 'dropins/nobackup-*'])}
+                allow_read = {toml_list([state / 'b'])}
             """
         },
     )
@@ -73,7 +74,7 @@ def test_file_access_follows_the_policy(
         call('read', path=str(root / 'dropins/nobackup-x.zsh')),
         call('bash', command=f'cat {root}/dropins/nobackup-x.zsh'),
         call('read', path=str(root / 'dropins/ok.zsh')),
-        call('read', path=str(state / 'b/MEMORY.md')),
+        call('read', path=str(state / 'c/MEMORY.md')),
         call('read', path=str(state / 'a/MEMORY.md')),
         call('grep', pattern='hunter', path=str(root)),
         call('grep', pattern='memory', path=str(state / 'a')),
@@ -82,6 +83,8 @@ def test_file_access_follows_the_policy(
         call('bash', command=f'echo b > {out}/b.txt && cat {out}/b.txt'),
         call('bash', command=f'echo b > {root}/b.txt'),
         call('edit', path=str(out / 'w.txt'), edits=[]),
+        call('read', path=str(state / 'b/MEMORY.md')),
+        call('bash', command=f'cat {state}/b/MEMORY.md {state}/c/MEMORY.md'),
     ]
 
     run, results = run_calls(claws, fake_llm, 'a', calls)
@@ -104,6 +107,9 @@ def test_file_access_follows_the_policy(
     assert FAILED in results[12]
     # Undeclared, so pi itself refuses it; the policy would block it too.
     assert 'Tool edit not found' in results[13]
+    assert 'memory of b' in results[14]
+    assert 'memory of b' in results[15]
+    assert 'memory of c' not in results[15]
     assert not (root / 'w.txt').exists()
     assert not (root / 'b.txt').exists()
 

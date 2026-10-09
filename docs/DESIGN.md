@@ -395,6 +395,9 @@ blocked.
   `interactive/auth.json`. The gateway adds the whole claw state root, with
   the claw's own state dir and `_shared` re-allowed, so claws read neither the
   gateway's files nor each other's memory or transcripts.
+- `allow_read`: further paths under the claw state root to re-allow (eg.
+  other claws' memory and transcripts). Empty by default. A re-allowed path beats
+  every deny, so paths outside the state root are rejected.
 - `network`: domains bash may reach (eg. `pypi.org`, `*.githubusercontent.com`);
   empty by default, so bash has no network. Build's allowlist arrives in step
   11.
