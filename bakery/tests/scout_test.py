@@ -7,6 +7,7 @@ from collections.abc import Iterator
 
 import pytest
 
+from bakery import state
 from bakery.chat import render
 from bakery.collectors import scout
 from bakery.gateway import config
@@ -399,15 +400,22 @@ def test_repo_claws_load(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv('TASK_FOLDER', str(tmp_path))  # triage watches it
-    claw = config.load(harness.REPO / 'claws').claw('scout')
+    monkeypatch.setenv('XDG_STATE_HOME', str(tmp_path))  # baker reads it
+    loaded = config.load(harness.REPO / 'claws')
+    claw = loaded.claw('scout')
     settings = scout.load_settings(claw.profile)
     assert claw.job('daily').collector == 'scout'
     assert {r.name for r in settings.repos} >= {f'{OWNER}/bakery'}
     assert f'{OWNER}/core' not in {r.name for r in settings.repos}
-    for name in ('scout', 'triage'):
-        profile = harness.REPO / 'claws' / name
+    for profile in sorted((harness.REPO / 'claws').glob('*/')):
         settings = json.loads((profile / 'settings.json').read_text())
         for path in settings['extensions'] + settings['prompts']:
             assert (profile / path).exists(), path
-    queue = config.load(harness.REPO / 'claws').claw('triage').job('queue')
+    queue = loaded.claw('triage').job('queue')
     assert (queue.collector, queue.repeat) == ('triage', True)
+    baker = loaded.claw('baker')
+    assert baker.job('review').collector == 'baker'
+    assert (baker.policy.task_tag, baker.policy.allow_read) == (
+        'bakery/human',
+        (state.root(),),
+    )

@@ -483,8 +483,13 @@ claw itself (`BAKERY_CLAW`), and `task_add` always files into the claw's
    `bakery/wontfix` and releases.
 3. `build` claims `bakery/build` tasks (high priority first), moves them to
    `bakery/review` once a PR is open, and runs `done` after merge.
+4. `baker` adds tasks about the claws themselves straight to `bakery/human`,
+   with their priority and size; I move them on.
 
-I delete `bakery/wontfix` tasks myself.
+I delete `bakery/wontfix` tasks myself. Tasks in `bakery/neverfix` stay
+forever: their link is never filed again by any claw, since scout and baker
+both skip links already on a task. It is for findings I never want fixed,
+where fixing the source is not an option.
 
 ## Claws (v1)
 
@@ -573,10 +578,52 @@ Profile: `claws/triage/`. Sonnet, medium thinking, $3 per ticket.
 - `task` allowlist: triage's plus `link` and `done`.
 - Ask policy: `ask`, falling back to `park`.
 
+### baker — reads every claw, files for me
+
+Reviews how the claws learn and files a task for each gap. Profile:
+`claws/baker/`. Opus, high thinking, $5, 45 minutes, and 100 turns per run.
+
+- The `review` job (04:00, after the dreams) uses the `baker` collector
+  (`bakery/bakery/collectors/baker.py`, transcripts parsed by
+  `bakery/bakery/transcripts.py`). It digests everything since baker's last
+  settled review:
+  - runs by claw, job, and outcome;
+  - tool calls and failures per tool;
+  - calls the policy or sandbox refused, and other failed calls, grouped,
+    with how many units of work each spans;
+  - memory sizes, `memory_append` sources, and the state-repo commits that
+    changed `MEMORY.md` or `_shared`;
+  - baker's own tasks;
+  - gateway warnings and errors.
+
+  Sections are capped (about 38k characters in all) and say how to read
+  what they cut. No other claw ran since the last review means no run.
+- Gap types, the `<type>` in each task's link `baker:<type>/<slug>`:
+  `tool-gap`, `false-learning`, `no-actuator`, `owner-feedback`,
+  `self-policy`, `memory-health`, `knowledge-silo`, `plumbing`, and `other`.
+  A restriction becomes a `tool-gap` when it causes repeated failures (3+
+  units of work) or a wrong conclusion. Bash without network, or bash that
+  stays out of protected paths, is fine.
+- Baker verifies with the same read-only tools the claws have and says how.
+  Each task records its evidence, impact, root cause, fix, and an
+  acceptance check baker re-runs while the task is open.
+- Policy:
+  - `allow_read` covers the whole state root (every claw's memory and
+    transcripts, `runs.db`, `gateway.log`); bash still has no network, and
+    unix sockets stay blocked.
+  - `task_tag = "bakery/human"`: fixes change the claws themselves, so they
+    never go straight to build.
+  - No `task_set`: changes to other claws' memory or to tickets are steps
+    in a task's **Fix**, for me.
+- It keeps its own memory (the slugs it filed). It never files a link
+  already on a task. Rejected findings live in `bakery/neverfix`.
+- Ask policy `assume`; `silent_ok`, replying `NO_REPLY` when it filed
+  nothing and none of its tasks is still open.
+
 ### Models
 
 `claude-sonnet-5-5` for scout, triage, flush, and dream; `claude-opus-5-5`
-for build. The gateway runs whatever `pi` is on `PATH`.
+for build and baker. The gateway runs whatever `pi` is on `PATH`.
 
 ## Testing
 
@@ -606,3 +653,5 @@ for build. The gateway runs whatever `pi` is on `PATH`.
 10. triage.
 11. build, with its `git_push` tool, `github` write access, and the
     pre-push hook.
+12. baker: `allow_read` and `task_tag` policies, sandbox violation
+    reporting, the transcript parser and `baker` collector, and the claw.

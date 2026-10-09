@@ -1,0 +1,23 @@
+# Injected by pi/extensions/context. AGENTS.md (this dir) is loaded by pi
+# itself, after these.
+
+[[file]]
+path = "SOUL.md"
+
+[[file]]
+path = "IDENTITY.md"
+
+[[file]]
+path = "${XDG_STATE_HOME}/claws/_shared/USER.md"
+max_chars = 4000
+
+[[file]]
+path = "${XDG_STATE_HOME}/claws/baker/MEMORY.md"
+inject = "session_start"
+optional = true
+
+[[file]]
+path = "${XDG_STATE_HOME}/claws/baker/memory/*.md"
+latest = 2
+inject = "session_start"
+optional = true
