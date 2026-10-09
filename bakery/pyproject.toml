@@ -20,7 +20,7 @@ dev = [
     "flake8==7.4.1",
     "pylint==4.1.2",
     "pytest==9.1.1",
-    "types-croniter==6.2.4.20260711",
+    "types-croniter==6.2.4.20261006",
 ]
 
 [tool.pytest.ini_options]
