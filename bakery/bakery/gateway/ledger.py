@@ -13,6 +13,8 @@ import sqlite3
 import time
 import zoneinfo
 
+from .. import state
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY,
@@ -44,6 +46,10 @@ class Status(enum.StrEnum):
     failed = 'failed'
     # The gateway stopped while the run was in flight.
     interrupted = 'interrupted'
+
+
+def default_path() -> pathlib.Path:
+    return state.root() / '_gateway' / 'runs.db'
 
 
 class Ledger:
@@ -123,6 +129,21 @@ class Ledger:
             (work_key,),
         ).fetchone()
         return None if row is None else str(row['job'])
+
+    def last_settled(self, claw: str, job: str) -> float | None:
+        """When the latest settled run of `claw`'s `job` started."""
+        row = self.db.execute(
+            'SELECT MAX(started_at) FROM runs'
+            ' WHERE claw = ? AND job = ? AND status = ?',
+            (claw, job, Status.settled),
+        ).fetchone()
+        return None if row[0] is None else float(row[0])
+
+    def runs_since(self, since: float) -> list[sqlite3.Row]:
+        rows: list[sqlite3.Row] = self.db.execute(
+            'SELECT * FROM runs WHERE started_at >= ? ORDER BY id', (since,)
+        ).fetchall()
+        return rows
 
     def work_key_of(self, run_id: int) -> str | None:
         row = self.db.execute(
