@@ -25,6 +25,11 @@ path = "~/src/personal/beancount-importer"
 [[repo]]
 name = "TheKevJames/challenges"
 path = "~/src/personal/challenges"
+exclude = [
+    "advent-*/**",
+    "kattis/**",
+    "polyeuler/**",
+]
 
 [[repo]]
 name = "TheKevJames/coveralls-python"
