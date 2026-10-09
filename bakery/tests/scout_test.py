@@ -326,7 +326,7 @@ def test_scout_adds_tasks_then_finds_nothing_new(
     assert len(fake_llm.requests) == 2
 
 
-def test_task_claims(
+def test_task_claims_and_adds(
     root: pathlib.Path,
     fake_llm: harness.FakeLLM,
     monkeypatch: pytest.MonkeyPatch,
@@ -337,7 +337,13 @@ def test_task_claims(
     task('add', 'theirs', '--owner', 'kevin')
     claws = testing_gateway.make_claws(
         root,
-        {'triage': '[policy]\ntools = ["task_set", "task_show"]\n'},
+        {
+            'triage': """
+                [policy]
+                tools = ["task_set", "task_show", "task_add"]
+                task_tag = "bakery/human"
+            """
+        },
         extensions={'triage': ['pi/claw-extensions/task.ts']},
     )
     fake_llm.queue(
@@ -350,6 +356,16 @@ def test_task_claims(
         Reply(
             tool='task_set',
             args={'id': 1, 'release': True, 'description_append': 'n'},
+        ),
+        Reply(
+            tool='task_add',
+            args={
+                'summary': 'new',
+                'description': 'd',
+                'link': 'baker:plumbing/x',
+                'priority': 'high',
+                'size': 'small',
+            },
         ),
         Reply(text='done'),
     )
@@ -369,6 +385,12 @@ def test_task_claims(
         None,
         'bakery/build',
         'n',
+    )
+    added = json.loads(task('show', '3', '--json'))
+    assert (added['tag'], added['priority'], added['size']) == (
+        'bakery/human',
+        'high',
+        'small',
     )
     assert os.environ['TASK_FOLDER'] == str(root / 'tasks')
 

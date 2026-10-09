@@ -3,7 +3,8 @@
  *
  * Tools over the shared `task` list (`task` CLI, $TASK_FOLDER), which I use
  * too. A claw's `policy.tools` decides which tools it gets. Claims are always
- * made as the claw itself (BAKERY_CLAW); `task` serializes concurrent writers.
+ * made as the claw itself (BAKERY_CLAW), and `task_add` files into the claw's
+ * policy `task_tag` (BAKERY_TASK_TAG); `task` serializes concurrent writers.
  */
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -12,6 +13,12 @@ function claw(): string {
   const name = process.env.BAKERY_CLAW;
   if (!name) throw new Error("BAKERY_CLAW is not set");
   return name;
+}
+
+function taskTag(): string {
+  const tag = process.env.BAKERY_TASK_TAG;
+  if (!tag) throw new Error("BAKERY_TASK_TAG is not set");
+  return tag;
 }
 
 function text(message: string, details: Record<string, unknown> = {}) {
@@ -25,6 +32,8 @@ async function task(pi: ExtensionAPI, args: string[], signal?: AbortSignal): Pro
 }
 
 const Id = Type.Integer({ minimum: 1, description: "Task id" });
+const Priority = Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high")]);
+const Size = Type.Union([Type.Literal("small"), Type.Literal("medium"), Type.Literal("large")]);
 
 export default function tasks(pi: ExtensionAPI) {
   pi.registerTool(
@@ -63,18 +72,21 @@ export default function tasks(pi: ExtensionAPI) {
       name: "task_add",
       label: "Add Task",
       description:
-        "Add a task for triage (in `bakery/triage`). `link` is its lineage: the exact source URL, which is also how " +
-        "duplicates are recognized, so copy it verbatim.",
+        `Add a task${process.env.BAKERY_TASK_TAG ? ` in \`${process.env.BAKERY_TASK_TAG}\`` : ""}. ` +
+        "`link` is its lineage: the exact source URL, which is also how duplicates are recognized, so copy it " +
+        "verbatim.",
       parameters: Type.Object({
         summary: Type.String({ maxLength: 120, description: "One line, at most ~80 characters" }),
         description: Type.String({ description: "Source, link, and enough context to triage it cold" }),
         link: Type.String({ description: "The source URL, verbatim" }),
+        priority: Type.Optional(Priority),
+        size: Type.Optional(Size),
       }),
       async execute(_id, params, signal) {
-        const args = [
-          "add", "--tag", "bakery/triage", "--description", params.description, "--link", params.link,
-          "--", params.summary,
-        ];
+        const args = ["add", "--tag", taskTag(), "--description", params.description, "--link", params.link];
+        if (params.priority) args.push("--priority", params.priority);
+        if (params.size) args.push("--size", params.size);
+        args.push("--", params.summary);
         await task(pi, args, signal);
         const added = JSON.parse(await task(pi, ["list", "--json", "-s", "id", "-f", `link=${params.link}`], signal));
         return text(`Added: ${JSON.stringify(added.at(-1) ?? {})}`);
@@ -95,8 +107,8 @@ export default function tasks(pi: ExtensionAPI) {
         tag: Type.Optional(Type.String({ description: "Section path, eg. bakery/human" })),
         claim: Type.Optional(Type.Boolean()),
         release: Type.Optional(Type.Boolean()),
-        priority: Type.Optional(Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high")])),
-        size: Type.Optional(Type.Union([Type.Literal("small"), Type.Literal("medium"), Type.Literal("large")])),
+        priority: Type.Optional(Priority),
+        size: Type.Optional(Size),
         description_append: Type.Optional(Type.String()),
       }),
       async execute(_id, params, signal) {

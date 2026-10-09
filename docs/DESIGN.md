@@ -403,6 +403,8 @@ blocked.
   11.
 - `confirm`: regexes on tool names or bash commands; a match asks me in
   Discord (Approve/Deny) before running.
+- `task_tag`: the task list section `task_add` files into (default
+  `bakery/triage`); the model cannot choose another.
 
 Enforcement:
 
@@ -461,9 +463,11 @@ Claws share my existing `task` tool (`~/src/personal/tools/task`, data in
   writers lose nothing).
 
 Claws use it through tools in `pi/claw-extensions/task.ts`: `task_list`,
-`task_show`, `task_add`, `task_set` (tag, claim, release, append notes),
-`task_link`, and `task_done`. Each claw's `policy.tools` selects which it
-gets; claims are always made as the claw itself (`BAKERY_CLAW`).
+`task_show`, `task_add` (with an optional priority and size), `task_set`
+(tag, claim, release, append notes), `task_link`, and `task_done`. Each
+claw's `policy.tools` selects which it gets; claims are always made as the
+claw itself (`BAKERY_CLAW`), and `task_add` always files into the claw's
+`policy.task_tag`.
 
 ### Ticket flow
 
