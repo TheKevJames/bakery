@@ -25,11 +25,19 @@ function text(message: string, details: Record<string, unknown> = {}) {
   return { content: [{ type: "text" as const, text: message }], details };
 }
 
-async function task(pi: ExtensionAPI, args: string[], signal?: AbortSignal): Promise<string> {
-  const result = await pi.exec("task", args, { signal });
-  if (result.code !== 0) throw new Error(result.stderr.trim() || `task exited with ${result.code}`);
+async function run(pi: ExtensionAPI, command: string, args: string[], signal?: AbortSignal): Promise<string> {
+  const result = await pi.exec(command, args, { signal });
+  if (result.code !== 0) throw new Error(result.stderr.trim() || `${command} exited with ${result.code}`);
   return result.stdout.trim();
 }
+
+async function task(pi: ExtensionAPI, args: string[], signal?: AbortSignal): Promise<string> {
+  return run(pi, "task", args, signal);
+}
+
+// Blocked tasks must say what they wait on, in a form triage's collectors can
+// check (bakery/bakery/collectors/blocked.py).
+const BLOCKED = "bakery/blocked";
 
 const Id = Type.Integer({ minimum: 1, description: "Task id" });
 const Priority = Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high")]);
@@ -104,7 +112,8 @@ export default function tasks(pi: ExtensionAPI) {
       description:
         "Update a task: move it to a section (`tag`, eg. `bakery/build`), set its priority or size, " +
         "claim it for yourself (fails if someone else owns it), release your claim, or append notes " +
-        "to its description.",
+        `to its description. Moving it to \`${BLOCKED}\` fails unless its notes, with any appended now, ` +
+        "hold a valid `**Blocked on:**` list (the last one counts) of blockers which have not cleared.",
       parameters: Type.Object({
         id: Id,
         tag: Type.Optional(Type.String({ description: "Section path, eg. bakery/human" })),
@@ -120,6 +129,11 @@ export default function tasks(pi: ExtensionAPI) {
         if (params.release) {
           const current = JSON.parse(await task(pi, ["show", id, "--json"], signal)) as { owner: string | null };
           if (current.owner !== claw()) throw new Error(`task ${id} is not claimed by ${claw()}`);
+        }
+        if (params.tag === BLOCKED) {
+          const check = ["blocked", "check", id];
+          if (params.description_append) check.push("--append", params.description_append);
+          await run(pi, "bakery", check, signal);
         }
         const args = ["set", id];
         if (params.tag) args.push("--tag", params.tag);

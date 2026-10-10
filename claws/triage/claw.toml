@@ -1,13 +1,14 @@
 # triage: researches each ticket in my task list's `triage` inbox, then in
 # scout's `bakery/triage`, records its priority, size, and notes, and routes it
-# to bakery/build, bakery/human, or bakery/wontfix. Research only: no
-# reproduction, no edits.
+# to bakery/build, bakery/human, bakery/blocked, or bakery/wontfix; then sends
+# blocked tickets back to bakery/triage once what they wait on clears.
+# Research only: no reproduction, no edits.
 
 model = "anthropic/claude-sonnet-5-5"
 thinking = "medium"
 
 [limits]
-cost_usd = 3.0  # per ticket
+cost_usd = 3.0  # per ticket, or per unblock or recheck
 
 [ask]
 policy = "ask"
@@ -31,3 +32,24 @@ collector = "triage"
 repeat = true
 watch = "${TASK_FOLDER}"
 debounce_seconds = 120
+
+# Blocked tickets whose blocking tasks have all cleared (eg. I answered one in
+# bakery/human and it was re-triaged), back to bakery/triage. Runs only when
+# there are some, so it watches the task list too.
+[[job]]
+name = "unblock"
+cron = "0 * * * *"
+prompt = "Unblock these tickets."
+collector = "triage-unblock"
+watch = "${TASK_FOLDER}"
+debounce_seconds = 120
+
+# Blocked tickets waiting on something external (an upstream issue, PR, or
+# release), checked once a week before scout's daily run. Its collector also
+# reports blocked tickets it cannot read.
+[[job]]
+name = "recheck"
+cron = "0 6 * * 1"
+prompt = "Recheck these blocked tickets."
+collector = "triage-recheck"
+silent_ok = true

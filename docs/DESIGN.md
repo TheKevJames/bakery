@@ -475,7 +475,9 @@ Claws share my existing `task` tool (`~/src/personal/tools/task`, data in
 Claws use it through tools in `pi/claw-extensions/task.ts`: `task_list`,
 `task_show`, `task_add` (with an optional priority and size), `task_set`
 (tag, claim, release, append notes), `task_link`, and `task_done`;
-`task_list` takes `done` to list only done tasks. Each
+`task_list` takes `done` to list only done tasks. `task_set` refuses to
+move a task to `bakery/blocked` unless `bakery blocked check` accepts its
+blockers (see triage). Each
 claw's `policy.tools` selects which it gets; claims are always made as the
 claw itself (`BAKERY_CLAW`), and `task_add` always files into the claw's
 `policy.task_tag`.
@@ -485,18 +487,24 @@ claw itself (`BAKERY_CLAW`), and `task_add` always files into the claw's
 1. `scout` adds tasks to `bakery/triage` with a `link`; tasks I add by hand
    land in `triage`.
 2. `triage` claims those (mine first), researches, appends notes, sets
-   `priority` and `size`, then re-tags to `bakery/build`, `bakery/human`, or
-   `bakery/wontfix` and releases.
-3. `build` claims `bakery/build` tasks (high priority first), moves them to
+   `priority` and `size`, then re-tags to `bakery/build`, `bakery/human`,
+   `bakery/blocked`, or `bakery/wontfix` and releases.
+3. I answer a `bakery/human` task by appending my answer to its description
+   and moving it to `bakery/triage`, where triage re-routes it.
+4. `triage` moves a `bakery/blocked` task back to `bakery/triage` once what
+   it waits on clears (another task decided or done, or an upstream
+   change), to be re-routed.
+5. `build` claims `bakery/build` tasks (high priority first), moves them to
    `bakery/review` once a PR is open, and runs `done` after merge.
-4. `baker` adds tasks about the claws themselves straight to `bakery/human`,
+6. `baker` adds tasks about the claws themselves straight to `bakery/human`,
    with their priority and size; I move them on.
 
 I close `bakery/wontfix` tasks myself, with `done`. A done task in
 `bakery/wontfix` is a permanent rejection: scout and baker skip links on
 open tasks and on rejections (`bakery/collectors/tasks.py`), so its link is
 never filed again. A done task anywhere else frees its link, so a gap which
-comes back after it was fixed is filed again.
+comes back after it was fixed is filed again. A `bakery/blocked` task is
+open, so its link is not filed again either, and its source stays as it is.
 
 ## Claws (v1)
 
@@ -544,14 +552,15 @@ Finds things in my repos that belong on my task list. Profile:
 
 ### triage — read-only + web
 
-Profile: `claws/triage/`. Sonnet, medium thinking, $3 per ticket.
+Profile: `claws/triage/`. Sonnet, medium thinking, $3 per ticket (and per
+`unblock` or `recheck` run).
 
 - The `queue` job's `triage` collector (`bakery/bakery/collectors/triage.py`)
   hands over the lowest-numbered unowned task tagged `triage` (mine), else
-  `bakery/triage` (scout's), skipping scheduled (recurring) ones, as the unit
-  `triage/task-<id>`. It runs hourly,
-  within two minutes of `$TASK_FOLDER` changing (scout or I add tickets),
-  manually, and on repeat until the queue is empty.
+  `bakery/triage` (scout's, and tickets sent back), skipping scheduled
+  (recurring) ones, as the unit `triage/task-<id>`. It runs hourly, within
+  two minutes of `$TASK_FOLDER` changing (scout or I add tickets), manually
+  (`bakery trigger triage queue`), and on repeat until the queue is empty.
 - Per ticket: claim it, check the source still exists, research (code,
   history, issues, docs, web; no reproduction, tests, or edits), append notes
   (route and reason, source check, code locations, hypothesis, approach,
@@ -559,10 +568,37 @@ Profile: `claws/triage/`. Sonnet, medium thinking, $3 per ticket.
   then re-tag and release:
   - `bakery/build`: a TheKevJames repo checked out under
     `~/src/personal`, clear scope, checkable by tests, lint, or CI;
-  - `bakery/human`: needs a decision, reproduction, credentials, outside
-    systems, or anything uncertain;
-  - `bakery/wontfix`: false positive, done, obsolete, or duplicate, with
-    what to change at the source.
+  - `bakery/human`: needs a decision on this ticket, reproduction,
+    credentials, outside systems, or anything uncertain;
+  - `bakery/blocked`: valid and scoped, but waiting on something checkable:
+    an upstream change, another task, or my decision on another task; and
+    every duplicate of an open task, which waits on its canonical (the
+    lowest-numbered open task for the same work) being decided;
+  - `bakery/wontfix`: false positive, done, or obsolete (including a
+    duplicate of a `bakery/wontfix` task), with what to change at the
+    source.
+- A blocked ticket's notes end with a `**Blocked on:**` list, one blocker
+  per line: `#<id> decided` (that task is done or out of `triage`,
+  `bakery/triage`, `bakery/human`, and `bakery/blocked`), `#<id> done`, or
+  `<url>: <condition>`. The last list counts; the ticket clears once all of
+  its blockers have. `bakery/bakery/collectors/blocked.py` parses and checks
+  it, for `bakery blocked check` (run by `task_set` before it moves a task to
+  `bakery/blocked`) and for the collectors below. A list is refused if it is
+  malformed, names a task that does not exist or the ticket itself, or names
+  a task blocker which has already cleared (triage routes on the merits
+  instead).
+- The `unblock` job's `triage-unblock` collector hands over, in one run,
+  every unowned blocked ticket whose blockers are all tasks and have all
+  cleared; triage appends an `## Unblocked` note and moves each to
+  `bakery/triage`. It runs hourly and within two minutes of `$TASK_FOLDER`
+  changing, so a ticket clears soon after its blocker is decided.
+- The `recheck` job (Mondays at 06:00, silent when nothing clears) uses the
+  `triage-recheck` collector: unowned blocked tickets with an external
+  blocker whose task blockers have cleared, grouped by URL so each is
+  checked once, in one run. Triage moves those whose conditions all hold to
+  `bakery/triage` likewise. The collector also reports blocked tickets it
+  cannot read (eg. moved by hand without a valid list) in `#bakery`; weekly,
+  rather than hourly in `unblock`, so they do not flood it.
 - Tools: read-only defaults (bash without network or writes), web, `github`,
   context7, memory, `ask_user`, and `task_list`, `task_show`, `task_set`.
 - Ask policy `ask`, falling back to `assume`; every question's assumption is
