@@ -26,6 +26,7 @@ from collections.abc import Callable
 
 from . import paths
 from . import state
+from .collectors import blocked
 from .gateway import cli as gateway_cli
 
 WAIT_POLL_INTERVAL = 0.25
@@ -829,6 +830,7 @@ def build_parser() -> argparse.ArgumentParser:
         'init', help=f'create the claw state repo at {state.root()}'
     ).set_defaults(func=do_state_init)
 
+    blocked.add_parsers(sub.add_parser)
     gateway_cli.add_parsers(sub.add_parser)
 
     return parser

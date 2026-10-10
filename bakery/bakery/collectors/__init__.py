@@ -22,4 +22,6 @@ COLLECTORS: dict[str, Collector] = {
     'baker': baker.collect,
     'scout': scout.collect,
     'triage': triage.collect,
+    'triage-recheck': triage.recheck,
+    'triage-unblock': triage.unblock,
 }

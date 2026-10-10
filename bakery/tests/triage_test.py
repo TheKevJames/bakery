@@ -5,6 +5,7 @@ import subprocess
 
 import pytest
 
+from bakery.collectors import triage
 from bakery.gateway import config
 from bakery.gateway import core
 from bakery.gateway import watcher
@@ -21,6 +22,25 @@ cron = "0 * * * *"
 prompt = "Triage this ticket."
 collector = "triage"
 repeat = true
+"""
+BLOCKED = """
+[policy]
+tools = ["task_list", "task_show", "task_set"]
+[[job]]
+name = "queue"
+cron = "0 * * * *"
+prompt = "Triage this ticket."
+collector = "triage"
+[[job]]
+name = "unblock"
+cron = "0 * * * *"
+prompt = "Unblock these tickets."
+collector = "triage-unblock"
+[[job]]
+name = "recheck"
+cron = "0 6 * * 1"
+prompt = "Recheck these blocked tickets."
+collector = "triage-recheck"
 """
 
 
@@ -53,10 +73,18 @@ def fixture_tasks(
     return folder
 
 
-def triage_claws(root: pathlib.Path) -> pathlib.Path:
+def prompt(fake_llm: harness.FakeLLM, index: int) -> str:
+    messages = fake_llm.requests[index]['messages']
+    assert isinstance(messages, list)
+    content = next(m for m in messages if m['role'] == 'user')['content']
+    assert isinstance(content, list)
+    return ''.join(str(part['text']) for part in content)
+
+
+def triage_claws(root: pathlib.Path, claw_toml: str = QUEUE) -> pathlib.Path:
     return testing_gateway.make_claws(
         root,
-        {'triage': QUEUE},
+        {'triage': claw_toml},
         extensions={'triage': ['pi/claw-extensions/task.ts']},
     )
 
@@ -128,6 +156,119 @@ def test_a_ticket_left_waiting_is_not_repeated(
 
     testing_gateway.run_gateway(triage_claws(root), fake, scenario)
     assert len(fake_llm.requests) == 1
+
+
+def test_blocking_a_ticket_needs_blockers_which_have_not_cleared(
+    root: pathlib.Path, tasks: pathlib.Path, fake_llm: harness.FakeLLM
+) -> None:
+    del tasks
+    valid = '**Blocked on:**\n- #1 decided\n- https://example.com/1: released'
+    fake_llm.queue(
+        call(id=3, claim=True),
+        call(
+            id=3,
+            tag='bakery/blocked',
+            description_append='**Blocked on:**\n- see upstream',
+        ),
+        call(
+            id=3,
+            tag='bakery/blocked',
+            description_append='**Blocked on:**\n- #4 decided\n- #99 done'
+            '\n- #3 done',
+        ),
+        call(id=3, tag='bakery/blocked', description_append=valid),
+        call(id=3, release=True),
+        Reply(text='3 blocked'),
+    )
+    fake = testing_gateway.FakeChannel()
+
+    async def scenario(gateway: core.Gateway) -> None:
+        gateway.trigger('triage', 'queue', None)
+        await fake.wait('triage/task-3')
+
+    testing_gateway.run_gateway(triage_claws(root, BLOCKED), fake, scenario)
+    malformed, cleared = fake_llm.tool_results(3)[-2:]
+    assert "'see upstream' is not `#<id> decided`" in malformed
+    assert '#4 decided: already cleared (bakery/build)' in cleared
+    assert '#99 does not exist' in cleared
+    assert '#3 done: a task cannot block itself' in cleared
+    ticket = show(3)
+    assert (ticket['tag'], ticket['owner']) == ('bakery/blocked', None)
+    assert ticket['description'] == valid  # refused notes were not appended
+
+
+def test_blocked_tickets_go_back_once_their_blockers_clear(
+    root: pathlib.Path, tasks: pathlib.Path, fake_llm: harness.FakeLLM
+) -> None:
+    del tasks
+    # #1 (bakery/triage) and #3 (triage) are undecided, #4 (bakery/build) is
+    # decided, and #5 is done.
+    task('add', 't5', '--tag', 'bakery/build')
+    task('5', 'done')
+    for ident, blockers in (
+        (6, '- #4 decided'),
+        (7, '- #1 decided'),
+        (8, '- #5 done\n- https://example.com/a: released'),
+        (9, '- #3 decided\n- https://example.com/a: released'),
+        (
+            10,
+            '- https://example.com/a: released\n'
+            '- https://example.com/b: merged',
+        ),
+        (11, ''),
+        (12, '- #4 decided'),
+    ):
+        notes = (
+            f'## Triage\n\n**Blocked on:**\n{blockers}' if blockers else 'x'
+        )
+        task(
+            'add',
+            f't{ident}',
+            '--tag',
+            'bakery/blocked',
+            '--description',
+            notes,
+        )
+    task('set', '12', '--owner', 'someone')
+    fake_llm.queue(
+        call(id=6, claim=True),
+        call(
+            id=6,
+            tag='bakery/triage',
+            description_append='## Unblocked',
+            release=True,
+        ),
+        Reply(text='moved 6'),
+        Reply(text='nothing cleared'),
+    )
+    fake = testing_gateway.FakeChannel()
+
+    async def scenario(gateway: core.Gateway) -> None:
+        unblocked = await fake.wait(gateway.trigger('triage', 'unblock', None))
+        assert unblocked.final_text == 'moved 6'
+        rechecked = await fake.wait(gateway.trigger('triage', 'recheck', None))
+        assert rechecked.final_text == 'nothing cleared'
+
+    testing_gateway.run_gateway(triage_claws(root, BLOCKED), fake, scenario)
+    assert prompt(fake_llm, 0).endswith(
+        f'<unblocked tickets="1">\n{triage.UNTRUSTED}\n'
+        '- #6 "t6": cleared #4 decided\n</unblocked>'
+    )
+    assert prompt(fake_llm, 3).endswith(
+        f'<blocked tickets="2" urls="2">\n{triage.UNTRUSTED}\n'
+        '## https://example.com/a\n'
+        '- #8 "t8": released\n'
+        '- #10 "t10": released\n'
+        '## https://example.com/b\n'
+        '- #10 "t10": merged\n'
+        '</blocked>'
+    )
+    assert (show(6)['tag'], show(6)['owner']) == ('bakery/triage', None)
+    # Reported weekly by recheck, not hourly by unblock.
+    assert [n for n in fake.notices if '#11' in n] == [
+        'triage/recheck collection problems:\n'
+        'bakery/blocked #11: no **Blocked on:** list'
+    ]
 
 
 def test_file_changes_trigger_after_a_quiet_period(
