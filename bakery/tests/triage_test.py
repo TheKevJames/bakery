@@ -165,7 +165,10 @@ def test_blocking_a_ticket_needs_blockers_which_have_not_cleared(
 ) -> None:
     del tasks
     task('add', 'needs kevin', '--tag', 'bakery/human')
-    valid = '**Blocked on:**\n- #5 decided\n- https://example.com/1: released'
+    valid = (
+        '**Blocked on:**\n- #5 decided\n- #3 done\n'
+        '- https://example.com/1: released'
+    )
     fake_llm.queue(
         call(id=1, claim=True),
         call(
@@ -177,7 +180,7 @@ def test_blocking_a_ticket_needs_blockers_which_have_not_cleared(
             id=1,
             tag='bakery/blocked',
             description_append='**Blocked on:**\n- #4 decided\n- #99 done'
-            '\n- #1 done',
+            '\n- #1 done\n- #3 decided',
         ),
         call(id=1, tag='bakery/blocked', description_append=valid),
         call(id=1, release=True),
@@ -195,6 +198,7 @@ def test_blocking_a_ticket_needs_blockers_which_have_not_cleared(
     assert '#4 decided: already cleared (bakery/build)' in cleared
     assert '#99 does not exist' in cleared
     assert '#1 done: a task cannot block itself' in cleared
+    assert "#3 decided: #3 is Kevin's (triage), so use `#3 done`" in cleared
     ticket = show(1)
     assert (ticket['tag'], ticket['owner']) == ('bakery/blocked', None)
     assert ticket['description'] == valid  # refused notes were not appended
@@ -204,15 +208,15 @@ def test_blocked_tickets_go_back_once_their_blockers_clear(
     root: pathlib.Path, tasks: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     del tasks
-    # #1 (bakery/triage) and #3 (triage) are undecided, #4 (bakery/build) is
-    # decided, and #5 is done.
+    # #1 (bakery/triage) is undecided, #3 (Kevin's) is not done,
+    # #4 (bakery/build) is decided, and #5 is done.
     task('add', 't5', '--tag', 'bakery/build')
     task('5', 'done')
     for ident, blockers in (
         (6, '- #4 decided'),
         (7, '- #1 decided'),
         (8, '- #5 done\n- https://example.com/a: released'),
-        (9, '- #3 decided\n- https://example.com/a: released'),
+        (9, '- #3 done\n- https://example.com/a: released'),
         (
             10,
             '- https://example.com/a: released\n'
@@ -272,6 +276,46 @@ def test_blocked_tickets_go_back_once_their_blockers_clear(
         'triage/recheck collection problems:\n'
         'bakery/blocked #11: no **Blocked on:** list'
     ]
+
+
+def test_claws_only_change_bakery_tasks(
+    root: pathlib.Path, tasks: pathlib.Path, fake_llm: harness.FakeLLM
+) -> None:
+    del tasks
+    # #4 is claimed, then Kevin takes it over into his own section.
+    task('set', '4', '--owner', 'triage', '--tag', 'dev')
+    fake_llm.queue(
+        call(id=3, claim=True),
+        call(id=3, description_append='notes'),
+        Reply(tool='task_link', args={'id': 3, 'url': 'https://x'}),
+        Reply(tool='task_done', args={'id': 3}),
+        call(id=1, tag='dev'),
+        call(id=4, release=True),
+        Reply(text='done'),
+    )
+    fake = testing_gateway.FakeChannel()
+    claw_toml = QUEUE.replace(
+        '"task_set"', '"task_set", "task_link", "task_done"'
+    )
+
+    async def scenario(gateway: core.Gateway) -> None:
+        gateway.trigger('triage', None, None)
+        await fake.wait('triage/task-1')
+
+    testing_gateway.run_gateway(triage_claws(root, claw_toml), fake, scenario)
+    *refused, moved, released = fake_llm.tool_results()
+    assert len(refused) == 4
+    assert all("task 3 is Kevin's (tagged triage)" in r for r in refused)
+    assert 'dev is not under bakery/' in moved
+    assert '"owner": null' in released
+    kevins = show(3)
+    assert (kevins['owner'], kevins['description'], kevins['link']) == (
+        None,
+        None,
+        None,
+    )
+    assert (kevins['tag'], kevins['done']) == ('triage', None)
+    assert (show(1)['tag'], show(4)['owner']) == ('bakery/triage', None)
 
 
 def test_file_changes_trigger_after_a_quiet_period(

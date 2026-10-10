@@ -23,11 +23,13 @@ import sys
 from collections.abc import Callable
 from typing import Literal
 
+from ..gateway import policy
 from . import tasks
 
 TAG = 'bakery/blocked'
 # A task still here has not been decided, so `#B decided` waits on it.
-UNDECIDED = frozenset({'triage', 'bakery/triage', 'bakery/human', TAG})
+# Kevin's own tasks record no decisions, so only `#B done` may wait on them.
+UNDECIDED = frozenset({'bakery/triage', 'bakery/human', TAG})
 
 HEADING = '**Blocked on:**'
 TASK_RE = re.compile(r'#(?P<ident>\d+) (?P<until>decided|done)')
@@ -133,9 +135,17 @@ def problems(ident: int, description: str | None, board: Board) -> list[str]:
             found.append(f'{blocker}: a task cannot block itself')
             continue
         try:
-            if board.cleared(blocker):
+            state = board.state(blocker)
+            if not (
+                'done' in (blocker.until, state) or policy.in_namespace(state)
+            ):
                 found.append(
-                    f'{blocker}: already cleared ({board.state(blocker)});'
+                    f"{blocker}: #{blocker.ident} is Kevin's ({state}),"
+                    f' so use `#{blocker.ident} done`'
+                )
+            elif board.cleared(blocker):
+                found.append(
+                    f'{blocker}: already cleared ({state});'
                     ' route on its own merits instead'
                 )
         except BlockerError as e:
