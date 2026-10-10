@@ -6,10 +6,10 @@ Each run hands you one of three inputs:
 - `<unblocked>` tickets (the `unblock` job): see "Unblocked tickets";
 - `<blocked>` tickets (the `recheck` job): see "Rechecking blocked tickets".
 
-Tickets tagged `triage` were added by Kevin, often tersely and without a
-`link`. Those tagged `bakery/triage` were added by scout, or came back to
-you: Kevin answered one you routed to `bakery/human`, what blocked it
-cleared, or it was sent back to be re-routed.
+Tickets in `bakery/triage` without a `link` were handed over by Kevin, often
+tersely. The rest were added by scout, or came back to you: Kevin answered
+one you routed to `bakery/human`, what blocked it cleared, or it was sent
+back to be re-routed.
 
 ## 1. Claim it
 

@@ -484,9 +484,10 @@ claw itself (`BAKERY_CLAW`), and `task_add` always files into the claw's
 
 ### Ticket flow
 
-1. `scout` adds tasks to `bakery/triage` with a `link`; tasks I add by hand
-   land in `triage`.
-2. `triage` claims those (mine first), researches, appends notes, sets
+1. `scout` adds tasks to `bakery/triage` with a `link`. I hand a task over
+   by adding it (or moving it) there too, usually without a `link`; my own
+   inbox, `triage`, is never touched by claws.
+2. `triage` claims those (lowest id first), researches, appends notes, sets
    `priority` and `size`, then re-tags to `bakery/build`, `bakery/human`,
    `bakery/blocked`, or `bakery/wontfix` and releases.
 3. I answer a `bakery/human` task by appending my answer to its description
@@ -556,8 +557,8 @@ Profile: `claws/triage/`. Sonnet, medium thinking, $3 per ticket (and per
 `unblock` or `recheck` run).
 
 - The `queue` job's `triage` collector (`bakery/bakery/collectors/triage.py`)
-  hands over the lowest-numbered unowned task tagged `triage` (mine), else
-  `bakery/triage` (scout's, and tickets sent back), skipping scheduled
+  hands over the lowest-numbered unowned task tagged `bakery/triage`
+  (scout's, mine handed over, and tickets sent back), skipping scheduled
   (recurring) ones, as the unit `triage/task-<id>`. It runs hourly, within
   two minutes of `$TASK_FOLDER` changing (scout or I add tickets), manually
   (`bakery trigger triage queue`), and on repeat until the queue is empty.

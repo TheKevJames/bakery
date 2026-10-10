@@ -2,10 +2,10 @@
 The triage collectors: tickets waiting for triage, and blocked tickets.
 
 `collect` (the `queue` job) hands over the next ticket waiting for triage: the
-lowest-numbered unowned task in a `triage` section, ignoring scheduled
-(recurring) ones, Kevin's inbox (`triage`) before scout's (`bakery/triage`).
-Each ticket is its own unit of work, `triage/task-<id>`, so its thread and
-session last as long as the ticket.
+lowest-numbered unowned task in `bakery/triage`, ignoring scheduled
+(recurring) ones. Kevin's own inbox, `triage`, is his alone. Each ticket is
+its own unit of work, `triage/task-<id>`, so its thread and session last as
+long as the ticket.
 
 `unblock` and `recheck` hand over unowned `bakery/blocked` tickets (see
 `blocked`), all in one run: `unblock` those whose blockers are all tasks and
@@ -32,15 +32,13 @@ UNTRUSTED = (
 
 
 def waiting() -> list[dict[str, object]]:
-    tickets = tasks.listed('-f', 'tag=triage,owner=')
+    tickets = tasks.listed('-f', 'tag=bakery/triage,owner=')
     scheduled = ('next', 'interval')
     return [t for t in tickets if all(t[k] is None for k in scheduled)]
 
 
 def collect(claw: 'config.Claw') -> base.Collection:
-    tickets = sorted(
-        waiting(), key=lambda t: (t['tag'] != 'triage', int(str(t['id'])))
-    )
+    tickets = sorted(waiting(), key=lambda t: int(str(t['id'])))
     if not tickets:
         return base.Collection(None)
     ticket = tickets[0]

@@ -67,7 +67,7 @@ def fixture_tasks(
     folder.mkdir()
     monkeypatch.setenv('TASK_FOLDER', str(folder))
     task('add', 'from scout', '--tag', 'bakery/triage')
-    task('add', 'recurring', '--next', '2030-01-01')
+    task('add', 'recurring', '--tag', 'bakery/triage', '--next', '2030-01-01')
     task('add', 'from kevin')
     task('add', 'already routed', '--tag', 'bakery/build')
     return folder
@@ -93,37 +93,38 @@ def test_works_through_the_queue_one_ticket_per_unit(
     root: pathlib.Path, tasks: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     del tasks
-    # Kevin's inbox goes first, though scout's ticket has the lower id.
+    task('add', 'handed over by kevin', '--tag', 'bakery/triage')
     fake_llm.queue(
-        call(id=3, claim=True),
-        call(id=3, priority='high', size='small', description_append='notes'),
-        call(id=3, tag='bakery/build', release=True),
-        Reply(text='3 to build'),
         call(id=1, claim=True),
-        call(id=1, tag='bakery/wontfix', priority='low', size='small'),
-        call(id=1, release=True),
-        Reply(text='1 to wontfix'),
+        call(id=1, priority='high', size='small', description_append='notes'),
+        call(id=1, tag='bakery/build', release=True),
+        Reply(text='1 to build'),
+        call(id=5, claim=True),
+        call(id=5, tag='bakery/wontfix', priority='low', size='small'),
+        call(id=5, release=True),
+        Reply(text='5 to wontfix'),
     )
     fake = testing_gateway.FakeChannel()
 
     async def scenario(gateway: core.Gateway) -> None:
         gateway.trigger('triage', None, None)
-        first = await fake.wait('triage/task-3')
-        assert (first.status, first.final_text) == ('settled', '3 to build')
-        second = await fake.wait('triage/task-1')
+        first = await fake.wait('triage/task-1')
+        assert (first.status, first.final_text) == ('settled', '1 to build')
+        second = await fake.wait('triage/task-5')
         assert (second.status, second.final_text) == (
             'settled',
-            '1 to wontfix',
+            '5 to wontfix',
         )
-        # The repeat after it finds nothing left (#2 is scheduled).
+        # The repeat after it finds nothing left: #2 is scheduled, and #3
+        # is in Kevin's own inbox.
         await asyncio.sleep(0.5)
         assert not gateway.active and not gateway.queue
 
     testing_gateway.run_gateway(triage_claws(root), fake, scenario)
-    assert json.dumps('<ticket id="3" waiting="1">')[1:-1] in (
+    assert json.dumps('<ticket id="1" waiting="1">')[1:-1] in (
         fake_llm.transcript(0)
     )
-    first, second = show(3), show(1)
+    first, second = show(1), show(5)
     assert (
         first['tag'],
         first['priority'],
@@ -136,7 +137,8 @@ def test_works_through_the_queue_one_ticket_per_unit(
         'low',
         None,
     )
-    assert show(2)['tag'] == 'triage'  # scheduled tasks are not triaged
+    assert show(2)['tag'] == 'bakery/triage'  # scheduled: not triaged
+    assert (show(3)['tag'], show(3)['owner']) == ('triage', None)
     assert len(fake_llm.requests) == 8
 
 
@@ -149,7 +151,7 @@ def test_a_ticket_left_waiting_is_not_repeated(
 
     async def scenario(gateway: core.Gateway) -> None:
         gateway.trigger('triage', None, None)
-        await fake.wait('triage/task-3')
+        await fake.wait('triage/task-1')
         async with asyncio.timeout(10):
             while not any('still waiting' in n for n in fake.notices):
                 await asyncio.sleep(0.05)
@@ -162,37 +164,38 @@ def test_blocking_a_ticket_needs_blockers_which_have_not_cleared(
     root: pathlib.Path, tasks: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     del tasks
-    valid = '**Blocked on:**\n- #1 decided\n- https://example.com/1: released'
+    task('add', 'needs kevin', '--tag', 'bakery/human')
+    valid = '**Blocked on:**\n- #5 decided\n- https://example.com/1: released'
     fake_llm.queue(
-        call(id=3, claim=True),
+        call(id=1, claim=True),
         call(
-            id=3,
+            id=1,
             tag='bakery/blocked',
             description_append='**Blocked on:**\n- see upstream',
         ),
         call(
-            id=3,
+            id=1,
             tag='bakery/blocked',
             description_append='**Blocked on:**\n- #4 decided\n- #99 done'
-            '\n- #3 done',
+            '\n- #1 done',
         ),
-        call(id=3, tag='bakery/blocked', description_append=valid),
-        call(id=3, release=True),
-        Reply(text='3 blocked'),
+        call(id=1, tag='bakery/blocked', description_append=valid),
+        call(id=1, release=True),
+        Reply(text='1 blocked'),
     )
     fake = testing_gateway.FakeChannel()
 
     async def scenario(gateway: core.Gateway) -> None:
         gateway.trigger('triage', 'queue', None)
-        await fake.wait('triage/task-3')
+        await fake.wait('triage/task-1')
 
     testing_gateway.run_gateway(triage_claws(root, BLOCKED), fake, scenario)
     malformed, cleared = fake_llm.tool_results(3)[-2:]
     assert "'see upstream' is not `#<id> decided`" in malformed
     assert '#4 decided: already cleared (bakery/build)' in cleared
     assert '#99 does not exist' in cleared
-    assert '#3 done: a task cannot block itself' in cleared
-    ticket = show(3)
+    assert '#1 done: a task cannot block itself' in cleared
+    ticket = show(1)
     assert (ticket['tag'], ticket['owner']) == ('bakery/blocked', None)
     assert ticket['description'] == valid  # refused notes were not appended
 
