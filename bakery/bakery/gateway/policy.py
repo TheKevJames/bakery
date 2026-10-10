@@ -15,6 +15,12 @@ from . import toml
 
 DOMAIN_RE = re.compile(r'(\*\.)?[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*(:\d+)?')
 TAG_RE = re.compile(r'[a-z0-9][a-z0-9_.-]*(/[a-z0-9][a-z0-9_.-]*)*')
+# Claws only change tasks tagged under this section; the rest are Kevin's.
+NAMESPACE = 'bakery'
+
+
+def in_namespace(tag: str) -> bool:
+    return tag.startswith(f'{NAMESPACE}/')
 
 
 @dataclasses.dataclass(frozen=True)
@@ -33,7 +39,7 @@ class Policy:
     network: tuple[str, ...]
     # Regexes; a matching tool name or bash command needs my approval.
     confirm: tuple[str, ...]
-    # The task list section `task_add` files into.
+    # The task list section `task_add` files into, under NAMESPACE.
     task_tag: str
 
 
@@ -68,6 +74,10 @@ def parse(table: toml.Table, profile: pathlib.Path) -> Policy:
     if not TAG_RE.fullmatch(task_tag):
         raise toml.ConfigError(
             f'{table.where}.task_tag: {task_tag!r} is not a lowercase tag path'
+        )
+    if not in_namespace(task_tag):
+        raise toml.ConfigError(
+            f'{table.where}.task_tag: {task_tag!r} is not under {NAMESPACE}/'
         )
     root = state.root()
     allow_read = tuple(

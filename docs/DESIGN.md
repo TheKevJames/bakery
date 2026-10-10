@@ -404,7 +404,8 @@ blocked.
 - `confirm`: regexes on tool names or bash commands; a match asks me in
   Discord (Approve/Deny) before running.
 - `task_tag`: the task list section `task_add` files into (default
-  `bakery/triage`); the model cannot choose another.
+  `bakery/triage`); the model cannot choose another. It must be under
+  `bakery/` (`policy.NAMESPACE`).
 
 Enforcement:
 
@@ -482,11 +483,20 @@ claw's `policy.tools` selects which it gets; claims are always made as the
 claw itself (`BAKERY_CLAW`), and `task_add` always files into the claw's
 `policy.task_tag`.
 
+Claws read every task, but only change tasks tagged under `bakery/` (the
+gateway's `policy.NAMESPACE`, passed as `BAKERY_TASK_NAMESPACE`); the rest
+are mine. `task_set`, `task_link`, and `task_done` refuse any other task,
+and `task_set` refuses to move a task out of `bakery/`. Releasing a claim is
+the exception, so a task I take out of `bakery/` never keeps a claw as its
+owner. The check and the write are separate `task` calls, so a task I move
+in that moment can still take the one write.
+
 ### Ticket flow
 
-1. `scout` adds tasks to `bakery/triage` with a `link`; tasks I add by hand
-   land in `triage`.
-2. `triage` claims those (mine first), researches, appends notes, sets
+1. `scout` adds tasks to `bakery/triage` with a `link`. I hand a task over
+   by adding it (or moving it) there too, usually without a `link`; my own
+   inbox, `triage`, is never touched by claws.
+2. `triage` claims those (lowest id first), researches, appends notes, sets
    `priority` and `size`, then re-tags to `bakery/build`, `bakery/human`,
    `bakery/blocked`, or `bakery/wontfix` and releases.
 3. I answer a `bakery/human` task by appending my answer to its description
@@ -556,8 +566,8 @@ Profile: `claws/triage/`. Sonnet, medium thinking, $3 per ticket (and per
 `unblock` or `recheck` run).
 
 - The `queue` job's `triage` collector (`bakery/bakery/collectors/triage.py`)
-  hands over the lowest-numbered unowned task tagged `triage` (mine), else
-  `bakery/triage` (scout's, and tickets sent back), skipping scheduled
+  hands over the lowest-numbered unowned task tagged `bakery/triage`
+  (scout's, mine handed over, and tickets sent back), skipping scheduled
   (recurring) ones, as the unit `triage/task-<id>`. It runs hourly, within
   two minutes of `$TASK_FOLDER` changing (scout or I add tickets), manually
   (`bakery trigger triage queue`), and on repeat until the queue is empty.
@@ -573,16 +583,18 @@ Profile: `claws/triage/`. Sonnet, medium thinking, $3 per ticket (and per
   - `bakery/blocked`: valid and scoped, but waiting on something checkable:
     an upstream change, another task, or my decision on another task; and
     every duplicate of an open task, which waits on its canonical (the
-    lowest-numbered open task for the same work) being decided;
+    lowest-numbered open task for the same work, or my own task whatever
+    its id) being decided, or done for my own tasks;
   - `bakery/wontfix`: false positive, done, or obsolete (including a
     duplicate of a `bakery/wontfix` task), with what to change at the
     source.
 - A blocked ticket's notes end with a `**Blocked on:**` list, one blocker
-  per line: `#<id> decided` (that task is done or out of `triage`,
-  `bakery/triage`, `bakery/human`, and `bakery/blocked`), `#<id> done`, or
-  `<url>: <condition>`. The last list counts; the ticket clears once all of
-  its blockers have. `bakery/bakery/collectors/blocked.py` parses and checks
-  it, for `bakery blocked check` (run by `task_set` before it moves a task to
+  per line: `#<id> decided` (that task is done or out of `bakery/triage`,
+  `bakery/human`, and `bakery/blocked`; refused for my own tasks, which
+  record no decisions), `#<id> done`, or `<url>: <condition>`. The last
+  list counts; the ticket clears once all of its blockers have.
+  `bakery/bakery/collectors/blocked.py` parses and checks it, for `bakery
+  blocked check` (run by `task_set` before it moves a task to
   `bakery/blocked`) and for the collectors below. A list is refused if it is
   malformed, names a task that does not exist or the ticket itself, or names
   a task blocker which has already cleared (triage routes on the merits

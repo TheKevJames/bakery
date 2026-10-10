@@ -6,10 +6,10 @@ Each run hands you one of three inputs:
 - `<unblocked>` tickets (the `unblock` job): see "Unblocked tickets";
 - `<blocked>` tickets (the `recheck` job): see "Rechecking blocked tickets".
 
-Tickets tagged `triage` were added by Kevin, often tersely and without a
-`link`. Those tagged `bakery/triage` were added by scout, or came back to
-you: Kevin answered one you routed to `bakery/human`, what blocked it
-cleared, or it was sent back to be re-routed.
+Tickets in `bakery/triage` without a `link` were handed over by Kevin, often
+tersely. The rest were added by scout, or came back to you: Kevin answered
+one you routed to `bakery/human`, what blocked it cleared, or it was sent
+back to be re-routed.
 
 ## 1. Claim it
 
@@ -58,9 +58,11 @@ for blocked: what to do once it clears)
 `**Blocked on:**` is only for blocked tickets: the heading alone on its line,
 then one blocker per line, each exactly one of:
 
-- `#<id> decided`: until that ticket is decided, ie. no longer in `triage`,
-  `bakery/triage`, `bakery/human`, or `bakery/blocked` (or done);
-- `#<id> done`: until that ticket is done;
+- `#<id> decided`: until that ticket is decided, ie. no longer in
+  `bakery/triage`, `bakery/human`, or `bakery/blocked` (or done). Only for
+  tickets under `bakery/`;
+- `#<id> done`: until that ticket is done. The only form for Kevin's own
+  tasks (any not under `bakery/`), which record no decisions;
 - `<url>: <condition>`: until the condition holds, eg. an upstream issue is
   closed with the fix, a PR merged, or a release published.
 
@@ -106,6 +108,12 @@ open ticket for that work, never another duplicate.
   one too, or `bakery/wontfix` if the canonical's outcome makes it obsolete.
 - Canonical in `bakery/wontfix`: `bakery/wontfix` in its own right, with its
   own change at the source.
+- Canonical is one of Kevin's own tasks (not under `bakery/`), whatever its
+  id: `bakery/blocked` on `#<his task> done`, naming it in your notes.
+
+You may read any task, but only change tickets under `bakery/`: Kevin's own
+tasks are his, and `task_set` refuses to change them or to move a ticket out
+of `bakery/`.
 
 ## Unblocked tickets
 

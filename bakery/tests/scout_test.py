@@ -339,8 +339,8 @@ def test_task_claims_and_adds(
 ) -> None:
     monkeypatch.setenv('TASK_FOLDER', str(root / 'tasks'))
     (root / 'tasks').mkdir()
-    task('add', 'mine')
-    task('add', 'theirs', '--owner', 'kevin')
+    task('add', 'mine', '--tag', 'bakery/triage')
+    task('add', 'theirs', '--tag', 'bakery/triage', '--owner', 'kevin')
     claws = testing_gateway.make_claws(
         root,
         {

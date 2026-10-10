@@ -5,6 +5,9 @@
  * too. A claw's `policy.tools` decides which tools it gets. Claims are always
  * made as the claw itself (BAKERY_CLAW), and `task_add` files into the claw's
  * policy `task_tag` (BAKERY_TASK_TAG); `task` serializes concurrent writers.
+ * Claws read every task but only change those tagged under their namespace
+ * (BAKERY_TASK_NAMESPACE): the rest are mine. Releasing a claim is the
+ * exception, so a task I take over never keeps a claw as its owner.
  */
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -19,6 +22,16 @@ function taskTag(): string {
   const tag = process.env.BAKERY_TASK_TAG;
   if (!tag) throw new Error("BAKERY_TASK_TAG is not set");
   return tag;
+}
+
+function namespace(): string {
+  const ns = process.env.BAKERY_TASK_NAMESPACE;
+  if (!ns) throw new Error("BAKERY_TASK_NAMESPACE is not set");
+  return ns;
+}
+
+function inNamespace(tag: string): boolean {
+  return tag.startsWith(`${namespace()}/`);
 }
 
 function text(message: string, details: Record<string, unknown> = {}) {
@@ -38,6 +51,24 @@ async function task(pi: ExtensionAPI, args: string[], signal?: AbortSignal): Pro
 // Blocked tasks must say what they wait on, in a form triage's collectors can
 // check (bakery/bakery/collectors/blocked.py).
 const BLOCKED = "bakery/blocked";
+
+type Shown = { tag: string; owner: string | null };
+
+async function show(pi: ExtensionAPI, id: string, signal?: AbortSignal): Promise<Shown> {
+  return JSON.parse(await task(pi, ["show", id, "--json"], signal)) as Shown;
+}
+
+// The check and the write are separate `task` calls (it has no conditional
+// set), so a task Kevin moves out in between can still take this one write.
+function assertWritable(id: string, current: Shown): void {
+  if (!inNamespace(current.tag)) {
+    throw new Error(`task ${id} is Kevin's (tagged ${current.tag}): only tasks under ${namespace()}/ may change`);
+  }
+}
+
+const NS_HINT = process.env.BAKERY_TASK_NAMESPACE
+  ? ` Only tasks tagged under \`${process.env.BAKERY_TASK_NAMESPACE}/\` may change; the rest are Kevin's.`
+  : "";
 
 const Id = Type.Integer({ minimum: 1, description: "Task id" });
 const Priority = Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high")]);
@@ -113,7 +144,9 @@ export default function tasks(pi: ExtensionAPI) {
         "Update a task: move it to a section (`tag`, eg. `bakery/build`), set its priority or size, " +
         "claim it for yourself (fails if someone else owns it), release your claim, or append notes " +
         `to its description. Moving it to \`${BLOCKED}\` fails unless its notes, with any appended now, ` +
-        "hold a valid `**Blocked on:**` list (the last one counts) of blockers which have not cleared.",
+        "hold a valid `**Blocked on:**` list (the last one counts) of blockers which have not cleared." +
+        NS_HINT +
+        " Releasing your own claim works on any task.",
       parameters: Type.Object({
         id: Id,
         tag: Type.Optional(Type.String({ description: "Section path, eg. bakery/human" })),
@@ -126,10 +159,11 @@ export default function tasks(pi: ExtensionAPI) {
       async execute(_id, params, signal) {
         if (params.claim && params.release) throw new Error("claim and release are exclusive");
         const id = String(params.id);
-        if (params.release) {
-          const current = JSON.parse(await task(pi, ["show", id, "--json"], signal)) as { owner: string | null };
-          if (current.owner !== claw()) throw new Error(`task ${id} is not claimed by ${claw()}`);
-        }
+        const current = await show(pi, id, signal);
+        if (params.release && current.owner !== claw()) throw new Error(`task ${id} is not claimed by ${claw()}`);
+        const changes = [params.tag, params.claim, params.priority, params.size, params.description_append];
+        if (changes.some(Boolean)) assertWritable(id, current);
+        if (params.tag && !inNamespace(params.tag)) throw new Error(`${params.tag} is not under ${namespace()}/`);
         if (params.tag === BLOCKED) {
           const check = ["blocked", "check", id];
           if (params.description_append) check.push("--append", params.description_append);
@@ -152,9 +186,10 @@ export default function tasks(pi: ExtensionAPI) {
     defineTool({
       name: "task_link",
       label: "Link Task",
-      description: "Set a task's link (eg. to the pull request implementing it).",
+      description: "Set a task's link (eg. to the pull request implementing it)." + NS_HINT,
       parameters: Type.Object({ id: Id, url: Type.String() }),
       async execute(_id, params, signal) {
+        assertWritable(String(params.id), await show(pi, String(params.id), signal));
         await task(pi, ["set", String(params.id), "--link", params.url], signal);
         return text(await task(pi, ["show", String(params.id), "--json"], signal));
       },
@@ -165,9 +200,10 @@ export default function tasks(pi: ExtensionAPI) {
     defineTool({
       name: "task_done",
       label: "Complete Task",
-      description: "Mark a task done (one-off tasks are hidden; recurring ones advance).",
+      description: "Mark a task done (one-off tasks are hidden; recurring ones advance)." + NS_HINT,
       parameters: Type.Object({ id: Id }),
       async execute(_id, params, signal) {
+        assertWritable(String(params.id), await show(pi, String(params.id), signal));
         return text(await task(pi, ["done", String(params.id)], signal));
       },
     }),
