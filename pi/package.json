@@ -3,7 +3,7 @@
   "private": true,
   "description": "Runtime dependencies of the shared pi extensions",
   "dependencies": {
-    "@anthropic-ai/sandbox-runtime": "0.0.78",
+    "@anthropic-ai/sandbox-runtime": "0.0.79",
     "smol-toml": "1.9.0"
   }
 }
