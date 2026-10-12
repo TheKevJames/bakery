@@ -3,9 +3,9 @@
 import json
 import subprocess
 
-# Done tasks here are permanent rejections: their links are never filed again.
-# Done tasks anywhere else free their link, so a gap which returns is refiled.
-REJECTED = 'bakery/wontfix'
+
+class TaskError(Exception):
+    pass
 
 
 def listed(*args: str) -> list[dict[str, object]]:
@@ -19,7 +19,20 @@ def listed(*args: str) -> list[dict[str, object]]:
     return tasks
 
 
-def tracked(filter_: str = '') -> list[dict[str, object]]:
-    """Tasks whose links must not be filed again: open ones and rejections."""
-    rejected = ','.join(f for f in (f'tag={REJECTED}', filter_) if f)
-    return listed('-f', filter_) + listed('--done', '-f', rejected)
+def shown(ident: int) -> dict[str, object]:
+    """One task; TaskError, with `task`'s message, if it cannot be shown."""
+    result = subprocess.run(
+        ('task', 'show', str(ident), '--json'),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode:
+        raise TaskError(result.stderr.strip())
+    task: dict[str, object] = json.loads(result.stdout)
+    return task
+
+
+def lineage(link: str) -> str:
+    """A link without its fragment, since line anchors move."""
+    return link.split('#', 1)[0]

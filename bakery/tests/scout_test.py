@@ -10,6 +10,7 @@ import pytest
 from bakery import state
 from bakery.chat import render
 from bakery.collectors import scout
+from bakery.collectors import wontfix
 from bakery.gateway import config
 from bakery.gateway import control
 from bakery.gateway import core
@@ -224,6 +225,7 @@ def test_collects_new_candidates_in_priority_order(
     issues = f'https://github.com/{REPO}/issues'
     task('add', 'no', '--tag', 'bakery/wontfix', '--link', f'{issues}/5')
     task('add', 'fixed', '--tag', 'bakery/build', '--link', f'{issues}/1')
+    wontfix.add(2, 'not ours')
     task('2', 'done')
     task('3', 'done')
 

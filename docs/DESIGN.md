@@ -467,9 +467,8 @@ Claws share my existing `task` tool (`~/src/personal/tools/task`, data in
 - `owner`, `link`, `priority` (low, medium, high), and `size` (small, medium,
   large) fields; `set --owner X` is a compare-and-set (fails if owned by
   someone else unless `--force`); `unset owner` releases;
-- tasks are never deleted: `done` stamps a one-off task done, hiding it from
-  `list` and `due` (`list --done` lists only done tasks; `reopen` undoes it),
-  and advances a recurring one; done tasks cannot otherwise change;
+- `done` deletes a one-off task, with its description, and advances a
+  recurring one;
 - `created` and `updated` timestamps, owned by the store: every change to a
   task bumps `updated`;
 - `set --description-append`, `add --link`, `owner`/`link`/`priority`/`size`
@@ -479,12 +478,11 @@ Claws share my existing `task` tool (`~/src/personal/tools/task`, data in
 
 Claws use it through tools in `pi/claw-extensions/task.ts`: `task_list`,
 `task_show`, `task_add` (with an optional priority and size), `task_set`
-(tag, claim, release, append notes), `task_link`, and `task_done`;
-`task_list` takes `done` to list only done tasks. `task_set` refuses to
-move a task to `bakery/blocked` unless `bakery blocked check` accepts its
-blockers (see triage). Each
-claw's `policy.tools` selects which it gets; claims are always made as the
-claw itself (`BAKERY_CLAW`), and `task_add` always files into the claw's
+(tag, claim, release, append notes), `task_link`, and `task_done`.
+`task_set` refuses to move a task to `bakery/blocked` unless `bakery
+blocked check` accepts its blockers (see triage). Each claw's
+`policy.tools` selects which it gets; claims are always made as the claw
+itself (`BAKERY_CLAW`), and `task_add` always files into the claw's
 `policy.task_tag`.
 
 Claws read every task, but only change tasks tagged under `bakery/` (the
@@ -513,12 +511,17 @@ in that moment can still take the one write.
 6. `baker` adds tasks about the claws themselves straight to `bakery/human`,
    with their priority and size; I move them on.
 
-I close `bakery/wontfix` tasks myself, with `done`. A done task in
-`bakery/wontfix` is a permanent rejection: scout and baker skip links on
-open tasks and on rejections (`bakery/collectors/tasks.py`), so its link is
-never filed again. A done task anywhere else frees its link, so a gap which
-comes back after it was fixed is filed again. A `bakery/blocked` task is
-open, so its link is not filed again either, and its source stays as it is.
+I close `bakery/wontfix` tasks myself, with `done`, after `bakery wontfix
+add <id> --reason "…"` if the link should never be filed again. That
+records a rejection: the link (without its `#…` fragment), the task's
+summary, the reason, and the date, in
+`$XDG_STATE_HOME/claws/_shared/wontfix.json`, committed to the state repo
+(`bakery wontfix list` and `rm <link>` read and undo them;
+`bakery/bakery/collectors/wontfix.py`). Any task with a link can be
+rejected, whatever its tag. Scout and baker skip links on open tasks and on
+rejections, so done tasks free their link: a gap which comes back after it
+was fixed is filed again. A `bakery/blocked` task is open, so its link is
+not filed again either, and its source stays as it is.
 
 ## Claws (v1)
 
@@ -553,10 +556,10 @@ Finds things in my repos that belong on my task list. Profile:
     per comment. Link: `…/blob/<branch>/<path>?todo=<fingerprint>#L<line>`;
     the fingerprint is of the comment's text, so the line can move.
 - **Lineage, not memory**: a candidate is new unless an open task or a
-  rejection (a done `bakery/wontfix` task) has its link (ignoring the `#L…`
-  anchor). There is no separate "seen" store, so a task done anywhere else
-  comes back if its source still exists. Scout therefore never merges or
-  drops candidates and copies links verbatim.
+  rejection (`bakery wontfix`) has its link (ignoring the `#L…` anchor).
+  There is no "seen" store, so a done task comes back if its source still
+  exists and was not rejected. Scout therefore never merges or drops
+  candidates and copies links verbatim.
 - At most `max_candidates` (25) per run, ordered CI, PRs, issues, warnings,
   TODOs; the rest wait for the next run. Repos are collected in parallel
   (8 at a time; about 13s for all 17). Repos that cannot be read are
@@ -600,10 +603,11 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
   list counts; the ticket clears once all of its blockers have.
   `bakery/bakery/collectors/blocked.py` parses and checks it, for `bakery
   blocked check` (run by `task_set` before it moves a task to
-  `bakery/blocked`) and for the collectors below. A list is refused if it is
-  malformed, names a task that does not exist or the ticket itself, or names
-  a task blocker which has already cleared (triage routes on the merits
-  instead).
+  `bakery/blocked`) and for the collectors below. Done tasks are deleted,
+  so a task which does not exist counts as done. A list is refused if it is
+  malformed, names the ticket itself, or names a task blocker which has
+  already cleared, including one which does not exist (triage routes on the
+  merits instead).
 - The `unblock` job's `triage-unblock` collector hands over, in one run,
   every unowned blocked ticket whose blockers are all tasks and have all
   cleared; triage appends an `## Unblocked` note and moves each to
@@ -653,7 +657,7 @@ Reviews how the claws learn and files a task for each gap. Profile:
     with how many units of work each spans;
   - memory sizes, `memory_append` sources, and the state-repo commits that
     changed `MEMORY.md` or `_shared`;
-  - baker's own tasks;
+  - baker's own tasks, and rejections of its links;
   - gateway warnings and errors.
 
   Sections are capped (about 38k characters in all) and say how to read
@@ -676,7 +680,7 @@ Reviews how the claws learn and files a task for each gap. Profile:
   - No `task_set`: changes to other claws' memory or to tickets are steps
     in a task's **Fix**, for me.
 - It keeps its own memory (the slugs it filed). It never files a link
-  already on an open task or a rejection (a done `bakery/wontfix` task).
+  already on an open task or a rejection.
 - Ask policy `assume`; `silent_ok`, replying `NO_REPLY` when it filed
   nothing and none of its tasks is still open.
 

@@ -22,6 +22,7 @@ from .. import transcripts
 from ..gateway import ledger
 from . import base
 from . import tasks
+from . import wontfix
 
 if TYPE_CHECKING:
     from ..gateway import config
@@ -232,16 +233,20 @@ def _memory(
 
 def _tasks() -> Section:
     lines = [
-        f'- #{t["id"]} [{"rejected" if t["done"] else t["tag"]}]'
+        f'- #{t["id"]} [{t["tag"]}]'
         f' {t["priority"]}/{t["size"]} {t["summary"]} ({t["link"]})'
-        for t in tasks.tracked(f'link~{TASK_LINK_PREFIX}')
+        for t in tasks.listed('-f', f'link~{TASK_LINK_PREFIX}')
+    ] + [
+        f'- [rejected] {r.summary} ({link})'
+        for link, r in sorted(wontfix.load().items())
+        if link.startswith(TASK_LINK_PREFIX)
     ]
     return Section(
         'Your tasks (open, and rejected)',
         lines,
         5_000,
-        f'task_list with filter link~{TASK_LINK_PREFIX}, and with done=true'
-        f' for rejections (tag={tasks.REJECTED})',
+        f'task_list with filter link~{TASK_LINK_PREFIX}, and rejections in'
+        f' {wontfix.path()}',
     )
 
 
