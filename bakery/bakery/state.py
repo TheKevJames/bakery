@@ -2,8 +2,8 @@
 Claw state: $XDG_STATE_HOME/claws, a local-only git repo.
 
 Memory and identity files are committed after every change so a poisoned or
-botched edit can be reviewed and rolled back; transcripts, worktrees, and the
-gateway's runtime files are ignored.
+botched edit can be reviewed and rolled back; transcripts, worktrees, each
+claw's home and temp dirs, and the gateway's runtime files are ignored.
 """
 
 import importlib.resources
@@ -17,6 +17,8 @@ GITIGNORE = """\
 /_gateway/
 /*/sessions/
 /*/worktrees/
+/*/home/
+/*/tmp/
 """
 
 
@@ -61,8 +63,10 @@ def init() -> None:
         git('config', 'user.name', 'bakery')
         git('config', 'user.email', 'bakery@localhost')
     gitignore = base / '.gitignore'
-    if not gitignore.exists():
-        gitignore.write_text(GITIGNORE)
+    lines = gitignore.read_text().splitlines() if gitignore.exists() else []
+    missing = [line for line in GITIGNORE.splitlines() if line not in lines]
+    if missing:
+        gitignore.write_text(''.join(f'{line}\n' for line in lines + missing))
     if not user_file().exists():
         template = importlib.resources.files('bakery') / 'templates'
         user_file().write_text((template / 'USER.md').read_text())

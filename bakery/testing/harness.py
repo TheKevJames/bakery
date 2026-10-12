@@ -106,17 +106,23 @@ def handler(llm: FakeLLM) -> type:
     lock = threading.Lock()
 
     class Handler(http.server.BaseHTTPRequestHandler):
+        # Claws reach this through their sandbox's HTTP proxy, which
+        # truncates large close-delimited (HTTP/1.0, unframed) responses to
+        # Node's fetch; framed ones come through whole.
+        protocol_version = 'HTTP/1.1'
+
         def do_POST(self) -> None:
             length = int(self.headers['Content-Length'])
             with lock:
                 llm.requests.append(json.loads(self.rfile.read(length)))
                 reply = llm.script.popleft() if llm.script else Reply()
             time.sleep(reply.delay)
+            body = b''.join(_render(reply))
             self.send_response(200)
             self.send_header('Content-Type', 'text/event-stream')
+            self.send_header('Content-Length', str(len(body)))
             self.end_headers()
-            for chunk in _render(reply):
-                self.wfile.write(chunk)
+            self.wfile.write(body)
 
         def log_request(
             self, code: int | str = '-', size: int | str = '-'

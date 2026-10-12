@@ -152,19 +152,13 @@ def test_digest_covers_activity_since_the_last_review(
                 'args': {'command': 'curl https://github.com'},
                 'error': True,
                 'text': 'curl: (7) CONNECT tunnel failed, response 403',
-                'details': {
-                    'sandboxViolations': [
-                        'deny network-outbound github.com:443 (host is not'
-                        ' on the allow list)'
-                    ]
-                },
             },
             {
                 'at': SINCE + 80,
                 'tool': 'read',
                 'args': {'path': '/x/secret'},
                 'error': True,
-                'text': '/x/secret is protected and cannot be read',
+                'text': "read is not allowed by this claw's policy",
             },
             {
                 'at': SINCE + 90,
@@ -180,6 +174,18 @@ def test_digest_covers_activity_since_the_last_review(
                 'text': 'Saved.',
             },
         ],
+    )
+    violations = state.root() / '_gateway' / 'violations' / 'scout'
+    violations.mkdir(parents=True)
+    (violations / 'scout-daily-x.jsonl').write_text(
+        ''.join(
+            json.dumps({'time': iso(at), 'line': line}) + '\n'
+            for at, line in (
+                (SINCE - 60, 'cat(1) deny(1) file-read-data /old'),
+                (SINCE + 70, 'curl(7) deny(1) file-read-data /x/y'),
+                (SINCE + 71, 'curl(8) deny(1) file-read-data /x/y'),
+            )
+        )
     )
     for tag, slug, summary in (
         ('bakery/wontfix', 'x', 'Never this'),
@@ -208,8 +214,13 @@ def test_digest_covers_activity_since_the_last_review(
         ' permitted — 2 calls in 1 units; latest scout-daily-x' in text
     )
     assert f'bash `{gh}`' in text
-    assert 'scout · sandbox · deny network-outbound github.com:443' in text
-    assert 'scout · policy · /x/secret is protected and cannot be read' in text
+    assert 'scout · sandbox · curl: CONNECT tunnel failed' in text
+    assert "scout · policy · read is not allowed by this claw's" in text
+    assert (
+        '- scout · curl deny file-read-data /x/y — 2×; latest in'
+        ' scout-daily-x' in text
+    )
+    assert '/old' not in text
     assert 'scout · github · gh api failed (1)' in text
     assert 'echo before' not in text
     assert (

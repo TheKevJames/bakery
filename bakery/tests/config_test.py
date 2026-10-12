@@ -96,7 +96,7 @@ def test_default_jobs_apply_to_every_claw(tmp_path: pathlib.Path) -> None:
         ('[policy]\nconfirm = ["("]', 'bad regex'),
         ('[policy]\nnetwork = ["https://x.com"]', 'is not a domain'),
         ('[policy]\ntool = []', 'unknown keys tool'),
-        ('[policy]\nallow_read = ["~/.ssh"]', 'is not under'),
+        ('[policy]\nallow_read = ["~/.ssh"]', 'unknown keys allow_read'),
         ('[policy]\ntask_tag = "Bakery/Human"', 'not a lowercase tag path'),
         ('[policy]\ntask_tag = "triage"', 'is not under bakery/'),
         ('[policy]\ntask_tag = "bakery"', 'is not under bakery/'),

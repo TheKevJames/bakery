@@ -11,7 +11,9 @@ import collections
 import contextlib
 import itertools
 import json
+import os
 import pathlib
+import signal
 from collections.abc import Mapping
 from collections.abc import Sequence
 
@@ -48,13 +50,15 @@ class PiProcess:
 
     @classmethod
     async def start(
-        cls, args: Sequence[str], *, cwd: pathlib.Path, env: Mapping[str, str]
+        cls,
+        command: Sequence[str],
+        *,
+        cwd: pathlib.Path,
+        env: Mapping[str, str],
     ) -> 'PiProcess':
+        """`command` runs `pi --mode rpc`, perhaps through a wrapper."""
         process = await asyncio.create_subprocess_exec(
-            'pi',
-            '--mode',
-            'rpc',
-            *args,
+            *command,
             cwd=cwd,
             # Deliberately not inherited: the caller decides exactly what a
             # claw may see.
@@ -63,6 +67,8 @@ class PiProcess:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             limit=LINE_LIMIT,
+            # Its own process group, so a kill reaches pi behind the wrapper.
+            start_new_session=True,
         )
         return cls(process)
 
@@ -163,7 +169,7 @@ class PiProcess:
             await asyncio.wait_for(self.process.wait(), CLOSE_TIMEOUT)
         except TimeoutError:
             with contextlib.suppress(ProcessLookupError):
-                self.process.kill()
+                os.killpg(self.process.pid, signal.SIGKILL)
             await self.process.wait()
         for task in self._tasks:
             with contextlib.suppress(asyncio.CancelledError):

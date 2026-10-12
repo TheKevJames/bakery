@@ -21,7 +21,8 @@ tools = [
     "memory_append", "memory_search", "memory_get",
     "task_list", "task_show", "task_add",
 ]
-allow_read = ["${XDG_STATE_HOME}/claws"]
+# Every claw's state, and the gateway's runs, logs, and sandbox violations.
+read_paths = ["~/src/personal", "${TASK_FOLDER}", "${XDG_STATE_HOME}/claws"]
 # Never bakery/build: fixes change the claws themselves, so Kevin approves.
 task_tag = "bakery/human"
 

@@ -58,13 +58,6 @@ def fixture_run_pi(
     shutil.rmtree(sockets)
 
 
-@pytest.fixture(name='claw_tmp', scope='session')
-def fixture_claw_tmp() -> Iterator[pathlib.Path]:
-    path = pathlib.Path(tempfile.mkdtemp(prefix='bakery-tmp-'))
-    yield path
-    shutil.rmtree(path)
-
-
 @pytest.fixture(name='keychain', scope='function', autouse=True)
 def fixture_keychain(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
     """The Keychain's items, by name; add to it to store a secret."""
@@ -73,10 +66,19 @@ def fixture_keychain(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
     return items
 
 
+@pytest.fixture(name='task_folder', scope='function', autouse=True)
+def fixture_task_folder(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> pathlib.Path:
+    """$TASK_FOLDER, which defaults.toml grants every claw; not created."""
+    folder = tmp_path / 'tasks'
+    monkeypatch.setenv('TASK_FOLDER', str(folder))
+    return folder
+
+
 @pytest.fixture(name='root', scope='function')
 def fixture_root(
     fake_llm: harness.FakeLLM,
-    claw_tmp: pathlib.Path,
     keychain: dict[str, str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[pathlib.Path]:
@@ -84,11 +86,8 @@ def fixture_root(
     # Short, because the state dir holds unix sockets (104-byte path cap).
     root = pathlib.Path(tempfile.mkdtemp(prefix='bk', dir='/tmp'))
     monkeypatch.setenv('XDG_STATE_HOME', str(root / 'state'))
+    monkeypatch.setenv('TASK_FOLDER', str(root / 'tasks'))
     keychain['BAKERY_FAKE_LLM_URL'] = fake_llm.url
     monkeypatch.setenv('BAKERY_REPO', str(harness.REPO))
-    # Claws may always write $TMPDIR; keep it apart from `root` (on Linux it
-    # would otherwise be /tmp, which holds `root` itself). Shared across tests
-    # so pi's compiled-extension cache there stays warm.
-    monkeypatch.setenv('TMPDIR', str(claw_tmp))
     yield root
     shutil.rmtree(root)

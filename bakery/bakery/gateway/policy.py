@@ -1,7 +1,8 @@
 """
-A claw's `[policy]`: what its pi child may do, enforced in the child by
-pi/claw-extensions/policy (tool and path checks, plus an OS sandbox around
-bash). The gateway serializes it into BAKERY_POLICY.
+A claw's `[policy]`: what its pi child may do. Paths and network are enforced
+by the OS sandbox the child runs in (see sandbox.py); tools and confirmations
+by pi/claw-extensions/policy in the child, to which the gateway passes them
+as BAKERY_POLICY.
 """
 
 import dataclasses
@@ -10,7 +11,6 @@ import pathlib
 import re
 from collections.abc import Iterable
 
-from .. import state
 from . import toml
 
 DOMAIN_RE = re.compile(r'(\*\.)?[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*(:\d+)?')
@@ -27,15 +27,14 @@ def in_namespace(tag: str) -> bool:
 class Policy:
     # Tool names; `*` matches any characters (eg. `mcp__context7__*`).
     tools: tuple[str, ...]
-    # Absolute paths the claw may write (bash and edit/write). $TMPDIR is
-    # always writable.
-    write_paths: tuple[pathlib.Path, ...]
-    # Absolute paths or globs the claw may not read.
+    # Absolute paths under $HOME the claw may read; the rest of $HOME is
+    # unreadable. Outside $HOME, everything but per-user temp is readable.
+    read_paths: tuple[pathlib.Path, ...]
+    # Absolute paths or globs the claw may not read, even within read_paths.
     deny_read: tuple[str, ...]
-    # Absolute paths under the claw state root the claw may read besides its
-    # own state and _shared (eg. other claws' memory and transcripts).
-    allow_read: tuple[pathlib.Path, ...]
-    # Domains bash may reach; empty means no network.
+    # Absolute paths the claw may write, besides its own state and profile.
+    write_paths: tuple[pathlib.Path, ...]
+    # Domains the claw (pi and bash alike) may reach.
     network: tuple[str, ...]
     # Regexes; a matching tool name or bash command needs my approval.
     confirm: tuple[str, ...]
@@ -79,26 +78,17 @@ def parse(table: toml.Table, profile: pathlib.Path) -> Policy:
         raise toml.ConfigError(
             f'{table.where}.task_tag: {task_tag!r} is not under {NAMESPACE}/'
         )
-    root = state.root()
-    allow_read = tuple(
-        toml.expand(p, profile) for p in table.strings('allow_read')
-    )
-    for path in allow_read:
-        # Re-allowing beats every deny, so anything outside the state root
-        # could expose eg. ~/.ssh.
-        if not path.is_relative_to(root):
-            raise toml.ConfigError(
-                f'{table.where}.allow_read: {path} is not under {root}'
-            )
     policy = Policy(
         tools=table.strings('tools'),
-        write_paths=tuple(
-            toml.expand(p, profile) for p in table.strings('write_paths')
+        read_paths=tuple(
+            toml.expand(p, profile) for p in table.strings('read_paths')
         ),
         deny_read=tuple(
             _pattern(p, profile) for p in table.strings('deny_read')
         ),
-        allow_read=allow_read,
+        write_paths=tuple(
+            toml.expand(p, profile) for p in table.strings('write_paths')
+        ),
         network=network,
         confirm=confirm,
         task_tag=task_tag,
@@ -107,25 +97,10 @@ def parse(table: toml.Table, profile: pathlib.Path) -> Policy:
     return policy
 
 
-def serialize(
-    policy: Policy,
-    *,
-    extra_deny_read: Iterable[pathlib.Path],
-    extra_allow_read: Iterable[pathlib.Path],
-    secret_names: Iterable[str],
-) -> str:
+def serialize(policy: Policy, *, secret_names: Iterable[str]) -> str:
     return json.dumps(
         {
             'tools': policy.tools,
-            'write_paths': [str(p) for p in policy.write_paths],
-            'deny_read': [
-                *policy.deny_read,
-                *(str(p) for p in extra_deny_read),
-            ],
-            'allow_read': [
-                str(p) for p in (*policy.allow_read, *extra_allow_read)
-            ],
-            'network': policy.network,
             'confirm': policy.confirm,
             'secret_names': sorted(secret_names),
         }

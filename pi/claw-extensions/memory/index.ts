@@ -7,10 +7,11 @@
  * durable before older turns are summarized away. It fires once per
  * compaction cycle, as an ordinary model turn so its cost is accounted.
  *
- * Bash cannot write memory (the state dir is not writable in the sandbox);
- * these tools run in pi's process.
+ * These are the intended writers of memory, but not the only possible ones:
+ * bash shares pi's sandbox, which can write the claw's state dir.
  */
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { createHash } from "node:crypto";
 import { Type } from "typebox";
 import * as store from "./store.ts";
 
@@ -121,36 +122,49 @@ const memoryEdit = defineTool({
   },
 });
 
-const proposeUserUpdate = defineTool({
-  name: "propose_user_update",
-  label: "Propose USER.md Update",
-  description:
-    "Propose edits to USER.md, the facts about the user that every agent sees. The user approves " +
-    "or rejects them; only propose stable facts the user told you directly.",
-  parameters: Type.Object({
-    edits: Type.Array(EditSchema, { minItems: 1 }),
-    reason: Type.String({ description: "Why, and where the user said it" }),
-  }),
-  async execute(_id, params, signal, _onUpdate, ctx) {
-    const file = store.userFile();
-    const updated = store.applyEdits(store.readOrEmpty(file), params.edits);
-    if (updated.length > USER_MAX_CHARS) {
-      throw new Error(`USER.md would be ${updated.length} characters; the limit is ${USER_MAX_CHARS}`);
-    }
-    const hours = envNumber("BAKERY_ASK_TIMEOUT_HOURS", 4);
-    const approved = await ctx.ui.confirm(
-      "Update USER.md?",
-      `${params.reason}\n\n${store.describeEdits(params.edits)}`,
-      { signal, timeout: hours * 3_600_000 },
-    );
-    if (!approved) return text("The user did not approve; USER.md is unchanged.", { applied: false });
-    store.writeCapped(file, updated, USER_MAX_CHARS);
-    return text("Approved and applied.", { applied: true });
-  },
-});
+// USER.md is private (the state repo is local-only) and claws cannot write
+// it: proposals become tasks Kevin applies by hand.
+const USER_TASK_TAG = "bakery/human";
+
+function proposeUserUpdate(pi: ExtensionAPI) {
+  async function task(args: string[], signal?: AbortSignal): Promise<string> {
+    const result = await pi.exec("task", args, { signal });
+    if (result.code !== 0) throw new Error(result.stderr.trim() || `task exited with ${result.code}`);
+    return result.stdout.trim();
+  }
+
+  return defineTool({
+    name: "propose_user_update",
+    label: "Propose USER.md Update",
+    description:
+      "Propose edits to USER.md, the facts about the user that every agent sees. They are filed as a " +
+      "task for the user, who applies them by hand if they agree; only propose stable facts the user " +
+      "told you directly.",
+    parameters: Type.Object({
+      edits: Type.Array(EditSchema, { minItems: 1 }),
+      reason: Type.String({ description: "Why, and where the user said it" }),
+    }),
+    async execute(_id, params, signal) {
+      const file = store.userFile();
+      const updated = store.applyEdits(store.readOrEmpty(file), params.edits);
+      if (updated.length > USER_MAX_CHARS) {
+        throw new Error(`USER.md would be ${updated.length} characters; the limit is ${USER_MAX_CHARS}`);
+      }
+      // The same proposal is the same task.
+      const link = `user-md:${createHash("sha256").update(updated).digest("hex").slice(0, 16)}`;
+      const filed = JSON.parse(await task(["list", "--json", "-f", `link=${link}`], signal)) as { id: number }[];
+      if (filed.length > 0) return text(`Already proposed as task #${filed[0].id}.`, { task: filed[0].id });
+      const description = `${params.reason}\n\nApply to ${file}:\n\n${store.describeEdits(params.edits)}`;
+      const summary = `Update USER.md: ${params.reason.split("\n")[0]}`.slice(0, 120);
+      await task(["add", "--tag", USER_TASK_TAG, "--link", link, "--description", description, "--", summary], signal);
+      const [added] = JSON.parse(await task(["list", "--json", "-f", `link=${link}`], signal)) as { id: number }[];
+      return text(`Filed as task #${added.id} for the user to apply.`, { task: added.id });
+    },
+  });
+}
 
 export default function memory(pi: ExtensionAPI) {
-  for (const tool of [memoryAppend, memorySearch(pi), memoryGet, memoryEdit, proposeUserUpdate]) {
+  for (const tool of [memoryAppend, memorySearch(pi), memoryGet, memoryEdit, proposeUserUpdate(pi)]) {
     pi.registerTool(tool);
   }
 
