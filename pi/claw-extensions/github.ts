@@ -2,8 +2,8 @@
  * GitHub Extension (claws only)
  *
  * A read-only `github` tool: GET requests to the GitHub REST API through
- * `gh api`, authenticated by GH_TOKEN (a read-only fine-grained token, set by
- * the gateway). It runs in pi's process, so claws whose bash has no network
+ * `gh api`, authenticated by GH_TOKEN (the claws' GitHub user, set by the
+ * gateway). It runs in pi's process, so claws whose bash has no network
  * can still read GitHub, and the token never reaches bash.
  */
 import {

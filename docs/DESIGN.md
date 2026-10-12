@@ -295,9 +295,10 @@ A claw's pi child gets only `PATH`, `HOME`, `USER`, `LANG`, `TMPDIR`,
 `TASK_FOLDER`, `XDG_*`, and `LC_*` from the gateway's environment, plus its
 `secrets`: entries `NAME` or `NAME=ITEM`, setting variable NAME from secret
 ITEM (default: NAME). The default is `ANTHROPIC_API_KEY`, `JINA_API_KEY`, and
-`GH_TOKEN=BAKERY_GITHUB_READ`. Secret values come from the gateway's
-environment if set, else the Keychain (generic password, account `bakery`,
-service = ITEM). A missing secret fails the run. Secrets are visible to pi and
+`GH_TOKEN=BAKERY_GITHUB`. Secret values come only from the Keychain (generic
+password, account `bakery`, service = ITEM), never the gateway's environment,
+which holds all of my shell's secrets when the gateway is started from a
+shell. A missing secret fails the run. Secrets are visible to pi and
 its extension tools, never to bash.
 
 ### Control
@@ -430,7 +431,7 @@ Enforcement:
    directory that contains a denied path, since they recurse.
 3. **Tools that need the network or credentials** (`web_search`,
    `web_fetch`, context7, `github`) run in pi's process, outside bash.
-   `github` is GET-only, through `gh api` with a read-only token.
+   `github` is GET-only, through `gh api`.
 4. **Pushing** (step 11): bash cannot push (no credentials, no ssh-agent), so
    build pushes through a `git_push` tool that only accepts `kjames/bakery-*`
    refs and runs git with `-c core.hooksPath=<bakery hooks>`, whose
@@ -443,10 +444,17 @@ fails the run before the model is called.
 Credentials (macOS Keychain, least privilege, selected per claw by `secrets`):
 
 - `DISCORD_BOT_TOKEN` (gateway only), `ANTHROPIC_API_KEY`, `JINA_API_KEY`.
-- `BAKERY_GITHUB_READ`: a fine-grained PAT for `TheKevJames` repositories
-  with metadata, contents, issues, pull requests, and actions: read.
-- `BAKERY_GITHUB_WRITE` (step 11, build): as above plus contents and pull
-  requests: write.
+- `BAKERY_GITHUB`: a classic PAT (`repo` scope only, one-year expiry) of the
+  claws' own GitHub user, a collaborator on the public `TheKevJames`
+  repositories they work on. Collaborators on a personal account's
+  repositories always have write access, and fine-grained PATs can't reach
+  another user's repositories, so GitHub enforces the limits instead: the
+  rulesets every repository gets from my repo template (dotsystem's
+  `repo-template`) require a PR approved after its last push for the default
+  branch. Tags are not protected yet, so the user can create and move them
+  (and so trigger tag-driven releases). The user has no admin rights. Private
+  repositories have no rulesets on GitHub Free, so the user is never invited
+  to them.
 
 `web_search`, `web_fetch` (`pi/extensions/web.ts`), and context7 (an MCP
 server registered by `pi/extensions/mcp-servers.ts`) replace the former

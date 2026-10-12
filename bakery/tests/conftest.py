@@ -9,6 +9,7 @@ from collections.abc import Iterator
 
 import pytest
 
+from bakery import secrets
 from testing import harness
 
 
@@ -64,17 +65,26 @@ def fixture_claw_tmp() -> Iterator[pathlib.Path]:
     shutil.rmtree(path)
 
 
+@pytest.fixture(name='keychain', scope='function', autouse=True)
+def fixture_keychain(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
+    """The Keychain's items, by name; add to it to store a secret."""
+    items: dict[str, str] = {}
+    monkeypatch.setattr(secrets, 'keychain', items.get)
+    return items
+
+
 @pytest.fixture(name='root', scope='function')
 def fixture_root(
     fake_llm: harness.FakeLLM,
     claw_tmp: pathlib.Path,
+    keychain: dict[str, str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[pathlib.Path]:
     """A gateway's world: state dir, fake model, and the repo's extensions."""
     # Short, because the state dir holds unix sockets (104-byte path cap).
     root = pathlib.Path(tempfile.mkdtemp(prefix='bk', dir='/tmp'))
     monkeypatch.setenv('XDG_STATE_HOME', str(root / 'state'))
-    monkeypatch.setenv('BAKERY_FAKE_LLM_URL', fake_llm.url)
+    keychain['BAKERY_FAKE_LLM_URL'] = fake_llm.url
     monkeypatch.setenv('BAKERY_REPO', str(harness.REPO))
     # Claws may always write $TMPDIR; keep it apart from `root` (on Linux it
     # would otherwise be /tmp, which holds `root` itself). Shared across tests

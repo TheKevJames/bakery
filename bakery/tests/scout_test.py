@@ -167,9 +167,11 @@ path = "{root / 'missing'}"
 
 @pytest.fixture(name='github', scope='function')
 def fixture_github(
-    root: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    root: pathlib.Path,
+    keychain: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[fake_github.FakeGitHub]:
-    monkeypatch.setenv('BAKERY_TEST_GH', TOKEN)
+    keychain['BAKERY_TEST_GH'] = TOKEN
     monkeypatch.setenv('TASK_FOLDER', str(root / 'tasks'))
     (root / 'tasks').mkdir()
     make_upstream(root)
