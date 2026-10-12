@@ -2,4 +2,22 @@
     "extends": [
         "github>thekevjames/tools:personal",
     ],
+    "customManagers": [
+        // Usage:
+        //     # renovate: datasource=github-releases depName=owner/repo
+        //     TAG="v1.2.3"
+        {
+            "description": "Update pinned versions in bin/ scripts",
+            "managerFilePatterns": [
+                "/^bin/[^/]+$/",
+            ],
+            "customType": "regex",
+            "matchStrings": [
+                "# renovate: datasource=(?<datasource>[a-z-]+?) depName=(?<depName>.+?)(?: versioning=(?<versioning>[a-z-]+?))?\\s+[A-Z_]+=\"?(?<currentValue>[^\"\\s]+)\"?\\s",
+            ],
+            "versioningTemplate": "{{#if versioning}}{{versioning}}{{else}}semver{{/if}}",
+            // N.B. generally requires re-running the script manually
+            "automerge": false,
+        },
+    ],
 }
