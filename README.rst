@@ -27,10 +27,10 @@ Gateway
 ~~~~~~~
 
 The claws' gateway reads its secrets only from the macOS Keychain (never its
-environment), as generic passwords with account ``bakery`` and the secret's
-name as the service. Store
-each one with ``security``, which prompts for the value (twice) when ``-w``
-comes last, so it never lands in your shell history; ``-U`` replaces an
+environment, as that might allow secrets to leak from the parent shell), as
+generic passwords with account ``bakery`` and the secret's name as the service.
+Store each one with ``security``, which prompts for the value (twice) when
+``-w`` comes last, so it never lands in your shell history; ``-U`` replaces an
 existing item:
 
 .. code-block:: console
@@ -44,10 +44,10 @@ existing item:
   developer portal → Bot → Reset Token).
 - ``ANTHROPIC_API_KEY``, ``JINA_API_KEY``: the model and web-tool API keys.
 - ``BAKERY_GITHUB``: a classic personal access token of the claws' own GitHub
-  user (signed in as it: Settings → Developer settings → Tokens (classic)),
-  with only the ``repo`` scope and a one-year expiry. That user is a
-  collaborator on the public ``TheKevJames`` repositories the claws work on;
-  fine-grained tokens can't reach another user's repositories.
+  user (``thekevjames-bakery``, signed in as it: Settings → Developer settings
+  → Tokens (classic)), with only the ``repo`` scope and a one-year expiry. That
+  user is a collaborator on the public ``TheKevJames`` repositories the claws
+  work on.
 
 Check which are stored, without printing their values:
 

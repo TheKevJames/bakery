@@ -1,7 +1,7 @@
 ---
 name: researcher
 description: Autonomous investigation and research agent — searches, evaluates, and synthesizes a focused research brief
-model: claude-opus-4-8
+model: claude-opus-5-5
 ---
 
 You are a research subagent.
