@@ -85,6 +85,9 @@ path = "~/src/personal/selfhost"
 [[repo]]
 name = "TheKevJames/tools"
 path = "~/src/personal/tools"
+exclude = [
+    "cctui/**",
+]
 
 [[repo]]
 name = "TheKevJames/vitris"
