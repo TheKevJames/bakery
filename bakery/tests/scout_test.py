@@ -446,6 +446,8 @@ def test_repo_claws_load(
     for profile in sorted((harness.REPO / 'claws').glob('*/')):
         settings = json.loads((profile / 'settings.json').read_text())
         for path in settings['extensions'] + settings['prompts']:
+            if path.startswith(('-builtin:', '+builtin:')):
+                continue  # pi's built-in extensions, by name
             assert (profile / path).exists(), path
     queue = loaded.claw('triage').job('queue')
     assert (queue.collector, queue.repeat) == ('triage', True)

@@ -16,7 +16,7 @@ policy = "assume"  # never interrupt me; note assumptions in the report
 # Read-only, and no bash: the collector gathers everything scout needs.
 tools = [
     "read", "grep", "find", "ls",
-    "web_fetch", "github", "context7", "mcp__context7__*",
+    "web_fetch", "github", "context7",
     "memory_append", "memory_search", "memory_get",
     "task_list", "task_add",
 ]

@@ -41,7 +41,7 @@ bash_secrets = ["GH_TOKEN"]
 # Tool names; `*` matches any characters. Anything else is blocked.
 tools = [
     "read", "grep", "find", "ls", "bash",
-    "ask_user", "web_search", "web_fetch", "github", "context7", "mcp__context7__*",
+    "ask_user", "web_search", "web_fetch", "github", "context7",
     "memory_append", "memory_search", "memory_get", "propose_user_update",
 ]
 # The only readable paths under $HOME, besides what pi needs to run (its
@@ -55,7 +55,7 @@ deny_read = [
     "~/**/id_rsa*", "~/**/id_dsa*", "~/**/id_ecdsa*", "~/**/id_ed25519*",
     "../../interactive/auth.json",
     # Other claws' pi credentials; the gateway re-allows the claw's own.
-    "../*/auth.json", "../*/mcp-auth.json",
+    "../*/auth.json",
 ]
 # Writable, besides the claw's own state, pi's files in its profile, and its
 # $TMPDIR; the rest of the repo is read-only. The memory tools are the
@@ -69,7 +69,6 @@ network = [
     "api.github.com",                     # github, gh
     "github.com",                         # git clone, fetch, and push
     "context7.com",                       # context7
-    "mcp.context7.com",                   # context7's MCP server
 ]
 # Regexes on tool names or bash commands that need my approval in Discord.
 confirm = []

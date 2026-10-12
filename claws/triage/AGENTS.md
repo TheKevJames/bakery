@@ -27,7 +27,7 @@ exactly NO_REPLY.
   under `~/src/personal/<repo>`. A fixed or removed source makes the ticket
   obsolete.
 - Find the relevant code, history (`git log`, `git blame` in bash), and
-  related issues. Use `web_search`, `web_fetch`, and the context7 tools for
+  related issues. Use `web_search`, `web_fetch`, and `context7` for
   library behavior and documentation.
 - Look for duplicates: open tickets for the same work, eg. the same
   boilerplate TODO in another repository (`task_list` with `summary~` or

@@ -3,8 +3,8 @@
  *
  * The gateway runs each claw's pi through this script (with node, outside
  * the sandbox): `node launch.ts pi --mode rpc ...`. It runs the command inside
- * Anthropic's sandbox-runtime, so pi and everything it starts (bash, gh, rg,
- * MCP servers) share one OS sandbox; macOS cannot nest sandboxes, so nothing
+ * Anthropic's sandbox-runtime, so pi and everything it starts (bash, gh, rg)
+ * share one OS sandbox; macOS cannot nest sandboxes, so nothing
  * inside can get a stricter one of its own.
  *
  * Configured by the gateway through the environment, none of which reaches

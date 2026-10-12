@@ -22,10 +22,17 @@ that is gitignored. Pi also rewrites `settings.json` (e.g.
 
 Claw profiles list their extensions explicitly rather than loading all of
 `pi/extensions/`: they need `context/`, `bakery.ts`, `time-awareness.ts`,
-`web.ts`, `mcp-servers.ts`, and `pi/claw-extensions/` (the gateway adds
+`web.ts`, `context7.ts`, and `pi/claw-extensions/` (the gateway adds
 `policy/` itself), and load `pi/claw-prompts/` as prompts, but not the
 TUI-only extensions or `subagent/` (its child pi runs would escape the
 gateway's cost ledger).
+
+Every profile disables pi's built-in `codemode`, `tool-search`,
+`llama.cpp`, and `mcp` extensions (`-builtin:<name>` in its `extensions`),
+so a subagent's child pi does too. None is used: library docs come from the
+`context7` tool rather than an MCP server, whose declared tools cost prompt
+tokens on every request. Re-enabling `mcp` would also need pi's
+`mcp-auth.json` back in the sandbox's profile writes and `deny_read`.
 
 ## State
 
@@ -407,10 +414,10 @@ gateway always loads with `--extension` so no profile can omit it. The
 gateway passes the latter as `BAKERY_POLICY`; without a valid one, every tool
 call is blocked.
 
-- `tools`: names or `*` patterns (eg. `mcp__context7__*`). Only these are
+- `tools`: names or `*` patterns (eg. `task_*`). Only these are
   declared to the model, and any other call is blocked. The default allows
   `read`, `grep`, `find`, `ls`, `bash`, `ask_user`, `web_search`,
-  `web_fetch`, `github`, and the context7 tools; no `edit` or `write`.
+  `web_fetch`, `github`, and `context7`; no `edit` or `write`.
 - `read_paths`: the only readable paths under `$HOME`, besides what pi needs
   to run (below). Default `~/src/personal` and `$TASK_FOLDER`; baker adds
   the claw state root. Outside `$HOME` everything is readable except
@@ -419,15 +426,14 @@ call is blocked.
 - `deny_read`: paths and globs unreadable even within `read_paths`:
   `~/**/.env*`, `~/**/*.tfvars`, `~/**/*.pem`, SSH key names
   (`~/**/id_rsa*` etc.), `interactive/auth.json`, and other claws' pi
-  credentials (`claws/*/auth.json`, `claws/*/mcp-auth.json`; the gateway
-  re-allows the claw's own).
+  credentials (`claws/*/auth.json`; the gateway re-allows the claw's own).
 - `write_paths`: writable besides the claw's own state dir, pi's files in its
   profile, and its `$TMPDIR`. Default `$TASK_FOLDER`. The memory tools are
   the intended writers of memory, but bash could write it too.
 - `network`: domains the claw (pi and bash alike) may reach through the
   sandbox's proxy. Default: `api.anthropic.com` (the model), `s.jina.ai`,
   `r.jina.ai`, `html.duckduckgo.com` (web tools), `api.github.com`
-  (`github`, `gh`), `github.com` (git), and `mcp.context7.com`.
+  (`github`, `gh`), `github.com` (git), and `context7.com` (`context7`).
 - `confirm`: regexes on tool names or bash commands; a match asks me in
   Discord (Approve/Deny) before running.
 - `task_tag`: the task list section `task_add` files into (default
@@ -440,7 +446,7 @@ Enforcement:
    `pi/claw-sandbox/launch.mts`, which runs it inside Anthropic's
    `sandbox-runtime` (sandbox-exec; bakery is macOS-only, and CI runs on
    macOS) with settings built by `bakery/bakery/gateway/sandbox.py`. pi and everything it
-   starts (bash, `gh`, `rg`, `task`, MCP servers) share that one sandbox:
+   starts (bash, `gh`, `rg`, `task`) share that one sandbox:
    macOS cannot nest sandboxes, so nothing inside gets a stricter one.
    - Reads: `$HOME`, per-user temp, the claw state root, and
      sandbox-runtime's shared `/tmp/claude` are denied; `read_paths` and
@@ -453,9 +459,9 @@ Enforcement:
      interpreter included).
    - Writes: `write_paths`, the claw's state dir and socket dir, its
      `$TMPDIR`, and exactly the files pi writes in its profile (`auth.json`,
-     `models-store.json`, `mcp-auth.json`, `settings.json`, and their
-     locks); the rest of the repo is read-only. sandbox-runtime also always
-     blocks writes to `.git/hooks`, `.git/config`, and shell rc files.
+     `models-store.json`, `settings.json`, and their locks); the rest of
+     the repo is read-only. sandbox-runtime also always blocks writes to
+     `.git/hooks`, `.git/config`, and shell rc files.
    - Network: only through the sandbox's filtering proxy, to `network`
      domains. Node's `fetch` uses it (`NODE_USE_ENV_PROXY=1`); loopback and
      private addresses go through it too rather than around it, so they are
@@ -509,9 +515,9 @@ Credentials (macOS Keychain, least privilege, selected per claw by `secrets`):
   repositories have no rulesets on GitHub Free, so the user is never invited
   to them.
 
-`web_search`, `web_fetch` (`pi/extensions/web.ts`), and context7 (an MCP
-server registered by `pi/extensions/mcp-servers.ts`) replace the former
-skills in every profile.
+`web_search`, `web_fetch` (`pi/extensions/web.ts`), and `context7`
+(`pi/extensions/context7.ts`, Context7's search API, unauthenticated)
+replace the former skills in every profile.
 
 ## Shared task list
 
@@ -690,7 +696,7 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
   cannot read (eg. moved by hand without a valid list) in `#bakery`; weekly,
   rather than hourly in `unblock`, so they do not flood it.
 - Tools: read-only defaults (bash without network or writes), web, `github`,
-  context7, memory, `ask_user`, and `task_list`, `task_show`, `task_set`.
+  `context7`, memory, `ask_user`, and `task_list`, `task_show`, `task_set`.
 - Ask policy `ask`, falling back to `assume`; every question's assumption is
   "route this ticket to bakery/human", so an unanswered question routes it
   there and the reply says triage could not finish.
