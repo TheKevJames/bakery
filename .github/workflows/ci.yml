@@ -8,10 +8,10 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           # renovate: datasource=github-releases depName=astral-sh/uv
-          version: 0.12.24
+          version: 0.13.0
           # renovate: datasource=docker depName=python
           python-version: 3.14.8
       - uses: j178/prek-action@v3.0.1
@@ -49,10 +49,10 @@ jobs:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
         working-directory: pi
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           # renovate: datasource=github-releases depName=astral-sh/uv
-          version: 0.12.24
+          version: 0.13.0
       # The shared task list CLI, used by claws.
       - run: uv tool install "task @ git+https://github.com/TheKevJames/tools@task-5.0.0#subdirectory=task"
       - run: uv run --frozen pytest
