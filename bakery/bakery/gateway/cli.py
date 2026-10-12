@@ -98,9 +98,14 @@ def do_run(args: argparse.Namespace) -> int:
 
 
 def do_check(args: argparse.Namespace) -> int:
-    code = _run_async(main.check(_claws_dir(args)))
+    try:
+        problems = asyncio.run(main.check(_claws_dir(args)))
+    except (config.ConfigError, secrets.SecretError) as e:
+        sys.exit(str(e))
     print('connected; see #bakery')
-    return code
+    for problem in problems:
+        print(f'- {problem}')
+    return 0
 
 
 def _claw(args: argparse.Namespace) -> config.Claw:

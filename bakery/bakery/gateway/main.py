@@ -7,6 +7,7 @@ import pathlib
 import signal
 import sys
 
+from .. import collectors
 from .. import secrets
 from .. import state
 from ..chat import discord_transport
@@ -96,9 +97,28 @@ async def run(claws_dir: pathlib.Path) -> None:
         await chat.close()
 
 
-async def check(claws_dir: pathlib.Path) -> None:
-    """Connect, ensure the Discord layout exists, say hello, disconnect."""
+def collector_problems(loaded: config.Config) -> list[str]:
+    checks = {
+        (claw.name, job.collector)
+        for claw in loaded.claws.values()
+        if claw.enabled
+        for job in claw.jobs
+        if job.collector in collectors.CHECKS
+    }
+    return [
+        problem
+        for claw, collector in sorted(checks)
+        for problem in collectors.CHECKS[collector](loaded.claw(claw))
+    ]
+
+
+async def check(claws_dir: pathlib.Path) -> list[str]:
+    """
+    Connect, ensure the Discord layout exists, say hello, disconnect; returns
+    problems with the claws' collector settings.
+    """
     loaded = config.load(claws_dir)
+    problems = collector_problems(loaded)
     chat = transport(claws_dir, loaded)
     assert loaded.gateway.discord is not None
     bot = relay.Relay(chat, loaded.gateway.discord.owner_id)
@@ -106,7 +126,11 @@ async def check(claws_dir: pathlib.Path) -> None:
     await chat.start(bot, claws)
     try:
         await bot.notice(
-            f'bakery check ✓ (claws: {", ".join(claws) or "none"})'
+            '\n'.join(
+                [f'bakery check ✓ (claws: {", ".join(claws) or "none"})']
+                + [f'- {problem}' for problem in problems]
+            )
         )
     finally:
         await chat.close()
+    return problems

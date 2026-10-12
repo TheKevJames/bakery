@@ -385,7 +385,9 @@ gateway's `Channel`), `transport` (the interface), `discord_transport`
    manage webhooks, read history, attach files, and add reactions; its token
    stored as the `DISCORD_BOT_TOKEN` Keychain secret; and the server and my
    user IDs in `[gateway.discord]`. `bakery gateway check` verifies it
-   (connects, creates the layout, posts to `#bakery`).
+   (connects, creates the layout, posts to `#bakery`), and reports
+   collector settings only the outside world can show to be wrong (eg. a
+   `scout.toml` override for a repo the claws cannot reach).
 2. `bakery service install|uninstall|restart` manages the launchd agent
    `in.thekev.bakery` (`~/Library/LaunchAgents/in.thekev.bakery.plist`):
    `bakery gateway run`, kept alive, with `PATH`, `HOME`, `LANG`,
@@ -585,8 +587,13 @@ Finds things in my repos that belong on my task list. Profile:
 `IDENTITY.md`, `context.toml`).
 
 - The `daily` job (07:00, or `bakery trigger scout`) uses the `scout`
-  collector (`bakery/bakery/collectors/scout.py`) over the repos in
-  `scout.toml` (every checked-out `TheKevJames` repo except `core`):
+  collector (`bakery/bakery/collectors/scout.py`) over every unarchived
+  repo the claws' GitHub user can reach (`GET /user/repos?affiliation=
+  collaborator`): inviting it is how a repo is added, so the public
+  `TheKevJames` repos with rulesets, and no private ones. `scout.toml`
+  holds per-repo overrides by name (`path`, `remote`, `exclude`); the
+  checkout defaults to `<checkouts>/<repo>` (`~/src/personal`), and a repo
+  without one gets no TODO or warning scan, noted in scout's report:
   - **CI**: the latest completed default-branch run of each workflow failed
     (Dependabot's own update jobs excluded). Link: the first failed run of
     the current failure streak, so a fresh failure after a fix is new.
@@ -611,8 +618,11 @@ Finds things in my repos that belong on my task list. Profile:
   candidates and copies links verbatim.
 - At most `max_candidates` (25) per run, ordered CI, PRs, issues, warnings,
   TODOs; the rest wait for the next run. Repos are collected in parallel
-  (8 at a time; about 13s for all 17). Repos that cannot be read are
-  reported in `#bakery` and in scout's report; the others still run.
+  (8 at a time). Repos that cannot be read are reported in `#bakery` and in
+  scout's report; the others still run.
+- GitHub reports the claws' token's expiry with every response; within 30
+  days of it, the collector reports it in `#bakery`, once per token
+  (`_gateway/github-token-expiry`).
 - The model (Haiku, high thinking, $2 per run, ask policy `assume`, no
   bash) writes each candidate up with `task_add` (into `bakery/triage`) and
   reports what it added.

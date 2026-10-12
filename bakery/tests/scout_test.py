@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import json
 import os
 import pathlib
@@ -7,9 +8,11 @@ from collections.abc import Iterator
 
 import pytest
 
+from bakery import github as github_
 from bakery import state
 from bakery.chat import render
 from bakery.collectors import scout
+from bakery.collectors import scout_repos
 from bakery.collectors import wontfix
 from bakery.gateway import config
 from bakery.gateway import control
@@ -96,6 +99,17 @@ def issue(number: int, **extra: object) -> dict[str, object]:
 
 
 def serve_repo(fake: fake_github.FakeGitHub, initial: str) -> None:
+    fake.routes['/user/repos?per_page=100&affiliation=collaborator'] = [
+        {'full_name': name, 'name': name.split('/')[1], 'archived': False}
+        for name in (REPO, f'{OWNER}/gone', f'{OWNER}/unchecked')
+    ] + [{'full_name': f'{OWNER}/old', 'name': 'old', 'archived': True}]
+    # Reachable, but with no checkout under `checkouts`.
+    unchecked = f'/repos/{OWNER}/unchecked'
+    fake.routes[unchecked] = {'default_branch': 'main'}
+    fake.routes[
+        f'{unchecked}/actions/runs?branch=main&status=completed&per_page=100'
+    ] = {'workflow_runs': []}
+    fake.routes[f'{unchecked}/issues?per_page=100&state=open'] = []
     base = f'/repos/{REPO}'
     runs = f'{base}/actions/runs?branch=main&status=completed&per_page=100'
     fake.routes[base] = {'default_branch': 'main'}
@@ -149,6 +163,7 @@ def serve_repo(fake: fake_github.FakeGitHub, initial: str) -> None:
 
 def scout_toml(root: pathlib.Path, api: str, max_candidates: int = 25) -> str:
     return f"""
+checkouts = "{root}"
 max_candidates = {max_candidates}
 opt_out_label = "ready-for-human"
 api = "{api}"
@@ -160,8 +175,8 @@ remote = "file://{root / 'upstream'}"
 exclude = ["vendor/**"]
 
 [[repo]]
-name = "{OWNER}/gone"
-path = "{root / 'missing'}"
+name = "{OWNER}/elsewhere"
+exclude = ["x/**"]
 """
 
 
@@ -202,7 +217,7 @@ def scout_claws(
         },
         extensions={'scout': ['pi/claw-extensions/task.ts']},
     )
-    (claws / 'scout' / scout.SETTINGS_NAME).write_text(
+    (claws / 'scout' / scout_repos.SETTINGS_NAME).write_text(
         scout_toml(root, api, max_candidates)
     )
     return claws
@@ -230,6 +245,8 @@ def test_collects_new_candidates_in_priority_order(
     wontfix.add(2, 'not ours')
     task('2', 'done')
     task('3', 'done')
+    soon = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=9)
+    github.headers[github_.EXPIRATION_HEADER] = f'{soon:%Y-%m-%d %H:%M:%S} UTC'
 
     collection = scout.collect(claw)
 
@@ -252,8 +269,18 @@ def test_collects_new_candidates_in_priority_order(
         f'From https://github.com/{REPO}/actions/runs/8 (commit '
     )
     assert 'def main():' in found[-1]['detail']
-    [error] = collection.errors
-    assert f'{OWNER}/gone' in error
+    assert f'{OWNER}/unchecked: no checkout at {root.resolve()}/unchecked' in (
+        collection.text or ''
+    )
+    gone, expiring = collection.errors
+    assert f'{OWNER}/gone: reading the repo failed' in gone
+    assert f'BAKERY_GITHUB) expires on {soon:%Y-%m-%d}' in expiring
+    # Once per token.
+    assert not any('expires' in e for e in scout.collect(claw).errors)
+    assert scout_repos.check(claw) == [
+        f'scout: scout.toml overrides {OWNER}/elsewhere, which the claws'
+        " cannot reach; it's ignored"
+    ]
     # Log downloads follow a redirect without leaking the token to it.
     assert ('/blob/logs.zip', None) in github.requests
     assert (f'/repos/{REPO}', f'Bearer {TOKEN}') in github.requests
@@ -412,10 +439,10 @@ def test_repo_claws_load(
     monkeypatch.setenv('XDG_STATE_HOME', str(tmp_path))  # baker reads it
     loaded = config.load(harness.REPO / 'claws')
     claw = loaded.claw('scout')
-    settings = scout.load_settings(claw.profile)
+    settings = scout_repos.load_settings(claw.profile)
     assert claw.job('daily').collector == 'scout'
-    assert {r.name for r in settings.repos} >= {f'{OWNER}/bakery'}
-    assert f'{OWNER}/core' not in {r.name for r in settings.repos}
+    assert settings.checkouts == pathlib.Path.home() / 'src' / 'personal'
+    assert f'{OWNER}/bakery' in settings.overrides
     for profile in sorted((harness.REPO / 'claws').glob('*/')):
         settings = json.loads((profile / 'settings.json').read_text())
         for path in settings['extensions'] + settings['prompts']:
