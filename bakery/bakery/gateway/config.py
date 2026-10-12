@@ -3,8 +3,9 @@ Gateway and claw configuration.
 
 `claws/defaults.toml` holds a `[gateway]` table and a `[claw]` table of
 defaults; each `claws/<name>/claw.toml` overrides any of those defaults and
-adds its jobs. Loading is strict: unknown keys and bad values raise
-ConfigError, so a typo can never silently change a limit.
+adds its jobs. The model and thinking level have no default: every claw sets
+both, and a job may override either. Loading is strict: unknown keys and bad
+values raise ConfigError, so a typo can never silently change a limit.
 """
 
 import dataclasses
@@ -30,6 +31,8 @@ DEFAULT_DEBOUNCE_SECONDS = 120.0
 NAME_RE = re.compile(r'[a-z][a-z0-9-]*')
 ASK_POLICIES = ('ask', 'assume', 'park')
 TIMEOUT_POLICIES = ('assume', 'park')
+# pi's levels; pi, not this check, clamps a level the model does not support.
+THINKING_LEVELS = ('off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max')
 
 
 @dataclasses.dataclass(frozen=True)
@@ -210,7 +213,9 @@ def _job(table: toml.Table, names: set[str], shared: set[str]) -> Job:
         else False,
         model=table.string('model') if table.optional('model') else None,
         thinking=(
-            table.string('thinking') if table.optional('thinking') else None
+            table.string('thinking', THINKING_LEVELS)
+            if table.optional('thinking')
+            else None
         ),
         tools=table.strings('tools') if table.optional('tools') else (),
         collector=_collector(table),
@@ -261,7 +266,7 @@ def _claw(
         profile=profile,
         enabled=table.boolean('enabled'),
         model=table.string('model'),
-        thinking=table.string('thinking'),
+        thinking=table.string('thinking', THINKING_LEVELS),
         cwd=cwd,
         limits=Limits(
             cost_usd=limits.positive('cost_usd'),

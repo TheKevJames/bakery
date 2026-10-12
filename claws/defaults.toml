@@ -1,5 +1,6 @@
 # Gateway settings, and defaults for every claw. Each claws/<name>/claw.toml
-# may override any [claw] value (tables merge key by key) and adds its jobs.
+# chooses its model and thinking (there is no default), may override any
+# [claw] value (tables merge key by key), and adds its jobs.
 # Apply changes with `bakery gateway reload`.
 
 [gateway]
@@ -13,8 +14,6 @@ owner_id = 523678345662300161   # the only user the bot acts on
 
 [claw]
 enabled = true
-model = "anthropic/claude-sonnet-5-5"
-thinking = "high"
 # Environment variables passed to the claw; values come from the gateway's
 # environment or the Keychain (see bakery/bakery/secrets.py). Nothing else from
 # the gateway's environment is passed on beyond PATH, HOME, locale, XDG_*, and
@@ -83,7 +82,8 @@ max_chars = 20000           # MEMORY.md's cap; match its context.toml budget
 name = "dream"
 cron = "0 3 * * *"
 prompt = "/dream"  # pi/claw-prompts/dream.md
-model = "anthropic/claude-sonnet-5-5"
+model = "anthropic/claude-opus-5-5"
+thinking = "medium"
 silent_ok = true
 tools = ["memory_edit"]  # only dream runs may rewrite MEMORY.md
 

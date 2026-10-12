@@ -130,11 +130,15 @@ Curation:
   once per compaction cycle, as an ordinary model turn using the claw's own
   model and context, so its cost is accounted.
 - **Dream job**: defined once in `claws/defaults.toml` (03:00 daily,
-  `prompt = "/dream"` from `pi/claw-prompts/dream.md`, Sonnet, `silent_ok`,
-  `tools = ["memory_edit"]`). It distills recent daily notes into `MEMORY.md`
-  and never promotes `external` notes, which stay in the daily notes as
-  evidence; its report lists what it held back. This rule is in the prompt:
-  a tool cannot judge text.
+  `prompt = "/dream"` from `pi/claw-prompts/dream.md`, Opus with medium
+  thinking, `silent_ok`, `tools = ["memory_edit"]`). It distills recent
+  daily notes into `MEMORY.md` and never promotes `external` notes, which
+  stay in the daily notes as evidence; its report lists what it held back.
+  It also leaves out volatile references (ticket ids, line numbers, counts),
+  promotes a rule only from the owner or two separate occasions (routing and
+  scope rules only from the owner), dates facts about the outside world, and
+  keeps `MEMORY.md` under about 10k characters, half its cap. These rules are
+  in the prompt: a tool cannot judge text.
 - **Commits**: after every run the gateway commits the state repo
   (`<work_key>: <status>`), so every memory change can be reviewed and
   reverted.
@@ -519,7 +523,8 @@ open, so its link is not filed again either, and its source stays as it is.
 ## Claws (v1)
 
 All configuration (models, limits, schedules, ask policy, concurrency) lives
-in each claw's `claw.toml`.
+in each claw's `claw.toml`. Models have no default: every claw sets `model`
+and `thinking` (one of pi's levels, `off` to `max`).
 
 ### scout — read-only
 
@@ -556,14 +561,14 @@ Finds things in my repos that belong on my task list. Profile:
   TODOs; the rest wait for the next run. Repos are collected in parallel
   (8 at a time; about 13s for all 17). Repos that cannot be read are
   reported in `#bakery` and in scout's report; the others still run.
-- The model (Sonnet, medium thinking, $2 per run, ask policy `assume`, no
+- The model (Haiku, high thinking, $2 per run, ask policy `assume`, no
   bash) writes each candidate up with `task_add` (into `bakery/triage`) and
   reports what it added.
 
 ### triage — read-only + web
 
-Profile: `claws/triage/`. Sonnet, medium thinking, $3 per ticket (and per
-`unblock` or `recheck` run).
+Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
+`unblock`), $3 per ticket (and per `unblock` or `recheck` run).
 
 - The `queue` job's `triage` collector (`bakery/bakery/collectors/triage.py`)
   hands over the lowest-numbered unowned task tagged `bakery/triage`
@@ -677,8 +682,10 @@ Reviews how the claws learn and files a task for each gap. Profile:
 
 ### Models
 
-`claude-sonnet-5-5` for scout, triage, flush, and dream; `claude-opus-5-5`
-for build and baker. The gateway runs whatever `pi` is on `PATH`.
+`claude-haiku-5-5` for scout and triage's `unblock`; `claude-sonnet-5-5`
+for triage; `claude-opus-5-5` for build, baker, and every claw's dream. A
+memory flush runs on its unit's model. The gateway runs whatever `pi` is on
+`PATH`.
 
 ## Testing
 

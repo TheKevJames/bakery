@@ -106,6 +106,11 @@ def test_default_jobs_apply_to_every_claw(tmp_path: pathlib.Path) -> None:
             'tools = "t"',
             'list of strings',
         ),
+        (
+            '[[job]]\nname = "x"\ncron = "* * * * *"\nprompt = "p"\n'
+            'thinking = "extreme"',
+            'thinking: must be one of',
+        ),
     ],
 )
 def test_invalid_config_is_rejected(
