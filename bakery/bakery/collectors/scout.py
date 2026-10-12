@@ -34,6 +34,7 @@ from .. import secrets
 from ..gateway import toml
 from . import base
 from . import tasks
+from . import wontfix
 
 if TYPE_CHECKING:
     from ..gateway import config
@@ -388,12 +389,12 @@ def _repo_candidates(
 
 
 def tracked_links() -> set[str]:
-    """Links of tracked tasks, without fragments (line anchors move)."""
+    """Lineages never to file again: open tasks' and rejections."""
     return {
-        str(task['link']).split('#', 1)[0]
-        for task in tasks.tracked()
+        tasks.lineage(str(task['link']))
+        for task in tasks.listed()
         if task.get('link')
-    }
+    } | set(wontfix.load())
 
 
 def render(chosen: list[Candidate], remaining: int, errors: list[str]) -> str:
@@ -428,7 +429,7 @@ def collect(claw: 'config.Claw') -> base.Collection:
             found += repo_found
             errors += repo_errors
     tracked = tracked_links()
-    new = [c for c in found if c.link.split('#', 1)[0] not in tracked]
+    new = [c for c in found if tasks.lineage(c.link) not in tracked]
     new.sort(key=lambda c: KINDS.index(c.kind))
     chosen = new[: settings.max_candidates]
     log.info(

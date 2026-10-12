@@ -196,7 +196,9 @@ def test_blocking_a_ticket_needs_blockers_which_have_not_cleared(
     malformed, cleared = fake_llm.tool_results(3)[-2:]
     assert "'see upstream' is not `#<id> decided`" in malformed
     assert '#4 decided: already cleared (bakery/build)' in cleared
-    assert '#99 does not exist' in cleared
+    assert (
+        '#99 done: already cleared (#99 is done or does not exist)' in cleared
+    )
     assert '#1 done: a task cannot block itself' in cleared
     assert "#3 decided: #3 is Kevin's (triage), so use `#3 done`" in cleared
     ticket = show(1)
@@ -314,7 +316,8 @@ def test_claws_only_change_bakery_tasks(
         None,
         None,
     )
-    assert (kevins['tag'], kevins['done']) == ('triage', None)
+    assert kevins['tag'] == 'triage'
+    assert 3 in [t['id'] for t in json.loads(task('list', '--json'))]
     assert (show(1)['tag'], show(4)['owner']) == ('bakery/triage', None)
 
 

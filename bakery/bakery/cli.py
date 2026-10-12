@@ -27,6 +27,7 @@ from collections.abc import Callable
 from . import paths
 from . import state
 from .collectors import blocked
+from .collectors import wontfix
 from .gateway import cli as gateway_cli
 
 WAIT_POLL_INTERVAL = 0.25
@@ -831,6 +832,7 @@ def build_parser() -> argparse.ArgumentParser:
     ).set_defaults(func=do_state_init)
 
     blocked.add_parsers(sub.add_parser)
+    wontfix.add_parsers(sub.add_parser)
     gateway_cli.add_parsers(sub.add_parser)
 
     return parser

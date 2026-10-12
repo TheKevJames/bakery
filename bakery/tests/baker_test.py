@@ -10,6 +10,7 @@ import pytest
 
 from bakery import state
 from bakery.collectors import baker
+from bakery.collectors import wontfix
 from bakery.gateway import config
 from bakery.gateway import ledger
 from testing import gateway as testing_gateway
@@ -190,6 +191,7 @@ def test_digest_covers_activity_since_the_last_review(
              '--', summary),
             check=True,
         )  # fmt: skip
+    wontfix.add(1, 'not a gap')
     for ident in ('1', '2'):
         subprocess.run(('task', ident, 'done'), check=True)
 
@@ -217,7 +219,8 @@ def test_digest_covers_activity_since_the_last_review(
     assert 'appended: 1 self' in text
     assert 'scout/dream-x: settled' in text
     assert 'initialize claw state' not in text
-    assert '[rejected] None/None Never this (baker:plumbing/x)' in text
+    assert '- [rejected] Never this (baker:plumbing/x)' in text
+    assert 'wontfix: add baker:plumbing/x' in text
     assert 'baker:plumbing/y' not in text
     assert '[bakery/human] None/None Still open (baker:plumbing/z)' in text
     assert 'ERROR bakery.gateway.core: committing state after' in text

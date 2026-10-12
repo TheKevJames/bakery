@@ -95,7 +95,7 @@ Move it with `task_set(id, tag=...)`, then `task_set(id, release=true)`:
   its notes hold a valid `**Blocked on:**` list.
 - `bakery/wontfix` when it is a false positive (eg. a TODO in prose), already
   done, or obsolete. Say what to change at the source so similar findings
-  stop: once Kevin closes the ticket, its own link is never filed again.
+  stop: once Kevin rejects the ticket, its own link is never filed again.
 
 Duplicates (the same work as another open ticket, eg. one boilerplate TODO
 in several repositories) point at the canonical ticket: the lowest-numbered

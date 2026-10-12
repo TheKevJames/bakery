@@ -82,16 +82,13 @@ export default function tasks(pi: ExtensionAPI) {
       description:
         "List tasks as JSON. Filters are comma-separated `field<op>value` on summary, tag, owner, " +
         "link, priority, or size, with = (equals), != , ~ (contains), !~; eg. " +
-        "`tag=bakery/build,owner=` (unowned). Done tasks are hidden unless `done` is set, which lists only " +
-        "them; done tasks in `bakery/wontfix` are permanent rejections.",
+        "`tag=bakery/build,owner=` (unowned).",
       parameters: Type.Object({
         filter: Type.Optional(Type.String()),
-        done: Type.Optional(Type.Boolean({ description: "List only done tasks" })),
       }),
       async execute(_id, params, signal) {
         const args = ["list", "--json"];
         if (params.filter) args.push("-f", params.filter);
-        if (params.done) args.push("--done");
         return text(await task(pi, args, signal));
       },
     }),
@@ -200,7 +197,7 @@ export default function tasks(pi: ExtensionAPI) {
     defineTool({
       name: "task_done",
       label: "Complete Task",
-      description: "Mark a task done (one-off tasks are hidden; recurring ones advance)." + NS_HINT,
+      description: "Mark a task done (one-off tasks are deleted; recurring ones advance)." + NS_HINT,
       parameters: Type.Object({ id: Id }),
       async execute(_id, params, signal) {
         assertWritable(String(params.id), await show(pi, String(params.id), signal));

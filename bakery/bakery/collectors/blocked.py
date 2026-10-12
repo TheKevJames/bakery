@@ -16,9 +16,7 @@ have.
 
 import argparse
 import dataclasses
-import json
 import re
-import subprocess
 import sys
 from collections.abc import Callable
 from typing import Literal
@@ -27,6 +25,7 @@ from ..gateway import policy
 from . import tasks
 
 TAG = 'bakery/blocked'
+DONE = 'done'
 # A task still here has not been decided, so `#B decided` waits on it.
 # Kevin's own tasks record no decisions, so only `#B done` may wait on them.
 UNDECIDED = frozenset({'bakery/triage', 'bakery/human', TAG})
@@ -94,30 +93,24 @@ def _entry(entry: str) -> Blocker:
 
 @dataclasses.dataclass(frozen=True)
 class Board:
-    """The task list, as blockers need it: open tasks' tags, done ids."""
+    """The task list, as blockers need it: open tasks' tags."""
 
     tags: dict[int, str]
-    done: frozenset[int]
 
     @classmethod
     def load(cls) -> 'Board':
-        return cls(
-            {int(str(t['id'])): str(t['tag']) for t in tasks.listed()},
-            frozenset(int(str(t['id'])) for t in tasks.listed('--done')),
-        )
+        return cls({int(str(t['id'])): str(t['tag']) for t in tasks.listed()})
 
     def state(self, blocker: TaskBlocker) -> str:
-        """Its task's tag, or `done`; BlockerError if there is no task."""
-        if blocker.ident in self.done:
-            return 'done'
-        if blocker.ident in self.tags:
-            return self.tags[blocker.ident]
-        raise BlockerError(f'#{blocker.ident} does not exist')
+        """Its task's tag, or DONE once there is no such task."""
+        # Done tasks are deleted, so a typo also reads as done; `problems`
+        # refuses it as already cleared.
+        return self.tags.get(blocker.ident, DONE)
 
     def cleared(self, blocker: TaskBlocker) -> bool:
         state = self.state(blocker)
         if blocker.until == 'done':
-            return state == 'done'
+            return state == DONE
         return state not in UNDECIDED
 
 
@@ -134,36 +127,28 @@ def problems(ident: int, description: str | None, board: Board) -> list[str]:
         if blocker.ident == ident:
             found.append(f'{blocker}: a task cannot block itself')
             continue
-        try:
-            state = board.state(blocker)
-            if not (
-                'done' in (blocker.until, state) or policy.in_namespace(state)
-            ):
-                found.append(
-                    f"{blocker}: #{blocker.ident} is Kevin's ({state}),"
-                    f' so use `#{blocker.ident} done`'
-                )
-            elif board.cleared(blocker):
-                found.append(
-                    f'{blocker}: already cleared ({state});'
-                    ' route on its own merits instead'
-                )
-        except BlockerError as e:
-            found.append(str(e))
+        state = board.state(blocker)
+        if not (DONE in (blocker.until, state) or policy.in_namespace(state)):
+            found.append(
+                f"{blocker}: #{blocker.ident} is Kevin's ({state}),"
+                f' so use `#{blocker.ident} done`'
+            )
+        elif board.cleared(blocker):
+            if state == DONE:
+                state = f'#{blocker.ident} is done or does not exist'
+            found.append(
+                f'{blocker}: already cleared ({state});'
+                ' route on its own merits instead'
+            )
     return found
 
 
 def check(ident: int, append: str = '') -> list[str]:
     """`problems` for task `ident` once `append` is appended to its notes."""
-    shown = subprocess.run(
-        ('task', 'show', str(ident), '--json'),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if shown.returncode:
-        return [shown.stderr.strip()]
-    description = str(json.loads(shown.stdout)['description'] or '')
+    try:
+        description = str(tasks.shown(ident)['description'] or '')
+    except tasks.TaskError as e:
+        return [str(e)]
     # Joined as `task set --description-append` joins it.
     description = '\n\n'.join(p for p in (description, append.strip()) if p)
     return problems(ident, description, Board.load())
