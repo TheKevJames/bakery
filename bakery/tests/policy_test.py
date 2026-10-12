@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import json
 import pathlib
@@ -6,6 +7,7 @@ from collections.abc import Iterator
 import pytest
 
 from bakery.gateway import channel
+from bakery.gateway import cli as gateway_cli
 from bakery.gateway import core
 from testing import gateway as testing_gateway
 from testing import harness
@@ -179,3 +181,24 @@ def test_startup_failures_fail_the_run(
     assert run.status == 'failed'
     assert 'broken at startup' in (run.reason or '')
     assert not fake_llm.requests
+
+
+def test_sandbox_exec_runs_commands_as_the_claw(
+    root: pathlib.Path, capfd: pytest.CaptureFixture[str]
+) -> None:
+    claws = testing_gateway.make_claws(root, {'a': ''})
+    secret = root / 'state' / 'claws' / 'b' / 'MEMORY.md'
+    secret.parent.mkdir(parents=True)
+    secret.write_text('hunter2')
+
+    def run(*command: str) -> int:
+        args = argparse.Namespace(
+            claw='a', claws_dir=str(claws), command=['--', *command]
+        )
+        return gateway_cli.do_sandbox_exec(args)
+
+    assert run('sh', '-c', 'echo "TMPDIR=$TMPDIR"') == 0
+    assert run('cat', str(secret)) != 0
+    out = capfd.readouterr()
+    assert f'TMPDIR={root.resolve()}/state/claws/a/tmp/pi-' in out.out
+    assert 'hunter2' not in out.out + out.err
