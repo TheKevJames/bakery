@@ -248,7 +248,8 @@ def test_control_rejects_bad_requests_and_configs(root: pathlib.Path) -> None:
             with pytest.raises(control.ControlError, match=error):
                 await ctl(record)
 
-        (claws / 'a' / 'claw.toml').write_text('[limits]\nturns = 0\n')
+        claw_toml = claws / 'a' / 'claw.toml'
+        claw_toml.write_text(claw_toml.read_text() + '[limits]\nturns = 0\n')
         with pytest.raises(control.ControlError, match='turns: must be'):
             await ctl({'type': 'reload'})
         assert gateway.config.claw('a').limits.turns == 50

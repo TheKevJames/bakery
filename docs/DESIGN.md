@@ -519,7 +519,8 @@ open, so its link is not filed again either, and its source stays as it is.
 ## Claws (v1)
 
 All configuration (models, limits, schedules, ask policy, concurrency) lives
-in each claw's `claw.toml`.
+in each claw's `claw.toml`. Models have no default: every claw sets `model`
+and `thinking` (one of pi's levels, `off` to `max`).
 
 ### scout — read-only
 
