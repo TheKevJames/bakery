@@ -93,6 +93,7 @@ def test_default_jobs_apply_to_every_claw(tmp_path: pathlib.Path) -> None:
         ('secrets = ["lower"]', 'is not NAME or NAME=ITEM'),
         ('secrets = ["A=b-c"]', 'is not NAME or NAME=ITEM'),
         ('secrets = "X"', 'must be a list of strings'),
+        ('bash_secrets = ["GH_TOKEN"]', 'GH_TOKEN is not in its secrets'),
         ('[policy]\nconfirm = ["("]', 'bad regex'),
         ('[policy]\nnetwork = ["https://x.com"]', 'is not a domain'),
         ('[policy]\ntool = []', 'unknown keys tool'),

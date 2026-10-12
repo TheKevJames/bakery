@@ -12,8 +12,10 @@
  * - results showing a sandbox refusal get a note saying so, so neither the
  *   model nor a later reader mistakes it for eg. missing auth or files.
  *
- * Bash is not handed the claw's secrets. That is hygiene, not a boundary:
- * bash shares pi's sandbox, so it could read them from pi's environment.
+ * Bash is not handed the claw's secrets, except those the gateway leaves
+ * out of BAKERY_POLICY's secret_names (its `bash_secrets`). That is hygiene,
+ * not a boundary: bash shares pi's sandbox, so it could read them from pi's
+ * environment.
  *
  * Without a valid policy every tool call is blocked.
  */

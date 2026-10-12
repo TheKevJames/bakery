@@ -164,4 +164,7 @@ def _make_profile(
     toml = 'model = "fake/echo"\nthinking = "off"\n'
     if not re.search(r'^secrets\s*=', extra, re.MULTILINE):
         toml += 'secrets = ["BAKERY_FAKE_LLM_URL"]\n'
+    # The default names GH_TOKEN, which test claws' secrets lack.
+    if not re.search(r'^bash_secrets\s*=', extra, re.MULTILINE):
+        toml += 'bash_secrets = []\n'
     (profile / 'claw.toml').write_text(toml + extra)

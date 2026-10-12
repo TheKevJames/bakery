@@ -18,13 +18,18 @@ enabled = true
 # (see bakery/bakery/secrets.py), never the gateway's environment. Nothing
 # else from the gateway's environment is passed on beyond PATH, HOME, locale,
 # XDG_*, and TASK_FOLDER. Entries are `NAME` or `NAME=ITEM` (the variable
-# NAME, valued from secret ITEM). Bash never sees them; only pi and its
-# extension tools do.
+# NAME, valued from secret ITEM). pi and its extension tools see them; bash
+# only sees `bash_secrets`. That is hygiene, not a boundary: bash shares pi's
+# sandbox, so it could read the others from pi's environment.
 secrets = [
     "ANTHROPIC_API_KEY",
     "JINA_API_KEY",                # web_search, web_fetch
-    "GH_TOKEN=BAKERY_GITHUB",      # github: the claws' own collaborator user
+    "GH_TOKEN=BAKERY_GITHUB",      # github, gh, git: the claws' GitHub user
 ]
+# For git and gh in the claw's own clones; GitHub's rulesets keep it off my
+# default branches.
+bash_secrets = ["GH_TOKEN"]
+
 # cwd defaults to the claw's state dir, $XDG_STATE_HOME/claws/<name>.
 
 # Paths and network are enforced by the OS sandbox the claw's whole pi runs
@@ -61,13 +66,20 @@ network = [
     "api.anthropic.com",                  # the model
     "s.jina.ai", "html.duckduckgo.com",   # web_search
     "r.jina.ai",                          # web_fetch: Jina fetches the page
-    "api.github.com",                     # github
+    "api.github.com",                     # github, gh
+    "github.com",                         # git clone, fetch, and push
     "mcp.context7.com",                   # context7
 ]
 # Regexes on tool names or bash commands that need my approval in Discord.
 confirm = []
 # The task list section task_add files into.
 task_tag = "bakery/triage"
+
+# The identity of the claw's commits (the claws' GitHub user), in the git
+# config the gateway writes into the claw's home at every start.
+[claw.git]
+user_name = "thekevjames-bakery"
+user_email = "341569114+thekevjames-bakery@users.noreply.github.com"
 
 [claw.limits]
 cost_usd = 5.0        # per run

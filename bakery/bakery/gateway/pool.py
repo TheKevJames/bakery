@@ -88,11 +88,13 @@ def child_env(
             ),
             'BAKERY_SANDBOX_VIOLATIONS': str(sandbox.violations(claw, sid)),
             'BAKERY_SANDBOX_TMP': str(sandbox.tmp(claw)),
+            'GIT_CONFIG_GLOBAL': str(sandbox.git_config(claw)),
             # Node's fetch (pi's model and web clients) ignores the sandbox's
             # proxy otherwise, and the sandbox refuses direct connections.
             'NODE_USE_ENV_PROXY': '1',
             'BAKERY_POLICY': policy.serialize(
-                claw_policy, secret_names=claw.secrets
+                claw_policy,
+                secret_names=set(claw.secrets) - set(claw.bash_secrets),
             ),
             'BAKERY_CLAW': claw.name,
             'BAKERY_TASK_TAG': claw.policy.task_tag,
@@ -176,9 +178,8 @@ class Pool:
                 return child.proc
             log.info('restarting %s: its sandbox or policy changed', work_key)
             await self.children.pop(work_key).proc.close()
-        claw.cwd.mkdir(parents=True, exist_ok=True)
         claw.sessions_dir.mkdir(parents=True, exist_ok=True)
-        sandbox.sockets(claw).mkdir(parents=True, exist_ok=True)
+        sandbox.prepare(claw)
         command, env = spec
         proc = await rpc.PiProcess.start(command, cwd=claw.cwd, env=env)
         await _check_startup(proc)
