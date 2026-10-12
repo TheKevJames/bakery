@@ -9,16 +9,10 @@
  * These run in pi's process, outside any claw's bash sandbox: they are how
  * claws without bash network access reach the web.
  */
-import {
-  DEFAULT_MAX_BYTES,
-  DEFAULT_MAX_LINES,
-  defineTool,
-  type ExtensionAPI,
-  truncateHead,
-} from "@earendil-works/pi-coding-agent";
+import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { get, text } from "./lib/http.ts";
 
-const TIMEOUT_MS = 30_000;
 const SNIPPET_CHARS = 300;
 
 class HttpError extends Error {
@@ -34,17 +28,6 @@ function jinaKey(): string {
   const key = process.env.JINA_API_KEY;
   if (!key) throw new Error("JINA_API_KEY is not set");
   return key;
-}
-
-async function get(url: string, headers: Record<string, string>, signal?: AbortSignal): Promise<Response> {
-  const timeout = AbortSignal.timeout(TIMEOUT_MS);
-  return fetch(url, { headers, signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
-}
-
-function text(body: string, details: Record<string, unknown> = {}) {
-  const truncated = truncateHead(body, { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES });
-  const note = truncated.truncated ? "\n\n[output truncated]" : "";
-  return { content: [{ type: "text" as const, text: truncated.content + note }], details };
 }
 
 function describeFailure(e: unknown): string {

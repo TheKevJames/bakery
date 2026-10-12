@@ -5,6 +5,7 @@
     "../../pi/extensions/bakery.ts",
     "../../pi/extensions/time-awareness.ts",
     "../../pi/extensions/web.ts",
+    "../../pi/extensions/context7.ts",
     "../../pi/extensions/mcp-servers.ts",
     "../../pi/claw-extensions/ask-user.ts",
     "../../pi/claw-extensions/github.ts",
