@@ -3,8 +3,8 @@
 # Candidates are gathered deterministically by bakery/bakery/collectors/
 # scout.py from scout.toml; the model only writes them up.
 
-model = "anthropic/claude-sonnet-5-5"
-thinking = "medium"
+model = "anthropic/claude-haiku-5-5"
+thinking = "high"
 
 [limits]
 cost_usd = 2.0

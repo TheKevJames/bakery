@@ -5,7 +5,7 @@
 # Research only: no reproduction, no edits.
 
 model = "anthropic/claude-sonnet-5-5"
-thinking = "medium"
+thinking = "high"
 
 [limits]
 cost_usd = 3.0  # per ticket, or per unblock or recheck
@@ -41,6 +41,8 @@ name = "unblock"
 cron = "0 * * * *"
 prompt = "Unblock these tickets."
 collector = "triage-unblock"
+model = "anthropic/claude-haiku-5-5"
+thinking = "low"
 watch = "${TASK_FOLDER}"
 debounce_seconds = 120
 
