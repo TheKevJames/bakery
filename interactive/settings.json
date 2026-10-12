@@ -25,7 +25,11 @@
   "hideThinkingBlock": false,
   "packages": [],
   "extensions": [
-    "../pi/extensions"
+    "../pi/extensions",
+    "-builtin:codemode",
+    "-builtin:llama.cpp",
+    "-builtin:mcp",
+    "-builtin:tool-search"
   ],
   "prompts": [
     "../pi/prompts"

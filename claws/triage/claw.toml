@@ -17,7 +17,7 @@ on_timeout = "assume"  # AGENTS.md: the assumption is always "route to human"
 [policy]
 tools = [
     "read", "grep", "find", "ls", "bash",
-    "ask_user", "web_search", "web_fetch", "github", "mcp__context7__*",
+    "ask_user", "web_search", "web_fetch", "github", "context7",
     "memory_append", "memory_search", "memory_get", "propose_user_update",
     "task_list", "task_show", "task_set",
 ]

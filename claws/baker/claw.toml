@@ -17,7 +17,7 @@ policy = "assume"  # its tasks are its questions for Kevin
 [policy]
 tools = [
     "read", "grep", "find", "ls", "bash",
-    "web_search", "web_fetch", "github", "mcp__context7__*",
+    "web_search", "web_fetch", "github", "context7",
     "memory_append", "memory_search", "memory_get",
     "task_list", "task_show", "task_add",
 ]

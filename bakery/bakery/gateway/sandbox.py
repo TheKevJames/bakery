@@ -30,17 +30,16 @@ GLOBAL_PREFERENCES = (
     'Library/Preferences/.GlobalPreferences_m.plist',
     'Library/Preferences/ByHost/.GlobalPreferences.*.plist',
 )
-# pi's credential files in its profile. deny_read's defaults hide every
-# claw's from the others; re-allowing a claw's own (literally, so they also
-# beat the glob) lets its pi read them.
-PI_CREDENTIALS = ('auth.json', 'mcp-auth.json')
+# pi's credential file in its profile. deny_read's defaults hide every
+# claw's from the others; re-allowing a claw's own (literally, so it also
+# beats the glob) lets its pi read it.
+PI_CREDENTIALS = ('auth.json',)
 # What pi writes in its profile (proper-lockfile locks are dirs beside their
 # file); the rest of the profile, like the repo, is read-only. A new file pi
 # needs shows up as a blocked write in the violation logs baker reviews.
 PI_PROFILE_WRITES = (
     'auth.json', 'auth.json.lock',
     'models-store.json', 'models-store.json.lock',
-    'mcp-auth.json', 'mcp-auth.json.lock', 'mcp-auth-refresh-*.lock',
     'settings.json', 'settings.json.lock',
 )  # fmt: skip
 # sandbox-runtime's default $TMPDIR, shared by every sandbox on the machine;

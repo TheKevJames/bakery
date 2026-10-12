@@ -25,7 +25,7 @@ def in_namespace(tag: str) -> bool:
 
 @dataclasses.dataclass(frozen=True)
 class Policy:
-    # Tool names; `*` matches any characters (eg. `mcp__context7__*`).
+    # Tool names; `*` matches any characters (eg. `task_*`).
     tools: tuple[str, ...]
     # Absolute paths under $HOME the claw may read; the rest of $HOME is
     # unreadable. Outside $HOME, everything but per-user temp is readable.

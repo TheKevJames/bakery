@@ -1,10 +1,8 @@
 # pi runtime state written into each profile's agent dir
-/interactive/mcp-auth.json
 /interactive/models-store.json
 /interactive/npm/
 /interactive/trust.json
 /claws/*/auth.json
-/claws/*/mcp-auth.json
 /claws/*/models-store.json
 /claws/*/npm/
 /claws/*/trust.json
