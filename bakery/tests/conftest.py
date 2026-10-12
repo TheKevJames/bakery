@@ -66,6 +66,16 @@ def fixture_keychain(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
     return items
 
 
+@pytest.fixture(name='task_folder', scope='function', autouse=True)
+def fixture_task_folder(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> pathlib.Path:
+    """$TASK_FOLDER, which defaults.toml grants every claw; not created."""
+    folder = tmp_path / 'tasks'
+    monkeypatch.setenv('TASK_FOLDER', str(folder))
+    return folder
+
+
 @pytest.fixture(name='root', scope='function')
 def fixture_root(
     fake_llm: harness.FakeLLM,
@@ -76,7 +86,6 @@ def fixture_root(
     # Short, because the state dir holds unix sockets (104-byte path cap).
     root = pathlib.Path(tempfile.mkdtemp(prefix='bk', dir='/tmp'))
     monkeypatch.setenv('XDG_STATE_HOME', str(root / 'state'))
-    # defaults.toml grants it to every claw.
     monkeypatch.setenv('TASK_FOLDER', str(root / 'tasks'))
     keychain['BAKERY_FAKE_LLM_URL'] = fake_llm.url
     monkeypatch.setenv('BAKERY_REPO', str(harness.REPO))

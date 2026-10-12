@@ -436,8 +436,8 @@ Enforcement:
 
 1. **The sandbox.** The gateway runs each pi child through
    `pi/claw-sandbox/launch.mts`, which runs it inside Anthropic's
-   `sandbox-runtime` (sandbox-exec on macOS, bubblewrap on Linux) with
-   settings built by `bakery/bakery/gateway/sandbox.py`. pi and everything it
+   `sandbox-runtime` (sandbox-exec; bakery is macOS-only, and CI runs on
+   macOS) with settings built by `bakery/bakery/gateway/sandbox.py`. pi and everything it
    starts (bash, `gh`, `rg`, `task`, MCP servers) share that one sandbox:
    macOS cannot nest sandboxes, so nothing inside gets a stricter one.
    - Reads: `$HOME`, per-user temp, the claw state root, and
@@ -461,8 +461,7 @@ Enforcement:
      own socket dir (so no ssh-agent).
    - Other processes: `ps` sees only the sandbox's own processes, and the
      Keychain is unreachable.
-   - What it blocks (denied reads and writes on macOS, denied writes on
-     Linux, denied network on both) is appended to
+   - What it blocks (denied reads, writes, and network) is appended to
      `_gateway/violations/<claw>/<session>.jsonl`, out of the claw's reach,
      for baker. A tool result showing a refusal (`Operation not permitted`,
      `EPERM`, or the proxy's 403) gets a note from the policy extension that

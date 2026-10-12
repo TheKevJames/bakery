@@ -1,7 +1,6 @@
 import asyncio
 import json
 import pathlib
-import sys
 from collections.abc import Iterator
 
 import pytest
@@ -108,13 +107,9 @@ def test_file_access_follows_the_policy(
     assert results[11].strip().endswith('b')
     assert not (root / 'w.txt').exists()
     assert not (root / 'b.txt').exists()
-    # Linux hides denied paths rather than refusing them.
-    if sys.platform == 'darwin':
-        for refused in (0, 1, 3, 4, 7, 10, 12):
-            assert 'sandbox policy blocked it' in results[refused], refused
-        assert f'file-read-data {home.resolve()}/.ssh/key' in violations(
-            root, 'a'
-        )
+    for refused in (0, 1, 3, 4, 7, 10, 12):
+        assert 'sandbox policy blocked it' in results[refused], refused
+    assert f'file-read-data {home.resolve()}/.ssh/key' in violations(root, 'a')
 
 
 def test_network_is_allowlisted(
