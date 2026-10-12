@@ -103,6 +103,13 @@ class Memory:
 
 
 @dataclasses.dataclass(frozen=True)
+class Git:
+    # The identity the claw's commits carry: the claws' GitHub user's.
+    user_name: str
+    user_email: str
+
+
+@dataclasses.dataclass(frozen=True)
 class Claw:
     # pylint: disable=too-many-instance-attributes
     name: str
@@ -117,6 +124,9 @@ class Claw:
     memory: Memory
     # Environment variable name -> Keychain item (see bakery/secrets.py).
     secrets: Mapping[str, str]
+    # The secrets bash is handed too, by variable name.
+    bash_secrets: tuple[str, ...]
+    git: Git
     policy: policy_.Policy
     jobs: tuple[Job, ...]
 
@@ -236,6 +246,39 @@ def _job(table: toml.Table, names: set[str], shared: set[str]) -> Job:
     return job
 
 
+def _bash_secrets(
+    table: toml.Table, secrets: Mapping[str, str]
+) -> tuple[str, ...]:
+    names = table.strings('bash_secrets')
+    for name in names:
+        if name not in secrets:
+            raise ConfigError(
+                f'{table.where}.bash_secrets: {name} is not in its secrets'
+            )
+    return names
+
+
+def _jobs(table: toml.Table, shared_jobs: set[str]) -> tuple[Job, ...]:
+    raw = table.data.get('job', [])
+    table.used.add('job')
+    if not isinstance(raw, list):
+        raise ConfigError(f'{table.where}.job: must be an array of tables')
+    names: set[str] = set()
+    return tuple(
+        _job(toml.Table(job, f'{table.where}.job[{i}]'), names, shared_jobs)
+        for i, job in enumerate(raw)
+    )
+
+
+def _git(table: toml.Table) -> Git:
+    git = Git(
+        user_name=table.string('user_name'),
+        user_email=table.string('user_email'),
+    )
+    table.done()
+    return git
+
+
 def _claw(
     name: str,
     profile: pathlib.Path,
@@ -247,15 +290,8 @@ def _claw(
     concurrency = table.table('concurrency')
     ask = table.table('ask')
     memory = table.table('memory')
-    jobs_raw = data.get('job', [])
-    table.used.add('job')
-    if not isinstance(jobs_raw, list):
-        raise ConfigError(f'{name}.job: must be an array of tables')
-    names: set[str] = set()
-    jobs = tuple(
-        _job(toml.Table(job, f'{name}.job[{i}]'), names, shared_jobs)
-        for i, job in enumerate(jobs_raw)
-    )
+    secrets = table.secrets('secrets')
+    jobs = _jobs(table, shared_jobs)
     cwd = (
         toml.expand(table.string('cwd'), profile)
         if table.optional('cwd')
@@ -279,7 +315,9 @@ def _claw(
             max_resumes=concurrency.count('max_resumes', minimum=0),
             idle_exit_minutes=concurrency.positive('idle_exit_minutes'),
         ),
-        secrets=table.secrets('secrets'),
+        secrets=secrets,
+        bash_secrets=_bash_secrets(table, secrets),
+        git=_git(table.table('git')),
         policy=policy_.parse(table.table('policy'), profile),
         ask=Ask(
             policy=ask.string('policy', ASK_POLICIES),

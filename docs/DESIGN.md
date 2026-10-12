@@ -41,7 +41,7 @@ $XDG_STATE_HOME/claws/
     ├── MEMORY.md            # curated long-term memory
     ├── memory/YYYY-MM-DD.md # daily notes (kept forever)
     ├── sessions/            # gitignored: pi session transcripts
-    ├── worktrees/           # gitignored: build worktrees
+    ├── worktrees/           # gitignored: the claw's clones of my repos
     ├── home/                # gitignored: the claw's XDG config, cache, and data
     └── tmp/                 # gitignored: its pi children's $TMPDIRs
 ```
@@ -153,9 +153,9 @@ Identity changes need my approval:
   `bakery/human` task with the diff (checked to apply, and to stay within
   4000 characters), which I apply by hand; the same proposal is the same
   task (its link is `user-md:<hash of the result>`).
-- `SOUL.md` / `AGENTS.md` edits are to be proposed as
-  `kjames/bakery-identity-*` PRs on this repo, merging being the approval.
-  This needs build's push mechanism and lands after step 11.
+- `SOUL.md` / `AGENTS.md` (and other claw configuration) edits are proposed
+  as PRs on this repo from the claw's own clone (see
+  [Safety](#safety)), merging being the approval.
 
 ## Gateway
 
@@ -427,7 +427,7 @@ call is blocked.
 - `network`: domains the claw (pi and bash alike) may reach through the
   sandbox's proxy. Default: `api.anthropic.com` (the model), `s.jina.ai`,
   `r.jina.ai`, `html.duckduckgo.com` (web tools), `api.github.com`
-  (`github`), and `mcp.context7.com`.
+  (`github`, `gh`), `github.com` (git), and `mcp.context7.com`.
 - `confirm`: regexes on tool names or bash commands; a match asks me in
   Discord (Approve/Deny) before running.
 - `task_tag`: the task list section `task_add` files into (default
@@ -471,15 +471,25 @@ Enforcement:
    - `bakery sandbox show <claw>` prints its settings (with the caller's
      `$PATH`); `bakery sandbox exec <claw> -- <command>` runs a command as
      the claw's pi would, in its sandbox and environment, secrets included.
-2. **Secrets** reach pi's environment, not bash's. That is hygiene, not a
-   boundary: bash shares pi's sandbox and could read pi's environment.
+2. **Secrets** reach pi's environment; bash only gets a claw's
+   `bash_secrets` (default `GH_TOKEN`). That is hygiene, not a boundary:
+   bash shares pi's sandbox and could read pi's environment.
 3. **The policy extension** enforces `tools`, `confirm`, and `task_tag`, in
    pi's process.
-4. **Pushing** (step 11): bash has no git credentials of its own and no
-   ssh-agent; build pushes through a `git_push` tool that only accepts
-   `kjames/bakery-*` refs and runs git with `-c core.hooksPath=<bakery
-   hooks>`, whose `pre-push` hook rejects anything else. The hook is not
-   installed into worktrees, which share hooks with my own checkouts.
+4. **Repositories and pushing.** `~/src` is read-only to claws. A claw that
+   changes a repo works in its own clone under `<state>/worktrees/`, made
+   with `git clone --reference ~/src/personal/<repo>` (objects borrowed
+   read-only from my checkout) and adding `git worktree`s of it as it needs
+   (`pi/claw-rules/repos.md`, in the context of the claws with bash). It
+   commits on `kjames/bakery-*` branches, pushes over HTTPS, and opens PRs
+   with `gh`; I review and merge. The gateway writes the claw's git config
+   (`<state>/home/config/git/config`, its `GIT_CONFIG_GLOBAL`, so git never
+   trips on an unreadable `~/.gitconfig`) at every start: the claws' GitHub
+   user's identity (`[claw.git]`), no signing, no hook templates (the
+   sandbox refuses writes to any `.git/hooks`, but allows `.git/config` in
+   the claw's own clones), and `gh` as the only credential helper, answering
+   with `GH_TOKEN`. GitHub's rulesets, not the claw, keep pushes off my
+   default branches.
 
 An extension that fails while pi starts (eg. a bad policy or `context.toml`)
 fails the run before the model is called.
@@ -687,13 +697,12 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
 - A ticket left claimed by a failed or parked run is not picked up again;
   its thread's Resume button continues it.
 
-### build — worktree + push
+### build — clones + PRs
 
 - Picks `bakery/build` tasks by `priority` (`high`, then `medium`, then
   `low`), then lowest id.
-- Works in `$XDG_STATE_HOME/claws/build/worktrees/<repo>/<task-id>`, created
-  with `git worktree add` from the checkouts listed in `build.toml`; removed
-  after merge/close. Full network (package registries).
+- Works in its own clones (see [Safety](#safety)), a worktree per task;
+  removed after merge/close. Full network (package registries).
 - Pushes `kjames/bakery-*` branches and opens PRs; never merges.
 - Polls its PRs every 10 minutes; new review comments or failing CI resume
   that ticket's session in the same thread.
@@ -778,7 +787,6 @@ memory flush runs on its unit's model. The gateway runs whatever `pi` is on
 8. Memory tools, flush, dream job, `USER.md` proposals.
 9. scout.
 10. triage.
-11. build, with its `git_push` tool, `github` write access, and the
-    pre-push hook.
+11. build, on the claws' own clones and pull requests.
 12. baker: `read_paths` and `task_tag` policies, sandbox violation
     reporting, the transcript parser and `baker` collector, and the claw.

@@ -67,6 +67,44 @@ def sockets(claw: config.Claw) -> pathlib.Path:
     return state.root() / '_gateway' / 'bakery' / claw.name
 
 
+def git_config(claw: config.Claw) -> pathlib.Path:
+    """
+    The claw's global git config ($GIT_CONFIG_GLOBAL), so git neither reads
+    nor fails on an unreadable ~/.gitconfig.
+    """
+    return home(claw) / 'config' / 'git' / 'config'
+
+
+def prepare(claw: config.Claw) -> None:
+    """
+    What a claw's pi child needs before it starts: its dirs, and its git
+    config. The config is rewritten every time, so the claw's own edits
+    don't outlive the child.
+    """
+    for path in (claw.cwd, sockets(claw)):
+        path.mkdir(parents=True, exist_ok=True)
+    path = git_config(claw)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        '# Written by the gateway when the claw starts.\n'
+        '[user]\n'
+        f'\tname = {claw.git.user_name}\n'
+        f'\temail = {claw.git.user_email}\n'
+        '[commit]\n'
+        '\tgpgsign = false\n'
+        # The sandbox refuses writes to any .git/hooks, so clones get none.
+        '[init]\n'
+        '\ttemplateDir =\n'
+        # gh answers with $GH_TOKEN, the claws' GitHub user's token; there
+        # is nothing to store (or erase) it in.
+        '[credential]\n'
+        '\thelper =\n'
+        '[credential "https://github.com"]\n'
+        '\thelper = "!f() { test \\"$1\\" = get &&'
+        ' gh auth git-credential get; }; f"\n'
+    )
+
+
 def violations(claw: config.Claw, session_id: str) -> pathlib.Path:
     """What the sandbox blocked, out of the claw's reach (baker reads it)."""
     return (
@@ -170,5 +208,9 @@ def settings(claw: config.Claw, path_env: str) -> dict[str, object]:
             'allowRead': _real(reads),
             'allowWrite': _real(writes),
             'denyWrite': [],
+            # Claws clone into their own (writable) state; nothing of mine is
+            # writable, so this only lets them make and configure clones.
+            # .git/hooks stays unwritable.
+            'allowGitConfig': True,
         },
     }

@@ -132,8 +132,7 @@ def do_sandbox_exec(args: argparse.Namespace) -> int:
         env = pool.child_env(claw, None, f'sandbox-exec-{stamp}')
     except secrets.SecretError as e:
         sys.exit(str(e))
-    for path in (claw.cwd, sandbox.sockets(claw)):
-        path.mkdir(parents=True, exist_ok=True)
+    sandbox.prepare(claw)
     return subprocess.run(
         ('node', str(sandbox.launcher()), *command),
         cwd=claw.cwd,

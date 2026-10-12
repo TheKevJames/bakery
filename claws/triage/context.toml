@@ -8,6 +8,9 @@ path = "SOUL.md"
 path = "IDENTITY.md"
 
 [[file]]
+path = "../../pi/claw-rules/repos.md"
+
+[[file]]
 path = "${XDG_STATE_HOME}/claws/_shared/USER.md"
 max_chars = 4000
 

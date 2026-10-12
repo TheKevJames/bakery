@@ -263,7 +263,10 @@ def test_secrets_reach_pi_but_not_bash(
     keychain: dict[str, str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    secrets = 'secrets = ["BAKERY_FAKE_LLM_URL", "GRANTED=BAKERY_TEST_ITEM"]'
+    secrets = (
+        'secrets = ["BAKERY_FAKE_LLM_URL", "GRANTED=BAKERY_TEST_ITEM",'
+        ' "SHARED=BAKERY_TEST_SHARED"]\nbash_secrets = ["SHARED"]'
+    )
     claws = testing_gateway.make_claws(
         root,
         {
@@ -273,6 +276,7 @@ def test_secrets_reach_pi_but_not_bash(
         extensions={'a': ['env_of.ts']},
     )
     keychain['BAKERY_TEST_ITEM'] = 'granted-value'
+    keychain['BAKERY_TEST_SHARED'] = 'shared-value'
     monkeypatch.setenv('BAKERY_TEST_PRIVATE', 'private-value')
     # Set in the gateway's environment, but secrets only come from the
     # Keychain.
@@ -280,7 +284,7 @@ def test_secrets_reach_pi_but_not_bash(
     fake = testing_gateway.FakeChannel()
     fake_llm.queue(
         Reply(tool='env_of', args={'name': 'GRANTED'}),
-        Reply(tool='bash', args={'command': 'env'}),
+        Reply(tool='bash', args={'command': 'env; git config user.name'}),
     )
 
     async def scenario(gateway: core.Gateway) -> None:
@@ -290,6 +294,9 @@ def test_secrets_reach_pi_but_not_bash(
         bash_env = fake_llm.transcript().removeprefix(pi_env)
         assert 'GRANTED=granted-value' in pi_env
         assert 'BAKERY_ASK_POLICY=ask' in bash_env
+        assert 'SHARED=shared-value' in bash_env
+        # The claw's home has its git config, with the claws' identity.
+        assert 'thekevjames-bakery' in bash_env
         for hidden in ('granted-value', 'private-value', fake_llm.url):
             assert hidden not in bash_env
 
