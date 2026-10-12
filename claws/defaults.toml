@@ -14,15 +14,16 @@ owner_id = 523678345662300161   # the only user the bot acts on
 
 [claw]
 enabled = true
-# Environment variables passed to the claw; values come from the gateway's
-# environment or the Keychain (see bakery/bakery/secrets.py). Nothing else from
-# the gateway's environment is passed on beyond PATH, HOME, locale, XDG_*, and
-# TASK_FOLDER. Entries are `NAME` or `NAME=ITEM` (the variable NAME, valued
-# from secret ITEM). Bash never sees them; only pi and its extension tools do.
+# Environment variables passed to the claw; values come from the Keychain
+# (see bakery/bakery/secrets.py), never the gateway's environment. Nothing
+# else from the gateway's environment is passed on beyond PATH, HOME, locale,
+# XDG_*, and TASK_FOLDER. Entries are `NAME` or `NAME=ITEM` (the variable
+# NAME, valued from secret ITEM). Bash never sees them; only pi and its
+# extension tools do.
 secrets = [
     "ANTHROPIC_API_KEY",
     "JINA_API_KEY",                # web_search, web_fetch
-    "GH_TOKEN=BAKERY_GITHUB_READ", # github: a read-only fine-grained token
+    "GH_TOKEN=BAKERY_GITHUB",      # github: the claws' own collaborator user
 ]
 # cwd defaults to the claw's state dir, $XDG_STATE_HOME/claws/<name>.
 

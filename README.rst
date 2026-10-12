@@ -26,8 +26,9 @@ Setup
 Gateway
 ~~~~~~~
 
-The claws' gateway reads its secrets from the macOS Keychain, as generic
-passwords with account ``bakery`` and the secret's name as the service. Store
+The claws' gateway reads its secrets only from the macOS Keychain (never its
+environment), as generic passwords with account ``bakery`` and the secret's
+name as the service. Store
 each one with ``security``, which prompts for the value (twice) when ``-w``
 comes last, so it never lands in your shell history; ``-U`` replaces an
 existing item:
@@ -37,21 +38,22 @@ existing item:
     $ security add-generic-password -U -a bakery -s DISCORD_BOT_TOKEN -w
     $ security add-generic-password -U -a bakery -s ANTHROPIC_API_KEY -w
     $ security add-generic-password -U -a bakery -s JINA_API_KEY -w
-    $ security add-generic-password -U -a bakery -s BAKERY_GITHUB_READ -w
+    $ security add-generic-password -U -a bakery -s BAKERY_GITHUB -w
 
 - ``DISCORD_BOT_TOKEN``: the ``bakery`` application's bot token (Discord
   developer portal → Bot → Reset Token).
 - ``ANTHROPIC_API_KEY``, ``JINA_API_KEY``: the model and web-tool API keys.
-- ``BAKERY_GITHUB_READ``: a fine-grained personal access token (GitHub →
-  Settings → Developer settings → Fine-grained tokens) for the
-  ``TheKevJames`` repositories, with read-only access to metadata, contents,
-  issues, pull requests, and actions.
+- ``BAKERY_GITHUB``: a classic personal access token of the claws' own GitHub
+  user (signed in as it: Settings → Developer settings → Tokens (classic)),
+  with only the ``repo`` scope and a one-year expiry. That user is a
+  collaborator on the public ``TheKevJames`` repositories the claws work on;
+  fine-grained tokens can't reach another user's repositories.
 
 Check which are stored, without printing their values:
 
 .. code-block:: console
 
-    $ for name in DISCORD_BOT_TOKEN ANTHROPIC_API_KEY JINA_API_KEY BAKERY_GITHUB_READ; do
+    $ for name in DISCORD_BOT_TOKEN ANTHROPIC_API_KEY JINA_API_KEY BAKERY_GITHUB; do
     >     security find-generic-password -a bakery -s "$name" >/dev/null 2>&1 \
     >         && echo "$name: ok" || echo "$name: missing"
     > done

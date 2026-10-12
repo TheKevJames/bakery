@@ -1,14 +1,12 @@
 """
 Secrets for the gateway and its claws.
 
-Each secret is an environment-variable name. Its value comes from the
-gateway's own environment if set (eg. when run from a shell), else from the
-macOS Keychain: a generic password with account `bakery` and the name as its
-service. Under launchd the environment is minimal, so the Keychain is the
-normal source.
+Each secret's value comes only from the macOS Keychain: a generic password
+with account `bakery` and the secret's name as its service. Never from the
+gateway's environment, which holds all of my shell's secrets when the gateway
+is started from a shell.
 """
 
-import os
 import shutil
 import subprocess
 
@@ -20,7 +18,6 @@ class SecretError(Exception):
 
 
 def keychain(name: str) -> str | None:
-    # No Keychain off macOS (eg. CI): only the environment applies.
     if shutil.which('security') is None:
         return None
     result = subprocess.run(
@@ -42,7 +39,7 @@ def keychain(name: str) -> str | None:
 
 
 def get(name: str) -> str:
-    value = os.environ.get(name) or keychain(name)
+    value = keychain(name)
     if not value:
         raise SecretError(
             f'secret {name} is not set; store it with: security'

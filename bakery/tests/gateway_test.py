@@ -260,6 +260,7 @@ def test_control_rejects_bad_requests_and_configs(root: pathlib.Path) -> None:
 def test_secrets_reach_pi_but_not_bash(
     root: pathlib.Path,
     fake_llm: harness.FakeLLM,
+    keychain: dict[str, str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     secrets = 'secrets = ["BAKERY_FAKE_LLM_URL", "GRANTED=BAKERY_TEST_ITEM"]'
@@ -271,9 +272,11 @@ def test_secrets_reach_pi_but_not_bash(
         },
         extensions={'a': ['env_of.ts']},
     )
-    monkeypatch.setenv('BAKERY_TEST_ITEM', 'granted-value')
+    keychain['BAKERY_TEST_ITEM'] = 'granted-value'
     monkeypatch.setenv('BAKERY_TEST_PRIVATE', 'private-value')
-    monkeypatch.delenv('BAKERY_TEST_MISSING', raising=False)
+    # Set in the gateway's environment, but secrets only come from the
+    # Keychain.
+    monkeypatch.setenv('BAKERY_TEST_MISSING', 'env-value')
     fake = testing_gateway.FakeChannel()
     fake_llm.queue(
         Reply(tool='env_of', args={'name': 'GRANTED'}),
