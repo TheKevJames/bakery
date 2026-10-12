@@ -1,15 +1,20 @@
-# Repos scout watches: CI, open issues and non-bot PRs, and TODO/FIXME
-# comments on the default branch. `path` is the local checkout (its default
-# branch is fetched into refs/bakery/scout/, leaving the checkout alone);
-# `exclude` holds git glob pathspecs, eg. for vendored code or prose that
-# mentions TODOs.
+# Scout watches every repo the claws' GitHub user can reach (inviting it is
+# how a repo is added): CI, open issues and non-bot PRs, and TODO/FIXME
+# comments on the default branch. The local checkout (its default branch is
+# fetched into refs/bakery/scout/, leaving the checkout alone) is
+# <checkouts>/<repo>; without one, the TODOs and CI warnings aren't scanned.
+#
+# [[repo]] entries override one repo by `name`: `path` (its checkout),
+# `remote`, and `exclude` (git glob pathspecs, eg. for vendored code or prose
+# that mentions TODOs). `bakery gateway check` reports overrides for repos the
+# claws cannot reach.
 
+checkouts = "~/src/personal"
 max_candidates = 25                # handed over per run; the rest wait
 opt_out_label = "ready-for-human"  # issues and PRs with it are skipped
 
 [[repo]]
 name = "TheKevJames/bakery"
-path = "~/src/personal/bakery"
 exclude = [
     "claws/**",
     "docs/**",
@@ -19,12 +24,7 @@ exclude = [
 ]
 
 [[repo]]
-name = "TheKevJames/beancount-importer"
-path = "~/src/personal/beancount-importer"
-
-[[repo]]
 name = "TheKevJames/challenges"
-path = "~/src/personal/challenges"
 exclude = [
     "advent-*/**",
     "kattis/**",
@@ -32,23 +32,13 @@ exclude = [
 ]
 
 [[repo]]
-name = "TheKevJames/coveralls-python"
-path = "~/src/personal/coveralls-python"
-
-[[repo]]
-name = "TheKevJames/cv"
-path = "~/src/personal/cv"
-
-[[repo]]
 name = "TheKevJames/dotsystem"
-path = "~/src/personal/dotsystem"
 exclude = [
     "scripts/dotsystem_scripts/bash/todo",
 ]
 
 [[repo]]
 name = "TheKevJames/experiments"
-path = "~/src/personal/experiments"
 exclude = [
     "asyncio-http-perf/**",
     "gw2/**",
@@ -59,40 +49,7 @@ exclude = [
 ]
 
 [[repo]]
-name = "TheKevJames/fractured-world"
-path = "~/src/personal/fractured_world"
-
-[[repo]]
-name = "TheKevJames/homebrew-youtube-viewer"
-path = "~/src/personal/homebrew-youtube-viewer"
-
-[[repo]]
-name = "TheKevJames/infrastructure"
-path = "~/src/personal/infrastructure"
-
-[[repo]]
-name = "TheKevJames/mosura"
-path = "~/src/personal/mosura"
-
-[[repo]]
-name = "TheKevJames/puppet-homebrew"
-path = "~/src/personal/puppet-homebrew"
-
-[[repo]]
-name = "TheKevJames/selfhost"
-path = "~/src/personal/selfhost"
-
-[[repo]]
 name = "TheKevJames/tools"
-path = "~/src/personal/tools"
 exclude = [
     "cctui/**",
 ]
-
-[[repo]]
-name = "TheKevJames/vitris"
-path = "~/src/personal/vitris"
-
-[[repo]]
-name = "TheKevJames/web"
-path = "~/src/personal/web"

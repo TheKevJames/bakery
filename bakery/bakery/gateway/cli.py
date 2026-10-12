@@ -98,9 +98,48 @@ def do_run(args: argparse.Namespace) -> int:
 
 
 def do_check(args: argparse.Namespace) -> int:
-    code = _run_async(main.check(_claws_dir(args)))
+    try:
+        problems = asyncio.run(main.check(_claws_dir(args)))
+    except (config.ConfigError, secrets.SecretError) as e:
+        sys.exit(str(e))
     print('connected; see #bakery')
-    return code
+    for problem in problems:
+        print(f'- {problem}')
+    return 0
+
+
+def _claw(args: argparse.Namespace) -> config.Claw:
+    try:
+        return config.load(_claws_dir(args)).claw(args.claw)
+    except config.ConfigError as e:
+        sys.exit(str(e))
+
+
+def do_sandbox_show(args: argparse.Namespace) -> int:
+    settings = sandbox.settings(_claw(args), os.environ.get('PATH', ''))
+    print(json.dumps(settings, indent=2))
+    return 0
+
+
+def do_sandbox_exec(args: argparse.Namespace) -> int:
+    """Run a command as the claw's pi would: same sandbox, same environment."""
+    claw = _claw(args)
+    command = args.command[1:] if args.command[:1] == ['--'] else args.command
+    if not command:
+        sys.exit('nothing to run; usage: bakery sandbox exec CLAW -- COMMAND')
+    stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+    try:
+        env = pool.child_env(claw, None, f'sandbox-exec-{stamp}')
+    except secrets.SecretError as e:
+        sys.exit(str(e))
+    for path in (claw.cwd, sandbox.sockets(claw)):
+        path.mkdir(parents=True, exist_ok=True)
+    return subprocess.run(
+        ('node', str(sandbox.launcher()), *command),
+        cwd=claw.cwd,
+        env=env,
+        check=False,
+    ).returncode
 
 
 def _claw(args: argparse.Namespace) -> config.Claw:

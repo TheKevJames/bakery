@@ -1,10 +1,11 @@
 """
 The scout collector: things in my repos that should be on my task list.
 
-Repos come from the claw's `scout.toml`. For each: CI failures and warnings
-on the default branch (warnings only from runs whose workflow file is still
-current), open issues and non-bot pull requests, and TODO/FIXME comments on
-the default branch (fetched into a private ref, leaving my checkout alone).
+Repos are every one the claws' GitHub user can reach (see scout_repos). For
+each: CI failures and warnings on the default branch (warnings only from runs
+whose workflow file is still current), open issues and non-bot pull
+requests, and TODO/FIXME comments on the default branch (fetched into a
+private ref, leaving my checkout alone).
 A candidate is new unless a task already has its link, which is
 deterministic: the link is the task's lineage.
 """
@@ -20,7 +21,6 @@ import os
 import pathlib
 import re
 import subprocess
-import tomllib
 import urllib.parse
 import zipfile
 from collections.abc import Callable
@@ -31,9 +31,10 @@ from typing import TypeVar
 
 from .. import github
 from .. import secrets
-from ..gateway import toml
 from . import base
+from . import scout_repos
 from . import tasks
+from . import token_expiry
 from . import wontfix
 
 if TYPE_CHECKING:
@@ -42,7 +43,6 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 T = TypeVar('T')
 
-SETTINGS_NAME = 'scout.toml'
 REF_PREFIX = 'refs/bakery/scout'
 # Hand-over order: what is most likely broken or blocking someone first.
 KINDS = ('ci', 'pr', 'issue', 'warning', 'todo')
@@ -61,67 +61,12 @@ WORKERS = 8
 
 
 @dataclasses.dataclass(frozen=True)
-class Repo:
-    name: str  # owner/name
-    path: pathlib.Path
-    exclude: tuple[str, ...]
-    remote: str
-
-
-@dataclasses.dataclass(frozen=True)
-class Settings:
-    repos: tuple[Repo, ...]
-    max_candidates: int
-    opt_out_label: str
-    api: str
-
-
-@dataclasses.dataclass(frozen=True)
 class Candidate:
     kind: str
     repo: str
     link: str
     title: str
     detail: str
-
-
-def load_settings(profile: pathlib.Path) -> Settings:
-    path = profile / SETTINGS_NAME
-    try:
-        table = toml.Table(tomllib.loads(path.read_text()), SETTINGS_NAME)
-    except (OSError, tomllib.TOMLDecodeError) as e:
-        raise toml.ConfigError(f'{path}: {e}') from None
-    raw_repos = table.data.get('repo', [])
-    table.used.add('repo')
-    if not isinstance(raw_repos, list):
-        raise toml.ConfigError(f'{SETTINGS_NAME}: repo must be a table array')
-    repos = []
-    for i, raw in enumerate(raw_repos):
-        entry = toml.Table(raw, f'{SETTINGS_NAME}.repo[{i}]')
-        name = entry.string('name')
-        repos.append(
-            Repo(
-                name=name,
-                path=toml.expand(entry.string('path'), profile),
-                exclude=entry.strings('exclude')
-                if entry.optional('exclude')
-                else (),
-                remote=entry.string('remote')
-                if entry.optional('remote')
-                else f'https://github.com/{name}.git',
-            )
-        )
-        entry.done()
-    settings = Settings(
-        repos=tuple(repos),
-        max_candidates=table.count('max_candidates'),
-        opt_out_label=table.string('opt_out_label'),
-        api=table.string('api')
-        if table.optional('api')
-        else 'https://api.github.com',
-    )
-    table.done()
-    return settings
 
 
 def fingerprint(text: str) -> str:
@@ -136,7 +81,7 @@ def _clip(text: str | None, limit: int = BODY_CHARS) -> str:
 
 
 def _ci(
-    gh: github.GitHub, repo: Repo, branch: str
+    gh: github.GitHub, repo: scout_repos.Repo, branch: str
 ) -> Iterator[Candidate | dict[str, Any]]:
     """CI failures, and each workflow's latest run if it passed."""
     runs = gh.get(
@@ -183,7 +128,7 @@ def _ci(
         )
 
 
-def _current(repo: Repo, ref: str, run: dict[str, Any]) -> bool:
+def _current(repo: scout_repos.Repo, ref: str, run: dict[str, Any]) -> bool:
     """Whether the run's workflow file is unchanged on the branch since."""
     sha = run['head_sha']
     try:
@@ -206,7 +151,10 @@ def _log_warnings(logs: bytes) -> Iterator[str]:
 
 
 def _warnings(
-    gh: github.GitHub, repo: Repo, ref: str, passing: list[dict[str, Any]]
+    gh: github.GitHub,
+    repo: scout_repos.Repo,
+    ref: str,
+    passing: list[dict[str, Any]],
 ) -> Iterator[Candidate]:
     seen: set[str] = set()
     for run in passing:
@@ -245,7 +193,7 @@ def _warnings(
 
 
 def _issues(
-    gh: github.GitHub, repo: Repo, opt_out: str
+    gh: github.GitHub, repo: scout_repos.Repo, opt_out: str
 ) -> Iterator[Candidate]:
     for item in gh.get_all(f'repos/{repo.name}/issues', {'state': 'open'}):
         if opt_out in {label['name'] for label in item.get('labels', [])}:
@@ -262,7 +210,9 @@ def _issues(
         )
 
 
-def _git(repo: Repo, *args: str, env: dict[str, str] | None = None) -> str:
+def _git(
+    repo: scout_repos.Repo, *args: str, env: dict[str, str] | None = None
+) -> str:
     return subprocess.run(
         ('git', '-C', str(repo.path), *args),
         capture_output=True,
@@ -272,7 +222,7 @@ def _git(repo: Repo, *args: str, env: dict[str, str] | None = None) -> str:
     ).stdout
 
 
-def _fetch(repo: Repo, branch: str, token: str) -> str:
+def _fetch(repo: scout_repos.Repo, branch: str, token: str) -> str:
     """Fetch the default branch into a private ref, which is returned."""
     ref = f'{REF_PREFIX}/{branch}'
     basic = base64.b64encode(f'x-access-token:{token}'.encode()).decode()
@@ -295,7 +245,9 @@ def _fetch(repo: Repo, branch: str, token: str) -> str:
     return ref
 
 
-def _todos(repo: Repo, branch: str, ref: str) -> Iterator[Candidate]:
+def _todos(
+    repo: scout_repos.Repo, branch: str, ref: str
+) -> Iterator[Candidate]:
     pathspecs = ['.', *(f':(exclude,glob){p}' for p in repo.exclude)]
     try:
         out = _git(
@@ -332,7 +284,7 @@ def _todos(repo: Repo, branch: str, ref: str) -> Iterator[Candidate]:
 class _Attempts:
     """Runs collection steps for one repo, recording failures."""
 
-    def __init__(self, repo: Repo) -> None:
+    def __init__(self, repo: scout_repos.Repo) -> None:
         self.repo = repo
         self.errors: list[str] = []
 
@@ -349,13 +301,18 @@ class _Attempts:
 
 
 def _repo_candidates(
-    gh: github.GitHub, repo: Repo, settings: Settings, token: str
-) -> tuple[list[Candidate], list[str]]:
+    gh: github.GitHub,
+    repo: scout_repos.Repo,
+    settings: scout_repos.Settings,
+    token: str,
+) -> tuple[list[Candidate], list[str], list[str]]:
+    """Candidates, errors, and notes for the report."""
     attempt = _Attempts(repo)
+    notes: list[str] = []
     found: list[Candidate] = []
     meta = attempt('reading the repo', lambda: gh.get(f'repos/{repo.name}'))
     if meta is None:
-        return found, attempt.errors
+        return found, attempt.errors, notes
     branch: str = meta['default_branch']
     passing: list[dict[str, Any]] = []
     for item in (
@@ -372,6 +329,12 @@ def _repo_candidates(
         )
         or []
     )
+    if not (repo.path / '.git').exists():
+        notes.append(
+            f'{repo.name}: no checkout at {repo.path}, so its TODOs and CI'
+            ' warnings were not scanned'
+        )
+        return found, attempt.errors, notes
     ref = attempt('fetching', lambda: _fetch(repo, branch, token))
     if ref is not None:
         found += (
@@ -385,7 +348,7 @@ def _repo_candidates(
             attempt('finding TODOs', lambda: list(_todos(repo, branch, ref)))
             or []
         )
-    return found, attempt.errors
+    return found, attempt.errors, notes
 
 
 def tracked_links() -> set[str]:
@@ -397,7 +360,12 @@ def tracked_links() -> set[str]:
     } | set(wontfix.load())
 
 
-def render(chosen: list[Candidate], remaining: int, errors: list[str]) -> str:
+def render(
+    chosen: list[Candidate],
+    remaining: int,
+    errors: list[str],
+    notes: list[str],
+) -> str:
     payload = [dataclasses.asdict(c) for c in chosen]
     parts = [
         f'<candidates count="{len(chosen)}" deferred="{remaining}">',
@@ -408,26 +376,42 @@ def render(chosen: list[Candidate], remaining: int, errors: list[str]) -> str:
     ]
     if errors:
         parts += ['<collection_errors>', *errors, '</collection_errors>']
+    if notes:
+        parts += ['<collection_notes>', *notes, '</collection_notes>']
     return '\n'.join(parts)
 
 
+def _gather(
+    gh: github.GitHub, settings: scout_repos.Settings, token: str
+) -> tuple[list[Candidate], list[str], list[str]]:
+    """Every reachable repo's candidates, errors, and notes, in repo order."""
+    found: list[Candidate] = []
+    errors: list[str] = []
+    notes: list[str] = []
+    try:
+        reachable = scout_repos.repos(gh, settings)
+    except github.GitHubError as e:
+        return found, [f'listing the repos failed: {e}'], notes
+    # Mostly waiting on GitHub and git fetches; map keeps repo order.
+    with concurrent.futures.ThreadPoolExecutor(WORKERS) as pool:
+        for repo_found, repo_errors, repo_notes in pool.map(
+            lambda repo: _repo_candidates(gh, repo, settings, token), reachable
+        ):
+            found += repo_found
+            errors += repo_errors
+            notes += repo_notes
+    return found, errors, notes
+
+
 def collect(claw: 'config.Claw') -> base.Collection:
-    settings = load_settings(claw.profile)
+    settings = scout_repos.load_settings(claw.profile)
     item = claw.secrets.get('GH_TOKEN')
     if item is None:
         return base.Collection(None, ('scout needs a GH_TOKEN secret',))
     token = secrets.get(item)
     gh = github.GitHub(settings.api, token)
-    found: list[Candidate] = []
-    errors: list[str] = []
-    # Mostly waiting on GitHub and git fetches; map keeps repo order.
-    with concurrent.futures.ThreadPoolExecutor(WORKERS) as pool:
-        for repo_found, repo_errors in pool.map(
-            lambda repo: _repo_candidates(gh, repo, settings, token),
-            settings.repos,
-        ):
-            found += repo_found
-            errors += repo_errors
+    found, errors, notes = _gather(gh, settings, token)
+    errors += token_expiry.reminder(gh.token_expires)
     tracked = tracked_links()
     new = [c for c in found if tasks.lineage(c.link) not in tracked]
     new.sort(key=lambda c: KINDS.index(c.kind))
@@ -436,5 +420,9 @@ def collect(claw: 'config.Claw') -> base.Collection:
         'scout: %d found, %d new, %d handed over', len(found), len(new),
         len(chosen),
     )  # fmt: skip
-    text = render(chosen, len(new) - len(chosen), errors) if chosen else None
+    text = (
+        render(chosen, len(new) - len(chosen), errors, notes)
+        if chosen
+        else None
+    )
     return base.Collection(text, tuple(errors))

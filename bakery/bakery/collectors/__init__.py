@@ -11,12 +11,17 @@ from typing import TYPE_CHECKING
 from . import baker
 from . import base
 from . import scout
+from . import scout_repos
 from . import triage
 
 if TYPE_CHECKING:
     from ..gateway import config
 
 Collector = Callable[['config.Claw'], base.Collection]
+# Problems with a claw's collector settings that only the outside world can
+# show (eg. a repo override the claws cannot reach); `bakery gateway check`
+# reports them.
+Check = Callable[['config.Claw'], list[str]]
 
 COLLECTORS: dict[str, Collector] = {
     'baker': baker.collect,
@@ -25,3 +30,5 @@ COLLECTORS: dict[str, Collector] = {
     'triage-recheck': triage.recheck,
     'triage-unblock': triage.unblock,
 }
+
+CHECKS: dict[str, Check] = {'scout': scout_repos.check}
