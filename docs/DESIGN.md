@@ -131,10 +131,14 @@ Curation:
   model and context, so its cost is accounted.
 - **Dream job**: defined once in `claws/defaults.toml` (03:00 daily,
   `prompt = "/dream"` from `pi/claw-prompts/dream.md`, Opus with medium
-  thinking, `silent_ok`, `tools = ["memory_edit"]`). It distills recent daily notes into `MEMORY.md`
-  and never promotes `external` notes, which stay in the daily notes as
-  evidence; its report lists what it held back. This rule is in the prompt:
-  a tool cannot judge text.
+  thinking, `silent_ok`, `tools = ["memory_edit"]`). It distills recent
+  daily notes into `MEMORY.md` and never promotes `external` notes, which
+  stay in the daily notes as evidence; its report lists what it held back.
+  It also leaves out volatile references (ticket ids, line numbers, counts),
+  promotes a rule only from the owner or two separate occasions (routing and
+  scope rules only from the owner), dates facts about the outside world, and
+  keeps `MEMORY.md` under about 10k characters, half its cap. These rules are
+  in the prompt: a tool cannot judge text.
 - **Commits**: after every run the gateway commits the state repo
   (`<work_key>: <status>`), so every memory change can be reviewed and
   reverted.
