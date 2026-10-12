@@ -50,13 +50,14 @@ def bakery_dir() -> pathlib.Path:
     )
 
 
-def claw_bakery_dir() -> pathlib.Path:
-    """Sockets of the gateway's claw sessions."""
-    return state.root() / '_gateway' / 'bakery'
+def claw_bakery_dirs() -> list[pathlib.Path]:
+    """Sockets of the gateway's claw sessions, a dir per claw."""
+    base = state.root() / '_gateway' / 'bakery'
+    return sorted(p for p in base.glob('*') if p.is_dir())
 
 
 def bakery_dirs() -> list[pathlib.Path]:
-    return [bakery_dir(), claw_bakery_dir()]
+    return [bakery_dir(), *claw_bakery_dirs()]
 
 
 def is_safe_name(name: str) -> bool:

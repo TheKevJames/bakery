@@ -15,15 +15,18 @@ from collections.abc import Iterator
 
 # The reasons pi/claw-extensions/policy blocks a call with.
 POLICY_BLOCKS = re.compile(
-    r"is not allowed by this claw's policy$"
-    r"|is not writable under this claw's policy$"
-    r'|is protected and cannot be read$'
-    r'|contains protected paths; search a narrower directory, or use bash$'
-    r'|denied by the user$'
+    r"is not allowed by this claw's policy$|denied by the user$"
 )
-# Transcripts from before the policy extension reported sandbox violations
-# only show the OS's refusal.
-SANDBOX_DENIAL = re.compile(r'operation not permitted', re.IGNORECASE)
+# The sandbox's refusals as tools report them (as in the policy extension's
+# SANDBOX_REFUSAL): seatbelt's EPERM, and the network proxy's 403.
+SANDBOX_REFUSAL = re.compile(
+    r'Operation not permitted|\bEPERM\b'
+    r'|Connection blocked by network allowlist|blocked-by-allowlist'
+    r'|CONNECT tunnel failed, response 403',
+    re.IGNORECASE,
+)
+# The policy extension's note on results showing one.
+SANDBOX_NOTE = re.compile(r"this claw's sandbox policy blocked it")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -37,23 +40,18 @@ class ToolCall:  # pylint: disable=too-many-instance-attributes
     args: dict[str, object]
     is_error: bool
     text: str
-    # Lines the sandbox reported for a bash call.
-    violations: tuple[str, ...]
 
     def restriction(self) -> tuple[str, tuple[str, ...]] | None:
         """('policy' | 'sandbox', lines) if the claw's policy refused it."""
-        if self.violations:
-            return 'sandbox', self.violations
         if self.is_error and POLICY_BLOCKS.search(self.text.strip()):
             return 'policy', (self.text.strip(),)
-        if self.tool == 'bash':
-            denied = tuple(
-                line.strip()
-                for line in self.text.splitlines()
-                if SANDBOX_DENIAL.search(line)
-            )
-            if denied:
-                return 'sandbox', denied
+        denied = tuple(
+            line.strip()
+            for line in self.text.splitlines()
+            if SANDBOX_REFUSAL.search(line) and not SANDBOX_NOTE.search(line)
+        )
+        if denied:
+            return 'sandbox', denied
         return None
 
 
@@ -101,12 +99,6 @@ def tool_calls(
             tool, args = calls.get(
                 message['toolCallId'], (message['toolName'], {})
             )
-            details = message.get('details')
-            violations = (
-                details.get('sandboxViolations') or ()
-                if isinstance(details, dict)
-                else ()
-            )
             yield ToolCall(
                 claw=claw,
                 session=session,
@@ -116,7 +108,6 @@ def tool_calls(
                 args=args,
                 is_error=bool(message.get('isError')),
                 text=_text(message.get('content')),
-                violations=tuple(violations),
             )
 
 

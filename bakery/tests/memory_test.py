@@ -1,10 +1,7 @@
-import asyncio
 import datetime
 import pathlib
 import subprocess
-from collections.abc import Iterator
 
-from bakery.gateway import channel
 from bakery.gateway import core
 from testing import gateway as testing_gateway
 from testing import harness
@@ -55,7 +52,6 @@ def test_memory_tools(root: pathlib.Path, fake_llm: harness.FakeLLM) -> None:
         call('memory_get', file=f'memory/{today_note(root).name}'),
         call('memory_get', file='../_shared/USER.md'),
         call('memory_edit', content='overwritten'),
-        call('bash', command=f'echo x >> {state_dir(root)}/MEMORY.md'),
         Reply(text='done'),
     )
 
@@ -71,9 +67,8 @@ def test_memory_tools(root: pathlib.Path, fake_llm: harness.FakeLLM) -> None:
     assert results[2].count(today_note(root).name) == 2
     assert 'Kevin prefers tabs' in results[3]
     assert 'not a memory file' in results[4]
-    # Only dream runs may rewrite MEMORY.md, and bash can never write it.
+    # Only dream runs may rewrite MEMORY.md.
     assert 'Tool memory_edit not found' in results[5]
-    assert 'Command exited with code' in results[6]
     assert not (state_dir(root) / 'MEMORY.md').exists()
     assert git_log(root).splitlines()[0].endswith(': settled')
 
@@ -138,32 +133,27 @@ def test_flush_before_compaction(
     assert 'flushed fact' in today_note(root).read_text()
 
 
-def test_user_updates_need_approval(
+def test_user_updates_are_filed_for_kevin(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
+    (root / 'tasks').mkdir()
     claws = testing_gateway.make_claws(
         root, {'a': ''}, extensions={'a': [MEMORY]}
     )
-    answers: Iterator[dict[str, object]] = iter(
-        [{'confirmed': False}, {'confirmed': True}]
-    )
-
-    async def answer(
-        info: channel.RunInfo, request: dict[str, object]
-    ) -> dict[str, object]:
-        del info, request
-        await asyncio.sleep(0)
-        return next(answers)
-
-    fake = testing_gateway.FakeChannel(dialogs=answer)
     edit = [
         {'oldText': '## Preferences\n', 'newText': '## Preferences\n- tabs\n'}
     ]
     fake_llm.queue(
         call('propose_user_update', edits=edit, reason='said so'),
         call('propose_user_update', edits=edit, reason='said so again'),
+        call(
+            'propose_user_update',
+            edits=[{'oldText': 'x', 'newText': 'y'}],
+            reason='r',
+        ),
         Reply(text='done'),
     )
+    fake = testing_gateway.FakeChannel()
 
     async def scenario(gateway: core.Gateway) -> None:
         run = await fake.wait(gateway.trigger('a', None, 'go'))
@@ -171,11 +161,17 @@ def test_user_updates_need_approval(
 
     testing_gateway.run_gateway(claws, fake, scenario)
     results = fake_llm.tool_results()
-    assert 'did not approve' in results[0]
-    assert 'Approved and applied' in results[1]
-    assert '- tabs' in str(fake.asked[0]['message'])  # the diff is shown
-    user = (root / 'state' / 'claws' / '_shared' / 'USER.md').read_text()
-    assert user.count('- tabs') == 1
+    assert 'Filed as task #1' in results[0]
+    assert 'Already proposed as task #1' in results[1]
+    assert 'text not found' in results[2]
+    shown = subprocess.run(
+        ('task', '1', 'show'), capture_output=True, text=True, check=True
+    ).stdout
+    assert 'bakery > human' in shown
+    assert '+ - tabs' in shown
+    assert 'said so' in shown
+    user = root / 'state' / 'claws' / '_shared' / 'USER.md'
+    assert '- tabs' not in user.read_text()
 
 
 def test_compaction_counts_towards_the_run_cost(

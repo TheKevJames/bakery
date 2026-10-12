@@ -424,7 +424,5 @@ def test_repo_claws_load(
     assert (queue.collector, queue.repeat) == ('triage', True)
     baker = loaded.claw('baker')
     assert baker.job('review').collector == 'baker'
-    assert (baker.policy.task_tag, baker.policy.allow_read) == (
-        'bakery/human',
-        (state.root(),),
-    )
+    assert baker.policy.task_tag == 'bakery/human'
+    assert state.root() in baker.policy.read_paths

@@ -144,8 +144,32 @@ def _restrictions(calls: list[transcripts.ToolCall]) -> Section:
         "Calls the claws' policy or sandbox refused",
         _grouped(keyed),
         8_000,
-        'search the transcripts for <sandbox_violations> and'
-        ' "operation not permitted"',
+        'search the transcripts for "operation not permitted" and "403"',
+    )
+
+
+def _violations(root: pathlib.Path, window: datetime.datetime) -> Section:
+    """Everything the sandbox blocked, seen by a tool result or not."""
+    logs = root / '_gateway' / 'violations'
+    counts: collections.Counter[tuple[str, str]] = collections.Counter()
+    latest: dict[tuple[str, str], str] = {}
+    for log in sorted(logs.glob('*/*.jsonl')):
+        for line in log.read_text().splitlines():
+            entry = json.loads(line)
+            if datetime.datetime.fromisoformat(entry['time']) < window:
+                continue
+            key = (log.parent.name, _short(PID.sub('', entry['line'])))
+            counts[key] += 1
+            latest[key] = log.stem
+    lines = [
+        f'- {claw} · {line} — {n}×; latest in {latest[(claw, line)]}'
+        for (claw, line), n in counts.most_common()
+    ]
+    return Section(
+        'What the sandbox blocked',
+        lines,
+        6_000,
+        f'read {logs}/<claw>/<session>.jsonl',
     )
 
 
@@ -303,6 +327,7 @@ def collect(claw: 'config.Claw') -> base.Collection:
         _runs(runs, root),
         _tools(calls),
         _restrictions(calls),
+        _violations(root, window),
         _errors(calls),
         _memory(root, claw_dirs, calls, since),
         _tasks(),

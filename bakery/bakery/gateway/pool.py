@@ -9,6 +9,7 @@ same session id, which restores the session from disk.
 import asyncio
 import contextlib
 import dataclasses
+import json
 import logging
 import os
 import pathlib
@@ -20,22 +21,26 @@ from .. import state
 from . import config
 from . import policy
 from . import rpc
+from . import sandbox
 
 REAP_INTERVAL = 15.0
 # The only parts of the gateway's environment a claw sees, besides its
-# configured secrets.
-INHERITED_ENV = ('PATH', 'HOME', 'USER', 'LANG', 'TMPDIR', 'TASK_FOLDER')
+# configured secrets. The launcher sets $TMPDIR.
+INHERITED_ENV = ('PATH', 'HOME', 'USER', 'LANG', 'TASK_FOLDER')
 INHERITED_ENV_PREFIXES = ('XDG_', 'LC_')
+# Pointed into the claw's own home, so tools find an empty config (and keep
+# their caches) instead of failing on the unreadable real ones under $HOME.
+XDG_HOMES = {
+    'XDG_CONFIG_HOME': 'config',
+    'XDG_CACHE_HOME': 'cache',
+    'XDG_DATA_HOME': 'data',
+}
 
 log = logging.getLogger(__name__)
 
 
 def session_id(work_key: str) -> str:
     return work_key.replace('/', '-')
-
-
-def bakery_dir() -> str:
-    return str(state.root() / '_gateway' / 'bakery')
 
 
 def policy_extension() -> pathlib.Path:
@@ -54,7 +59,9 @@ async def _check_startup(proc: rpc.PiProcess) -> None:
         raise rpc.RpcError('; '.join(errors))
 
 
-def child_env(claw: config.Claw, job: config.Job | None) -> dict[str, str]:
+def child_env(
+    claw: config.Claw, job: config.Job | None, sid: str
+) -> dict[str, str]:
     """Raises secrets.SecretError if a configured secret is missing."""
     tools = job.tools if job is not None else ()
     claw_policy = dataclasses.replace(
@@ -70,20 +77,28 @@ def child_env(claw: config.Claw, job: config.Job | None) -> dict[str, str]:
     )
     env.update(
         {
-            # Unless their policy's allow_read says otherwise, claws may read
-            # neither the gateway's files nor each other's state (memory,
-            # transcripts, the state repo's history).
+            name: str(sandbox.home(claw) / sub)
+            for name, sub in XDG_HOMES.items()
+        }
+    )
+    env.update(
+        {
+            'BAKERY_SANDBOX': json.dumps(
+                sandbox.settings(claw, env.get('PATH', ''))
+            ),
+            'BAKERY_SANDBOX_VIOLATIONS': str(sandbox.violations(claw, sid)),
+            'BAKERY_SANDBOX_TMP': str(sandbox.tmp(claw)),
+            # Node's fetch (pi's model and web clients) ignores the sandbox's
+            # proxy otherwise, and the sandbox refuses direct connections.
+            'NODE_USE_ENV_PROXY': '1',
             'BAKERY_POLICY': policy.serialize(
-                claw_policy,
-                extra_deny_read=[state.root()],
-                extra_allow_read=[claw.state_dir, state.root() / state.SHARED],
-                secret_names=claw.secrets,
+                claw_policy, secret_names=claw.secrets
             ),
             'BAKERY_CLAW': claw.name,
             'BAKERY_TASK_TAG': claw.policy.task_tag,
             'BAKERY_TASK_NAMESPACE': policy.NAMESPACE,
             'PI_CODING_AGENT_DIR': str(claw.profile),
-            'PI_CODING_AGENT_BAKERY_DIR': bakery_dir(),
+            'PI_CODING_AGENT_BAKERY_DIR': str(sandbox.sockets(claw)),
             'BAKERY_ASK_POLICY': claw.ask.policy,
             'BAKERY_ASK_TIMEOUT_HOURS': f'{claw.ask.timeout_hours:g}',
             'BAKERY_ASK_ON_TIMEOUT': claw.ask.on_timeout,
@@ -96,10 +111,35 @@ def child_env(claw: config.Claw, job: config.Job | None) -> dict[str, str]:
     return env
 
 
+def child_spec(
+    claw: config.Claw, work_key: str, job: config.Job | None
+) -> tuple[tuple[str, ...], dict[str, str]]:
+    """The command and environment a child for `work_key` starts with."""
+    sid = session_id(work_key)
+    model = job.model if job and job.model else claw.model
+    thinking = job.thinking if job and job.thinking else claw.thinking
+    command = (
+        'node', str(sandbox.launcher()),
+        'pi', '--mode', 'rpc',
+        '--session-id', sid,
+        '--session-dir', str(claw.sessions_dir),
+        '--name', sid,
+        '--model', model,
+        '--thinking', thinking,
+        # Loaded by the gateway, not the profile, so no profile can run a
+        # claw without its policy.
+        '--extension', str(policy_extension()),
+    )  # fmt: skip
+    return command, child_env(claw, job, sid)
+
+
 @dataclasses.dataclass
 class Child:
     proc: rpc.PiProcess
     idle_exit_seconds: float
+    # What it was started with: its command and environment, which carry its
+    # sandbox and policy.
+    spec: tuple[tuple[str, ...], dict[str, str]]
     # None while a run is using the child.
     idle_since: float | None = None
 
@@ -123,33 +163,27 @@ class Pool:
     async def acquire(
         self, claw: config.Claw, work_key: str, job: config.Job | None
     ) -> rpc.PiProcess:
-        """A child for `work_key`; `job` (its unit's job) sets overrides."""
+        """
+        A child for `work_key`; `job` (its unit's job) sets overrides. A live
+        child started with a different spec (eg. a reloaded policy) is
+        replaced; the new one resumes the session from disk.
+        """
+        spec = child_spec(claw, work_key, job)
         child = self.children.get(work_key)
         if child is not None and child.proc.alive:
-            child.idle_since = None
-            return child.proc
-        sid = session_id(work_key)
+            if child.spec == spec:
+                child.idle_since = None
+                return child.proc
+            log.info('restarting %s: its sandbox or policy changed', work_key)
+            await self.children.pop(work_key).proc.close()
         claw.cwd.mkdir(parents=True, exist_ok=True)
         claw.sessions_dir.mkdir(parents=True, exist_ok=True)
-        model = job.model if job and job.model else claw.model
-        thinking = job.thinking if job and job.thinking else claw.thinking
-        proc = await rpc.PiProcess.start(
-            [
-                '--session-id', sid,
-                '--session-dir', str(claw.sessions_dir),
-                '--name', sid,
-                '--model', model,
-                '--thinking', thinking,
-                # Loaded by the gateway, not the profile, so no profile can
-                # run a claw without its policy.
-                '--extension', str(policy_extension()),
-            ],
-            cwd=claw.cwd,
-            env=child_env(claw, job),
-        )  # fmt: skip
+        sandbox.sockets(claw).mkdir(parents=True, exist_ok=True)
+        command, env = spec
+        proc = await rpc.PiProcess.start(command, cwd=claw.cwd, env=env)
         await _check_startup(proc)
         self.children[work_key] = Child(
-            proc, claw.concurrency.idle_exit_minutes * 60
+            proc, claw.concurrency.idle_exit_minutes * 60, spec
         )
         return proc
 

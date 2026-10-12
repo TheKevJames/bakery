@@ -8,7 +8,7 @@ gateway daemon and controlled over Discord.
 
 | Path | Contents |
 | --- | --- |
-| `pi/` | Shared pi resources: `extensions/`, `claw-extensions/` (claws only: `policy/`, `memory/`, `task.ts`, `ask-user.ts`, `github.ts`), `claw-prompts/` (claws only, eg. `/dream`), `skills/` (incl. vendored), `prompts/`, `agents/`, `rules/` (instruction fragments). |
+| `pi/` | Shared pi resources: `extensions/`, `claw-extensions/` (claws only: `policy/`, `memory/`, `task.ts`, `ask-user.ts`, `github.ts`), `claw-sandbox/` (the claws' sandbox launcher), `claw-prompts/` (claws only, eg. `/dream`), `skills/` (incl. vendored), `prompts/`, `agents/`, `rules/` (instruction fragments). |
 | `interactive/` | The interactive profile; used directly as `PI_CODING_AGENT_DIR`. |
 | `claws/<name>/` | One profile per claw: `claw.toml`, `context.toml`, `settings.json`, `SOUL.md`, `IDENTITY.md`, `AGENTS.md`. |
 | `bakery/` | Python project: the `bakery` CLI, the gateway, and collectors. |
@@ -36,17 +36,19 @@ every run so memory changes can be reviewed and rolled back.
 ```
 $XDG_STATE_HOME/claws/
 ├── _shared/USER.md          # facts about me, injected into every claw
-├── _gateway/                # gitignored: run ledger (runs.db), control socket, bakery sockets
+├── _gateway/                # gitignored: run ledger (runs.db), control socket, bakery sockets, sandbox violations
 └── <name>/
     ├── MEMORY.md            # curated long-term memory
     ├── memory/YYYY-MM-DD.md # daily notes (kept forever)
     ├── sessions/            # gitignored: pi session transcripts
-    └── worktrees/           # gitignored: build worktrees
+    ├── worktrees/           # gitignored: build worktrees
+    ├── home/                # gitignored: the claw's XDG config, cache, and data
+    └── tmp/                 # gitignored: its pi children's $TMPDIRs
 ```
 
 The interactive profile keeps using `$XDG_STATE_HOME/pi/{sessions,bakery}`.
 `bakery list|show|read|send|pin|attach` cover both the interactive and the
-claw locations (claw sockets live in `_gateway/bakery/`, named after the work
+claw locations (claw sockets live in `_gateway/bakery/<claw>/`, named after the work
 key, eg. `bakery read triage-task-151`). `bakery attach` refuses a claw
 session the gateway is running, and runs pi with the claw's profile
 otherwise. `bakery gc` never collects claw sessions, since units of work
@@ -106,9 +108,10 @@ cloning or when the lockfile changes (dotsystem's `sync` does this).
 
 ## Memory
 
-Memory lives in the claw's state dir and is only written through tools
-(`pi/claw-extensions/memory/`), which run in pi's process; the bash sandbox
-cannot write the state dir.
+Memory lives in the claw's state dir and is meant to be written through
+tools (`pi/claw-extensions/memory/`). Bash shares pi's sandbox, which can
+write the claw's state dir, so this is convention rather than enforcement;
+the state repo's commits keep every change reviewable.
 
 - `memory_append(text, source)` — a timestamped entry in today's
   `memory/YYYY-MM-DD.md`, tagged with its source: `owner` (I said it),
@@ -145,10 +148,11 @@ Curation:
 
 Identity changes need my approval:
 
-- `propose_user_update(edits, reason)` shows the diff as a confirm dialog
-  (Discord Approve/Deny); approved edits are applied to `_shared/USER.md`
-  (capped at 4000 characters) and committed after the run. Unapproved or
-  timed-out (`ask.timeout_hours`) proposals change nothing.
+- `_shared/USER.md` is private (the state repo is local-only) and claws
+  cannot write it. `propose_user_update(edits, reason)` files a
+  `bakery/human` task with the diff (checked to apply, and to stay within
+  4000 characters), which I apply by hand; the same proposal is the same
+  task (its link is `user-md:<hash of the result>`).
 - `SOUL.md` / `AGENTS.md` edits are to be proposed as
   `kjames/bakery-identity-*` PRs on this repo, merging being the approval.
   This needs build's push mechanism and lands after step 11.
@@ -168,7 +172,12 @@ Each unit of work is a `pi --mode rpc` child with a persisted session, run
 with the claw's profile as `PI_CODING_AGENT_DIR`. The gateway speaks pi's
 JSONL RPC protocol directly, waits for `agent_settled` to detect completion,
 and forwards `extension_ui_request` dialogs to Discord as buttons. The bakery
-extension still loads (sockets under `$XDG_STATE_HOME/claws/_gateway/bakery`).
+extension still loads (sockets under
+`$XDG_STATE_HOME/claws/_gateway/bakery/<claw>`). The child runs through the
+claws' sandbox launcher (see [Safety](#safety)); one whose command or
+environment (and so sandbox or policy) changed since it started, eg. after a
+`bakery gateway reload`, is replaced at its unit's next run, resuming the
+session from disk.
 
 Code lives in `bakery/bakery/gateway/`: `config` (claw.toml), `rpc` (the pi
 child), `runner` (one run and its limits), `pool` (warm children), `ledger`,
@@ -291,15 +300,22 @@ when pi's own dialog timeout, which starts earlier, ends the run first.
 
 ### Claw environment
 
-A claw's pi child gets only `PATH`, `HOME`, `USER`, `LANG`, `TMPDIR`,
-`TASK_FOLDER`, `XDG_*`, and `LC_*` from the gateway's environment, plus its
-`secrets`: entries `NAME` or `NAME=ITEM`, setting variable NAME from secret
-ITEM (default: NAME). The default is `ANTHROPIC_API_KEY`, `JINA_API_KEY`, and
+A claw's pi child gets only `PATH`, `HOME`, `USER`, `LANG`, `TASK_FOLDER`,
+`XDG_*` (three replaced, below), and `LC_*` from the gateway's environment,
+plus its `secrets`: entries `NAME` or `NAME=ITEM`, setting variable NAME
+from secret ITEM (default: NAME). The default is `ANTHROPIC_API_KEY`, `JINA_API_KEY`, and
 `GH_TOKEN=BAKERY_GITHUB`. Secret values come only from the Keychain (generic
 password, account `bakery`, service = ITEM), never the gateway's environment,
 which holds all of my shell's secrets when the gateway is started from a
-shell. A missing secret fails the run. Secrets are visible to pi and
-its extension tools, never to bash.
+shell. A missing secret fails the run. Secrets are handed to pi and its
+extension tools, not to bash (see [Safety](#safety)).
+
+`XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, and `XDG_DATA_HOME` point into the
+claw's own `home/` (in its state dir), so tools find an empty config and
+keep their caches there instead of failing on the unreadable real ones under
+`$HOME`. Tools that read `~/.something` directly still get "permission
+denied". The sandbox launcher creates each child's `$TMPDIR` in the claw's
+`tmp/` and removes it when the child exits.
 
 ### Control
 
@@ -381,31 +397,35 @@ gateway's `Channel`), `transport` (the interface), `discord_transport`
 ## Safety
 
 Prompt-level rules are not enforcement. Each claw's `[policy]` (defaults in
-`claws/defaults.toml`, overridable per claw; there are no named tiers) is
-enforced in its pi child by `pi/claw-extensions/policy/`, which the gateway
-always loads with `--extension` so no profile can omit it. The gateway passes
-the policy as `BAKERY_POLICY`; without a valid one, every tool call is
-blocked.
+`claws/defaults.toml`, overridable per claw; there are no named tiers; a
+claw's value for a key replaces the default list) is enforced in two places:
+paths and network by the OS sandbox the claw's whole pi runs in, and tools,
+confirmations, and `task_tag` by `pi/claw-extensions/policy/`, which the
+gateway always loads with `--extension` so no profile can omit it. The
+gateway passes the latter as `BAKERY_POLICY`; without a valid one, every tool
+call is blocked.
 
 - `tools`: names or `*` patterns (eg. `mcp__context7__*`). Only these are
   declared to the model, and any other call is blocked. The default allows
   `read`, `grep`, `find`, `ls`, `bash`, `ask_user`, `web_search`,
   `web_fetch`, `github`, and the context7 tools; no `edit` or `write`.
-- `write_paths`: where bash and `edit`/`write` may write, besides `$TMPDIR`.
-  Empty by default; build's worktrees in step 11. Memory is only written
-  through the memory tools.
-- `deny_read`: paths and globs nothing may read: `~/.ssh`, `~/.aws`,
-  `~/.gnupg`, `~/.netrc`, `~/Library/Keychains`, `~/.config/gh`,
-  `~/.config/gcloud`, `~/.config/zsh/dropins/nobackup-*`, and
-  `interactive/auth.json`. The gateway adds the whole claw state root, with
-  the claw's own state dir and `_shared` re-allowed, so claws read neither the
-  gateway's files nor each other's memory or transcripts.
-- `allow_read`: further paths under the claw state root to re-allow (eg.
-  other claws' memory and transcripts). Empty by default. A re-allowed path beats
-  every deny, so paths outside the state root are rejected.
-- `network`: domains bash may reach (eg. `pypi.org`, `*.githubusercontent.com`);
-  empty by default, so bash has no network. Build's allowlist arrives in step
-  11.
+- `read_paths`: the only readable paths under `$HOME`, besides what pi needs
+  to run (below). Default `~/src/personal` and `$TASK_FOLDER`; baker adds
+  the claw state root. Outside `$HOME` everything is readable except
+  per-user temp (`/var/folders/...`) and the claw state root, of which a claw
+  reads only its own state dir and `_shared`.
+- `deny_read`: paths and globs unreadable even within `read_paths`:
+  `~/**/.env*`, `~/**/*.tfvars`, `~/**/*.pem`, SSH key names
+  (`~/**/id_rsa*` etc.), `interactive/auth.json`, and other claws' pi
+  credentials (`claws/*/auth.json`, `claws/*/mcp-auth.json`; the gateway
+  re-allows the claw's own).
+- `write_paths`: writable besides the claw's own state dir, pi's files in its
+  profile, and its `$TMPDIR`. Default `$TASK_FOLDER`. The memory tools are
+  the intended writers of memory, but bash could write it too.
+- `network`: domains the claw (pi and bash alike) may reach through the
+  sandbox's proxy. Default: `api.anthropic.com` (the model), `s.jina.ai`,
+  `r.jina.ai`, `html.duckduckgo.com` (web tools), `api.github.com`
+  (`github`), and `mcp.context7.com`.
 - `confirm`: regexes on tool names or bash commands; a match asks me in
   Discord (Approve/Deny) before running.
 - `task_tag`: the task list section `task_add` files into (default
@@ -414,29 +434,48 @@ blocked.
 
 Enforcement:
 
-1. **Bash** runs inside Anthropic's `sandbox-runtime` (sandbox-exec on
-   macOS, bubblewrap on Linux): writes only to `write_paths` and `$TMPDIR`,
-   no reads under `deny_read`, and network only through its filtering proxy
-   to `network` domains. It also always blocks writes to `.git/hooks`,
-   `.git/config`, and shell rc files, and blocks unix sockets (so the
-   ssh-agent too). Secrets are removed from bash's environment. What the
-   sandbox blocked (its violation log: denied reads and writes on macOS,
-   denied writes on Linux, denied network on both) is appended to the bash
-   result as `<sandbox_violations>`, with a note that it is policy rather
-   than missing auth or files, and kept in the result's
-   `details.sandboxViolations` for later analysis.
-2. **pi's in-process file tools** (`read`, `ls`, `grep`, `find`, `edit`,
-   `write`) are checked by the extension against the same rules (paths are
-   resolved through symlinks first). `grep` and `find` are refused on a
-   directory that contains a denied path, since they recurse.
-3. **Tools that need the network or credentials** (`web_search`,
-   `web_fetch`, context7, `github`) run in pi's process, outside bash.
-   `github` is GET-only, through `gh api`.
-4. **Pushing** (step 11): bash cannot push (no credentials, no ssh-agent), so
-   build pushes through a `git_push` tool that only accepts `kjames/bakery-*`
-   refs and runs git with `-c core.hooksPath=<bakery hooks>`, whose
-   `pre-push` hook rejects anything else. The hook is not installed into
-   worktrees, which share hooks with my own checkouts.
+1. **The sandbox.** The gateway runs each pi child through
+   `pi/claw-sandbox/launch.mts`, which runs it inside Anthropic's
+   `sandbox-runtime` (sandbox-exec on macOS, bubblewrap on Linux) with
+   settings built by `bakery/bakery/gateway/sandbox.py`. pi and everything it
+   starts (bash, `gh`, `rg`, `task`, MCP servers) share that one sandbox:
+   macOS cannot nest sandboxes, so nothing inside gets a stricter one.
+   - Reads: `$HOME`, per-user temp, the claw state root, and
+     sandbox-runtime's shared `/tmp/claude` are denied; `read_paths` and
+     what pi needs to run are re-allowed; `deny_read` applies within them.
+     What pi needs: the bakery repo, the claw's profile and its own pi
+     credentials, its state dir, `_shared`, its socket dir, macOS's global
+     preferences, and the tools pi and the claw extensions run (`pi`,
+     `node`, `rg`, `fd`, `gh`, `git`, `task`, `bakery`), each through its
+     link on `PATH` and the installation it resolves into (a venv's base
+     interpreter included).
+   - Writes: `write_paths`, the claw's state dir and socket dir, its
+     `$TMPDIR`, and exactly the files pi writes in its profile (`auth.json`,
+     `models-store.json`, `mcp-auth.json`, `settings.json`, and their
+     locks); the rest of the repo is read-only. sandbox-runtime also always
+     blocks writes to `.git/hooks`, `.git/config`, and shell rc files.
+   - Network: only through the sandbox's filtering proxy, to `network`
+     domains. Node's `fetch` uses it (`NODE_USE_ENV_PROXY=1`); loopback and
+     private addresses go through it too rather than around it, so they are
+     allowlisted like any host. Unix sockets are blocked except the claw's
+     own socket dir (so no ssh-agent).
+   - Other processes: `ps` sees only the sandbox's own processes, and the
+     Keychain is unreachable.
+   - What it blocks (denied reads and writes on macOS, denied writes on
+     Linux, denied network on both) is appended to
+     `_gateway/violations/<claw>/<session>.jsonl`, out of the claw's reach,
+     for baker. A tool result showing a refusal (`Operation not permitted`,
+     `EPERM`, or the proxy's 403) gets a note from the policy extension that
+     it is policy rather than missing auth or files.
+2. **Secrets** reach pi's environment, not bash's. That is hygiene, not a
+   boundary: bash shares pi's sandbox and could read pi's environment.
+3. **The policy extension** enforces `tools`, `confirm`, and `task_tag`, in
+   pi's process.
+4. **Pushing** (step 11): bash has no git credentials of its own and no
+   ssh-agent; build pushes through a `git_push` tool that only accepts
+   `kjames/bakery-*` refs and runs git with `-c core.hooksPath=<bakery
+   hooks>`, whose `pre-push` hook rejects anything else. The hook is not
+   installed into worktrees, which share hooks with my own checkouts.
 
 An extension that fails while pi starts (eg. a bad policy or `context.toml`)
 fails the run before the model is called.
@@ -663,6 +702,8 @@ Reviews how the claws learn and files a task for each gap. Profile:
   - tool calls and failures per tool;
   - calls the policy or sandbox refused, and other failed calls, grouped,
     with how many units of work each spans;
+  - everything the sandbox blocked (its violation logs), whether a tool
+    result showed it or not, eg. a file pi newly needs to write;
   - memory sizes, `memory_append` sources, and the state-repo commits that
     changed `MEMORY.md` or `_shared`;
   - baker's own tasks, and rejections of its links;
@@ -674,8 +715,8 @@ Reviews how the claws learn and files a task for each gap. Profile:
   `tool-gap`, `false-learning`, `no-actuator`, `owner-feedback`,
   `self-policy`, `memory-health`, `knowledge-silo`, `plumbing`, and `other`.
   A restriction becomes a `tool-gap` when it causes repeated failures (3+
-  units of work) or a wrong conclusion. Bash without network, or bash that
-  stays out of protected paths, is fine.
+  units of work) or a wrong conclusion. Bash without general network access,
+  or bash that stays out of protected paths, is fine.
 - Baker verifies with the same read-only tools the claws have and says how.
   Each task records its evidence, impact, root cause, fix, and an
   acceptance check baker re-runs while the task is open.
@@ -727,5 +768,5 @@ memory flush runs on its unit's model. The gateway runs whatever `pi` is on
 10. triage.
 11. build, with its `git_push` tool, `github` write access, and the
     pre-push hook.
-12. baker: `allow_read` and `task_tag` policies, sandbox violation
+12. baker: `read_paths` and `task_tag` policies, sandbox violation
     reporting, the transcript parser and `baker` collector, and the claw.

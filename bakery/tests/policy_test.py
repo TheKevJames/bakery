@@ -4,15 +4,14 @@ import pathlib
 import sys
 from collections.abc import Iterator
 
+import pytest
+
 from bakery.gateway import channel
 from bakery.gateway import core
 from testing import gateway as testing_gateway
 from testing import harness
 
 Reply = harness.Reply
-# Denials read differently per platform (macOS: Operation not permitted;
-# Linux: the path is hidden or read-only), so assert on what got through.
-FAILED = 'Command exited with code'
 
 
 def call(tool: str, **args: object) -> harness.Reply:
@@ -42,15 +41,24 @@ def toml_list(paths: list[pathlib.Path | str]) -> str:
     return json.dumps([str(p) for p in paths])
 
 
+def violations(root: pathlib.Path, claw: str) -> str:
+    logs = root / 'state' / 'claws' / '_gateway' / 'violations' / claw
+    return ''.join(p.read_text() for p in logs.glob('*.jsonl'))
+
+
 def test_file_access_follows_the_policy(
-    root: pathlib.Path, fake_llm: harness.FakeLLM
+    root: pathlib.Path,
+    fake_llm: harness.FakeLLM,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    secret = root / 'secret'
-    secret.mkdir()
-    (secret / 'key').write_text('hunter2')
-    (root / 'dropins').mkdir()
-    (root / 'dropins' / 'nobackup-x.zsh').write_text('hunter3')
-    (root / 'dropins' / 'ok.zsh').write_text('fine')
+    home = root / 'home'
+    monkeypatch.setenv('HOME', str(home))
+    (home / '.ssh').mkdir(parents=True)
+    (home / '.ssh' / 'key').write_text('hunter2')
+    repo = home / 'src' / 'personal' / 'repo'
+    repo.mkdir(parents=True)
+    (repo / 'code.py').write_text('fine')
+    (repo / '.env').write_text('hunter3')
     out = root / 'out'
     out.mkdir()
     state = root / 'state' / 'claws'
@@ -62,66 +70,59 @@ def test_file_access_follows_the_policy(
         {
             'a': f"""
                 [policy]
-                tools = ["read", "grep", "write", "bash"]
+                tools = ["read", "write", "bash"]
+                read_paths = {toml_list(['~/src/personal', state / 'b'])}
                 write_paths = {toml_list([out])}
-                deny_read = {toml_list([secret, root / 'dropins/nobackup-*'])}
-                allow_read = {toml_list([state / 'b'])}
-            """
+            """,
+            'b': '',
         },
     )
+    (claws / 'a' / 'auth.json').write_text('{}')
+    (claws / 'b' / 'auth.json').write_text('{"b": "hunter4"}')
     calls = [
-        call('read', path=str(secret / 'key')),
-        call('bash', command=f'cat {secret}/key'),
-        call('read', path=str(root / 'dropins/nobackup-x.zsh')),
-        call('bash', command=f'cat {root}/dropins/nobackup-x.zsh'),
-        call('read', path=str(root / 'dropins/ok.zsh')),
-        call('read', path=str(state / 'c/MEMORY.md')),
-        call('read', path=str(state / 'a/MEMORY.md')),
-        call('grep', pattern='hunter', path=str(root)),
-        call('grep', pattern='memory', path=str(state / 'a')),
+        call('read', path=str(home / '.ssh' / 'key')),
+        call('bash', command=f'cat {home}/.ssh/key'),
+        call('read', path=str(repo / 'code.py')),
+        call('read', path=str(repo / '.env')),
+        call('read', path=str(state / 'c' / 'MEMORY.md')),
+        call('read', path=str(state / 'a' / 'MEMORY.md')),
+        call('bash', command=f'cat {state}/b/MEMORY.md'),
+        call('read', path=str(claws / 'b' / 'auth.json')),
+        call('read', path=str(claws / 'a' / 'auth.json')),
         call('write', path=str(out / 'w.txt'), content='w'),
         call('write', path=str(root / 'w.txt'), content='w'),
         call('bash', command=f'echo b > {out}/b.txt && cat {out}/b.txt'),
         call('bash', command=f'echo b > {root}/b.txt'),
-        call('edit', path=str(out / 'w.txt'), edits=[]),
-        call('read', path=str(state / 'b/MEMORY.md')),
-        call('bash', command=f'cat {state}/b/MEMORY.md {state}/c/MEMORY.md'),
     ]
 
     run, results = run_calls(claws, fake_llm, 'a', calls)
 
     assert run.status == 'settled', run.reason
-    assert 'is protected and cannot be read' in results[0]
-    assert FAILED in results[1]
-    assert 'hunter2' not in results[1]
-    if sys.platform == 'darwin':
-        assert f'file-read-data {secret.resolve()}/key' in results[1]
-    assert 'is protected and cannot be read' in results[2]
-    assert FAILED in results[3]
-    assert 'hunter3' not in results[3]
-    assert 'fine' in results[4]
-    assert 'is protected and cannot be read' in results[5]
-    assert 'memory of a' in results[6]
-    assert 'contains protected paths' in results[7]
-    assert 'memory of a' in results[8]
+    assert not any('hunter' in result for result in results)
+    assert 'memory of c' not in results[4]
+    assert 'fine' in results[2]
+    assert 'memory of a' in results[5]
+    assert 'memory of b' in results[6]
+    assert '{}' in results[8]
     assert (out / 'w.txt').read_text() == 'w'
-    assert 'is not writable' in results[10]
     assert results[11].strip().endswith('b')
-    assert FAILED in results[12]
-    # Undeclared, so pi itself refuses it; the policy would block it too.
-    assert 'Tool edit not found' in results[13]
-    assert 'memory of b' in results[14]
-    assert 'memory of b' in results[15]
-    assert 'memory of c' not in results[15]
     assert not (root / 'w.txt').exists()
     assert not (root / 'b.txt').exists()
+    # Linux hides denied paths rather than refusing them.
+    if sys.platform == 'darwin':
+        for refused in (0, 1, 3, 4, 7, 10, 12):
+            assert 'sandbox policy blocked it' in results[refused], refused
+        assert f'file-read-data {home.resolve()}/.ssh/key' in violations(
+            root, 'a'
+        )
 
 
-def test_bash_network_is_allowlisted(
+def test_network_is_allowlisted(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
+    network = toml_list([testing_gateway.FAKE_LLM_HOST, 'example.com'])
     claws = testing_gateway.make_claws(
-        root, {'a': '[policy]\ntools = ["bash"]\nnetwork = ["example.com"]\n'}
+        root, {'a': f'[policy]\ntools = ["bash"]\nnetwork = {network}\n'}
     )
     calls = [
         call('bash', command='curl -sS -m 10 https://github.com -o /dev/null')
@@ -131,8 +132,8 @@ def test_bash_network_is_allowlisted(
 
     assert run.status == 'settled', run.reason
     assert '403' in results[0]
-    assert 'deny network-outbound github.com:443' in results[0]
-    assert 'sandbox policy blocked' in results[0]
+    assert 'sandbox policy blocked it' in results[0]
+    assert 'deny network-outbound github.com:443' in violations(root, 'a')
 
 
 def test_confirm_patterns_ask_first(

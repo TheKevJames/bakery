@@ -19,6 +19,8 @@ from . import harness
 
 TESTING = pathlib.Path(__file__).parent
 RUN_TIMEOUT = 60.0
+# Where harness.FakeLLM listens.
+FAKE_LLM_HOST = '127.0.0.1'
 
 Dialog = Callable[
     [channel.RunInfo, dict[str, object]], Awaitable[dict[str, object]]
@@ -84,12 +86,20 @@ def make_claws(
     A claws dir: the repo's real defaults.toml, plus one profile per claw.
 
     `claws` maps names to extra claw.toml text; every claw uses the fake
-    model and loads the claw prompts. `gateway` overrides values in
+    model and loads the claw prompts, and may reach it (FAKE_LLM_HOST, which
+    a claw's own `network` must repeat). `gateway` overrides values in
     defaults.toml's [gateway] table; `settings` adds to a claw's settings.json.
     """
     claws_dir = root / 'claws'
     claws_dir.mkdir()
     defaults = (harness.REPO / 'claws' / 'defaults.toml').read_text()
+    defaults, count = re.subn(
+        r'^network = \[',
+        f'network = ["{FAKE_LLM_HOST}", ',
+        defaults,
+        flags=re.MULTILINE,
+    )
+    assert count == 1
     for key, value in (gateway or {}).items():
         # [gateway] comes first, so its key is the first match.
         defaults, count = re.subn(

@@ -17,10 +17,13 @@ failing in a way nothing will fix. File one task per gap for Kevin.
     `external` notes.
   - `<claw>/sessions/*.jsonl`: pi transcripts, one JSON entry per line.
     Tool calls are `toolCall` parts of assistant messages; results are
-    `toolResult` messages with `toolCallId`, `isError`, `content`, and, for
-    bash the sandbox refused, `details.sandboxViolations`.
-  - `_shared/USER.md`: facts about Kevin every claw sees, changed only with
-    his approval.
+    `toolResult` messages with `toolCallId`, `isError`, and `content`.
+  - `_gateway/violations/<claw>/<session>.jsonl`: everything each claw's
+    sandbox blocked (`time`, `line`), whether a tool result showed it or
+    not. A write pi itself needs (eg. a new file in the claw's profile) is a
+    `tool-gap`: propose widening the sandbox's allowlist.
+  - `_shared/USER.md`: facts about Kevin every claw sees; claws propose
+    changes as tasks, and Kevin applies them by hand.
   - `_gateway/runs.db` (SQLite `runs`: claw, work_key, job, status, reason,
     cost_usd, turns) and `_gateway/gateway.log`.
 - **The bakery repository** (`~/src/personal/bakery`): each claw's
@@ -28,8 +31,8 @@ failing in a way nothing will fix. File one task per gap for Kevin.
   `context.toml`), `claws/defaults.toml`, the claw tools in
   `pi/claw-extensions/`, the dream prompt in `pi/claw-prompts/dream.md`, the
   gateway and collectors in `bakery/bakery/`, and `docs/DESIGN.md`.
-- Dig with bash (`jq`, `rg`, `git`); it has no network. Search narrow
-  directories: a recursive search covering a protected path is refused.
+- Dig with bash (`jq`, `rg`, `git`); it reaches only the network your tools
+  need, and most of `$HOME` is unreadable to it.
 
 ## 1. Recheck your open tasks
 
@@ -44,8 +47,8 @@ Each gap has a type, used in its link:
 - `tool-gap`: a claw lacks a tool, a tool is too weak, or a restriction
   makes it fail. Evidence: refused or failed calls of the same kind in 3 or
   more units of work, or a single one that led to a wrong conclusion in
-  memory or on a ticket. Bash without network, and bash that stays out of
-  protected paths, is fine; the gap is what a restriction stopped the claw
+  memory or on a ticket. Bash without general network access, and bash that
+  stays out of protected paths, is fine; the gap is what a restriction stopped the claw
   from doing. Name the tool to add or fix, and the access it needs.
 - `false-learning`: memory or a note that the evidence contradicts,
   including a failure recorded as a fact about the world.
