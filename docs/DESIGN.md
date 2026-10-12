@@ -466,6 +466,9 @@ Enforcement:
      for baker. A tool result showing a refusal (`Operation not permitted`,
      `EPERM`, or the proxy's 403) gets a note from the policy extension that
      it is policy rather than missing auth or files.
+   - `bakery sandbox show <claw>` prints its settings (with the caller's
+     `$PATH`); `bakery sandbox exec <claw> -- <command>` runs a command as
+     the claw's pi would, in its sandbox and environment, secrets included.
 2. **Secrets** reach pi's environment, not bash's. That is hygiene, not a
    boundary: bash shares pi's sandbox and could read pi's environment.
 3. **The policy extension** enforces `tools`, `confirm`, and `task_tag`, in
