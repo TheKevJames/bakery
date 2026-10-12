@@ -16,7 +16,30 @@
                 "# renovate: datasource=(?<datasource>[a-z-]+?) depName=(?<depName>.+?)(?: versioning=(?<versioning>[a-z-]+?))?\\s+[A-Z_]+=\"?(?<currentValue>[^\"\\s]+)\"?\\s",
             ],
             "versioningTemplate": "{{#if versioning}}{{versioning}}{{else}}semver{{/if}}",
+        },
+        {
+            "description": "Update the task CLI installed in CI",
+            "managerFilePatterns": [
+                "/^\\.github/workflows/ci\\.yml$/",
+            ],
+            "customType": "regex",
+            // Only the version is captured: extractVersion applies to the
+            // tags, never to currentValue, so `task-` stays outside.
+            "matchStrings": [
+                "git\\+https://github\\.com/TheKevJames/tools@task-(?<currentValue>[^#\"\\s]+)#subdirectory=task",
+            ],
+            "datasourceTemplate": "github-tags",
+            "packageNameTemplate": "TheKevJames/tools",
+            "depNameTemplate": "task",
+            "extractVersionTemplate": "^task-(?<version>.+)$",
+            "versioningTemplate": "semver",
+        },
+    ],
+    "packageRules": [
+        {
             // N.B. generally requires re-running the script manually
+            "matchManagers": ["custom.regex"],
+            "matchFileNames": ["bin/**"],
             "automerge": false,
         },
     ],
