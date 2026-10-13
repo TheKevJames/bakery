@@ -2,6 +2,8 @@ import argparse
 import asyncio
 import json
 import pathlib
+import socket
+import urllib.parse
 from collections.abc import Iterator
 
 import pytest
@@ -114,23 +116,43 @@ def test_file_access_follows_the_policy(
     assert f'file-read-data {home.resolve()}/.ssh/key' in violations(root, 'a')
 
 
-def test_network_is_allowlisted(
+def test_network_refuses_only_local_names_and_sockets(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
-    network = toml_list([testing_gateway.FAKE_LLM_HOST, 'example.com'])
+    port = urllib.parse.urlsplit(fake_llm.url).port
+    unix_path = root / 'u.sock'
     claws = testing_gateway.make_claws(
-        root, {'a': f'[policy]\ntools = ["bash"]\nnetwork = {network}\n'}
+        root, {'a': '[policy]\ntools = ["bash"]\n'}
+    )
+    curl = 'curl -sS -m 5'
+    connect = (
+        f"import socket; socket.socket(socket.AF_UNIX).connect('{unix_path}')"
     )
     calls = [
-        call('bash', command='curl -sS -m 10 https://github.com -o /dev/null')
+        call('bash', command=f'{curl} http://localhost:{port}/'),
+        call('bash', command=f'python3 -c "{connect}"'),
+        call(
+            'bash',
+            command=f'{curl} -o /dev/null -w "%{{http_code}}" '
+            f'http://127.0.0.1:{port}/',
+        ),
+        # Offline, this fails upstream rather than at the sandbox.
+        call('bash', command=f'{curl} -o /dev/null https://example.com'),
     ]
 
-    run, results = run_calls(claws, fake_llm, 'a', calls)
+    with socket.socket(socket.AF_UNIX) as unix_server:
+        unix_server.bind(str(unix_path))
+        unix_server.listen()
+        run, results = run_calls(claws, fake_llm, 'a', calls)
 
     assert run.status == 'settled', run.reason
-    assert '403' in results[0]
-    assert 'sandbox policy blocked it' in results[0]
-    assert 'deny network-outbound github.com:443' in violations(root, 'a')
+    for refused in (0, 1):
+        assert 'sandbox policy blocked it' in results[refused], refused
+    assert results[2].strip() == '501'
+    assert 'sandbox policy blocked it' not in results[3]
+    logged = violations(root, 'a')
+    assert f'deny network-outbound localhost:{port}' in logged
+    assert 'example.com' not in logged
 
 
 def test_confirm_patterns_ask_first(

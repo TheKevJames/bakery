@@ -198,7 +198,10 @@ def settings(claw: config.Claw, path_env: str) -> dict[str, object]:
     ]
     return {
         'network': {
-            'allowedDomains': list(policy.network),
+            # Every host is allowed by launch.mts's callback; a network
+            # config at all is what keeps the proxy and the unix socket
+            # allowlist (without one, macOS gets a blanket allow network*).
+            'allowedDomains': [],
             'deniedDomains': [],
             'allowUnixSockets': _real([sockets(claw)]),
         },

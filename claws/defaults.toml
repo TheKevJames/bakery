@@ -32,10 +32,13 @@ bash_secrets = ["GH_TOKEN"]
 
 # cwd defaults to the claw's state dir, $XDG_STATE_HOME/claws/<name>.
 
-# Paths and network are enforced by the OS sandbox the claw's whole pi runs
-# in (see bakery/bakery/gateway/sandbox.py), so they bind pi, bash, and every
-# tool alike; tools and confirm by pi/claw-extensions/policy. Relative paths
-# are relative to the claw's profile (claws/<name>/); ~ and ${VAR} expand.
+# Paths are enforced by the OS sandbox the claw's whole pi runs in (see
+# bakery/bakery/gateway/sandbox.py), so they bind pi, bash, and every tool
+# alike; tools and confirm by pi/claw-extensions/policy. The sandbox also lets
+# every claw reach any host except by a name resolving to this machine
+# (loopback, link-local, its own addresses), and no unix socket but its own.
+# Relative paths are relative to the claw's profile (claws/<name>/); ~ and
+# ${VAR} expand.
 # A claw's value for a key replaces the default list; repeat what it keeps.
 [claw.policy]
 # Tool names; `*` matches any characters. Anything else is blocked.
@@ -61,15 +64,6 @@ deny_read = [
 # $TMPDIR; the rest of the repo is read-only. The memory tools are the
 # intended writers of memory, but bash could write it.
 write_paths = ["${TASK_FOLDER}"]
-# Domains the claw may reach, through the sandbox's proxy.
-network = [
-    "api.anthropic.com",                  # the model
-    "s.jina.ai", "html.duckduckgo.com",   # web_search
-    "r.jina.ai",                          # web_fetch: Jina fetches the page
-    "api.github.com",                     # github, gh
-    "github.com",                         # git clone, fetch, and push
-    "context7.com",                       # context7
-]
 # Regexes on tool names or bash commands that need my approval in Discord.
 confirm = []
 # The task list section task_add files into.
