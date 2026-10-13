@@ -9,10 +9,13 @@ then applies within those.
 """
 
 import functools
+import json
 import pathlib
 import shutil
 import subprocess
 import sys
+import urllib.parse
+import urllib.request
 from collections.abc import Iterable
 
 from .. import paths
@@ -141,11 +144,24 @@ def _real(paths_: Iterable[pathlib.Path | str]) -> list[str]:
     return found
 
 
+def _editable_sources(venv: pathlib.Path) -> list[pathlib.Path]:
+    """The source dirs of the venv's editable installs (PEP 610)."""
+    found = []
+    pattern = 'lib/python*/site-packages/*.dist-info/direct_url.json'
+    for record in venv.glob(pattern):
+        direct = json.loads(record.read_text())
+        if direct.get('dir_info', {}).get('editable'):
+            url = urllib.parse.urlsplit(direct['url'])
+            found.append(pathlib.Path(urllib.request.url2pathname(url.path)))
+    return found
+
+
 def _installation(exe: pathlib.Path) -> list[pathlib.Path]:
     """
     The link on PATH, and what running it reads: its npm packages, or its
-    venv and the venv's base interpreter, or else just itself (never the
-    dir around a binary, eg. a cargo home, which holds its credentials).
+    venv, the venv's base interpreter, and the source of its editable
+    installs, or else just itself (never the dir around a binary, eg. a
+    cargo home, which holds its credentials).
     """
     real = exe.resolve()
     for parent in real.parents:
@@ -154,7 +170,7 @@ def _installation(exe: pathlib.Path) -> list[pathlib.Path]:
     venv = real.parent.parent / 'pyvenv.cfg'
     if not venv.is_file():
         return [exe]
-    found = [exe, venv.parent]
+    found = [exe, venv.parent, *_editable_sources(venv.parent)]
     for line in venv.read_text().splitlines():
         key, _, value = line.partition('=')
         if key.strip() == 'home':

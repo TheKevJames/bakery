@@ -25,5 +25,5 @@ add useful context, but keep it brief; triage does the research.
 
 When done, reply with a short report: how many tasks you added (by kind and
 repository), how many candidates were deferred, and any `<collection_errors>`
-and `<collection_notes>` verbatim. Note anything durable you learned about
+verbatim. Note anything durable you learned about
 the repositories with `memory_append`.

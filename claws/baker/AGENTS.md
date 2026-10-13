@@ -26,7 +26,7 @@ failing in a way nothing will fix. File one task per gap for the operator.
     propose changes as tasks, and the operator applies them by hand.
   - `_gateway/runs.db` (SQLite `runs`: claw, work_key, job, status, reason,
     cost_usd, turns) and `_gateway/gateway.log`.
-- **The bakery repository** (`~/src/personal/bakery`): each claw's
+- **The bakery repository** (your clone of `TheKevJames/bakery`): each claw's
   `claws/<name>/` (`claw.toml` policy and jobs, `AGENTS.md`, `SOUL.md`,
   `context.toml`), `claws/defaults.toml`, the claw tools in
   `pi/claw-extensions/`, the dream prompt in `pi/claw-prompts/dream.md`, the

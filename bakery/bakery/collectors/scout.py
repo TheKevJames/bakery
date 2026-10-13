@@ -5,8 +5,8 @@ task list.
 Repos are every one the claws' GitHub user can reach (see scout_repos). For
 each: CI failures and warnings on the default branch (warnings only from runs
 whose workflow file is still current), open issues and non-bot pull
-requests, and TODO/FIXME comments on the default branch (fetched into a
-private ref, leaving the operator's checkout alone).
+requests, and TODO/FIXME comments on the default branch (fetched into
+scout's own clone).
 A candidate is new unless a task already has its link, which is
 deterministic: the link is the task's lineage.
 """
@@ -44,7 +44,6 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 T = TypeVar('T')
 
-REF_PREFIX = 'refs/bakery/scout'
 # Hand-over order: what is most likely broken or blocking someone first.
 KINDS = ('ci', 'pr', 'issue', 'warning', 'todo')
 FAILED = frozenset({'failure', 'timed_out', 'startup_failure'})
@@ -215,7 +214,7 @@ def _git(
     repo: scout_repos.Repo, *args: str, env: dict[str, str] | None = None
 ) -> str:
     return subprocess.run(
-        ('git', '-C', str(repo.path), *args),
+        ('git', '-C', str(repo.clone), *args),
         capture_output=True,
         text=True,
         check=True,
@@ -224,8 +223,13 @@ def _git(
 
 
 def _fetch(repo: scout_repos.Repo, branch: str, token: str) -> str:
-    """Fetch the default branch into a private ref, which is returned."""
-    ref = f'{REF_PREFIX}/{branch}'
+    """Fetch the default branch into scout's clone; returns its ref."""
+    subprocess.run(
+        ('git', 'init', '--quiet', '--bare', str(repo.clone)),
+        capture_output=True,
+        check=True,
+    )
+    ref = f'refs/remotes/origin/{branch}'
     basic = base64.b64encode(f'x-access-token:{token}'.encode()).decode()
     # Configured through the environment so the token never shows in `ps`.
     env = os.environ | {
@@ -306,14 +310,13 @@ def _repo_candidates(
     repo: scout_repos.Repo,
     settings: scout_repos.Settings,
     token: str,
-) -> tuple[list[Candidate], list[str], list[str]]:
-    """Candidates, errors, and notes for the report."""
+) -> tuple[list[Candidate], list[str]]:
+    """Candidates, and errors for the report."""
     attempt = _Attempts(repo)
-    notes: list[str] = []
     found: list[Candidate] = []
     meta = attempt('reading the repo', lambda: gh.get(f'repos/{repo.name}'))
     if meta is None:
-        return found, attempt.errors, notes
+        return found, attempt.errors
     branch: str = meta['default_branch']
     passing: list[dict[str, Any]] = []
     for item in (
@@ -330,12 +333,6 @@ def _repo_candidates(
         )
         or []
     )
-    if not (repo.path / '.git').exists():
-        notes.append(
-            f'{repo.name}: no checkout at {repo.path}, so its TODOs and CI'
-            ' warnings were not scanned'
-        )
-        return found, attempt.errors, notes
     ref = attempt('fetching', lambda: _fetch(repo, branch, token))
     if ref is not None:
         found += (
@@ -349,7 +346,7 @@ def _repo_candidates(
             attempt('finding TODOs', lambda: list(_todos(repo, branch, ref)))
             or []
         )
-    return found, attempt.errors, notes
+    return found, attempt.errors
 
 
 def tracked_links() -> set[str]:
@@ -361,12 +358,7 @@ def tracked_links() -> set[str]:
     } | set(wontfix.load())
 
 
-def render(
-    chosen: list[Candidate],
-    remaining: int,
-    errors: list[str],
-    notes: list[str],
-) -> str:
+def render(chosen: list[Candidate], remaining: int, errors: list[str]) -> str:
     payload = [dataclasses.asdict(c) for c in chosen]
     parts = [
         f'<candidates count="{len(chosen)}" deferred="{remaining}">',
@@ -377,31 +369,30 @@ def render(
     ]
     if errors:
         parts += ['<collection_errors>', *errors, '</collection_errors>']
-    if notes:
-        parts += ['<collection_notes>', *notes, '</collection_notes>']
     return '\n'.join(parts)
 
 
 def _gather(
-    gh: github.GitHub, settings: scout_repos.Settings, token: str
-) -> tuple[list[Candidate], list[str], list[str]]:
-    """Every reachable repo's candidates, errors, and notes, in repo order."""
+    gh: github.GitHub,
+    settings: scout_repos.Settings,
+    token: str,
+    clones: pathlib.Path,
+) -> tuple[list[Candidate], list[str]]:
+    """Every reachable repo's candidates and errors, in repo order."""
     found: list[Candidate] = []
     errors: list[str] = []
-    notes: list[str] = []
     try:
-        reachable = scout_repos.repos(gh, settings)
+        reachable = scout_repos.repos(gh, settings, clones)
     except github.GitHubError as e:
-        return found, [f'listing the repos failed: {e}'], notes
+        return found, [f'listing the repos failed: {e}']
     # Mostly waiting on GitHub and git fetches; map keeps repo order.
     with concurrent.futures.ThreadPoolExecutor(WORKERS) as pool:
-        for repo_found, repo_errors, repo_notes in pool.map(
+        for repo_found, repo_errors in pool.map(
             lambda repo: _repo_candidates(gh, repo, settings, token), reachable
         ):
             found += repo_found
             errors += repo_errors
-            notes += repo_notes
-    return found, errors, notes
+    return found, errors
 
 
 def collect(claw: 'config.Claw') -> base.Collection:
@@ -411,7 +402,7 @@ def collect(claw: 'config.Claw') -> base.Collection:
         return base.Collection(None, ('scout needs a GH_TOKEN secret',))
     token = secrets.get(item)
     gh = github.GitHub(settings.api, token)
-    found, errors, notes = _gather(gh, settings, token)
+    found, errors = _gather(gh, settings, token, claw.state_dir / 'clones')
     errors += token_expiry.reminder(gh.token_expires)
     tracked = tracked_links()
     new = [c for c in found if tasks.lineage(c.link) not in tracked]
@@ -421,9 +412,5 @@ def collect(claw: 'config.Claw') -> base.Collection:
         'scout: %d found, %d new, %d handed over', len(found), len(new),
         len(chosen),
     )  # fmt: skip
-    text = (
-        render(chosen, len(new) - len(chosen), errors, notes)
-        if chosen
-        else None
-    )
+    text = render(chosen, len(new) - len(chosen), errors) if chosen else None
     return base.Collection(text, tuple(errors))

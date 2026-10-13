@@ -51,7 +51,7 @@ tools = [
 # install, the bakery repo, the claw's profile, own state, and _shared).
 # Outside $HOME everything is readable but per-user temp and the claw state
 # root ($XDG_STATE_HOME/claws).
-read_paths = ["~/src/personal", "${TASK_FOLDER}"]
+read_paths = ["${TASK_FOLDER}"]
 # Unreadable even within the readable paths.
 deny_read = [
     "~/**/.env*", "~/**/*.tfvars", "~/**/*.pem",

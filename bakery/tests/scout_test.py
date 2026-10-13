@@ -52,8 +52,8 @@ def commit(path: pathlib.Path, message: str) -> None:
 
 
 def make_upstream(root: pathlib.Path) -> pathlib.Path:
-    """A repo standing in for GitHub, and a checkout of it on a branch."""
-    upstream = root / 'upstream'
+    """A repo standing in for GitHub's, under `remote`."""
+    upstream = root / 'remote' / f'{REPO}.git'
     (upstream / 'vendor').mkdir(parents=True)
     (upstream / 'app.py').write_text(
         'def main():\n    pass  # TODO: handle errors\n\n\n'
@@ -66,10 +66,7 @@ def make_upstream(root: pathlib.Path) -> pathlib.Path:
     (upstream / '.github' / 'workflows').mkdir(parents=True)
     (upstream / '.github' / 'workflows' / 'w4.yml').write_text('fixed\n')
     commit(upstream, 'ci')
-    checkout = root / 'checkout'
-    git(root, 'clone', '-q', str(upstream), str(checkout))
-    git(checkout, 'switch', '-q', '-c', 'feature')
-    return checkout
+    return upstream
 
 
 def run(
@@ -101,15 +98,8 @@ def issue(number: int, **extra: object) -> dict[str, object]:
 def serve_repo(fake: fake_github.FakeGitHub, initial: str) -> None:
     fake.routes['/user/repos?per_page=100&affiliation=collaborator'] = [
         {'full_name': name, 'name': name.split('/')[1], 'archived': False}
-        for name in (REPO, f'{OWNER}/gone', f'{OWNER}/unchecked')
+        for name in (REPO, f'{OWNER}/gone')
     ] + [{'full_name': f'{OWNER}/old', 'name': 'old', 'archived': True}]
-    # Reachable, but with no checkout under `checkouts`.
-    unchecked = f'/repos/{OWNER}/unchecked'
-    fake.routes[unchecked] = {'default_branch': 'main'}
-    fake.routes[
-        f'{unchecked}/actions/runs?branch=main&status=completed&per_page=100'
-    ] = {'workflow_runs': []}
-    fake.routes[f'{unchecked}/issues?per_page=100&state=open'] = []
     base = f'/repos/{REPO}'
     runs = f'{base}/actions/runs?branch=main&status=completed&per_page=100'
     fake.routes[base] = {'default_branch': 'main'}
@@ -163,15 +153,13 @@ def serve_repo(fake: fake_github.FakeGitHub, initial: str) -> None:
 
 def scout_toml(root: pathlib.Path, api: str, max_candidates: int = 25) -> str:
     return f"""
-checkouts = "{root}"
 max_candidates = {max_candidates}
 opt_out_label = "ready-for-human"
 api = "{api}"
+git_url = "{(root / 'remote').as_uri()}"
 
 [[repo]]
 name = "{REPO}"
-path = "{root / 'checkout'}"
-remote = "file://{root / 'upstream'}"
 exclude = ["vendor/**"]
 
 [[repo]]
@@ -189,8 +177,7 @@ def fixture_github(
     keychain['BAKERY_TEST_GH'] = TOKEN
     monkeypatch.setenv('TASK_FOLDER', str(root / 'tasks'))
     (root / 'tasks').mkdir()
-    make_upstream(root)
-    initial = git(root / 'upstream', 'rev-parse', 'HEAD~').strip()
+    initial = git(make_upstream(root), 'rev-parse', 'HEAD~').strip()
     with fake_github.serve() as fake:
         serve_repo(fake, initial)
         yield fake
@@ -269,9 +256,6 @@ def test_collects_new_candidates_in_priority_order(
         f'From https://github.com/{REPO}/actions/runs/8 (commit '
     )
     assert 'def main():' in found[-1]['detail']
-    assert f'{OWNER}/unchecked: no checkout at {root.resolve()}/unchecked' in (
-        collection.text or ''
-    )
     gone, expiring = collection.errors
     assert f'{OWNER}/gone: reading the repo failed' in gone
     assert f'BAKERY_GITHUB) expires on {soon:%Y-%m-%d}' in expiring
@@ -284,10 +268,9 @@ def test_collects_new_candidates_in_priority_order(
     # Log downloads follow a redirect without leaking the token to it.
     assert ('/blob/logs.zip', None) in github.requests
     assert (f'/repos/{REPO}', f'Bearer {TOKEN}') in github.requests
-    # The checkout itself is untouched; only the private ref moved.
-    checkout = root / 'checkout'
-    assert git(checkout, 'branch', '--show-current').strip() == 'feature'
-    assert git(checkout, 'rev-parse', '--verify', 'refs/bakery/scout/main')
+    # Scout's own clone, in its state.
+    clone = claw.state_dir / 'clones' / REPO
+    assert git(clone, 'rev-parse', '--verify', 'refs/remotes/origin/main')
 
 
 def test_caps_candidates_per_run(
@@ -348,7 +331,9 @@ def test_scout_adds_tasks_then_finds_nothing_new(
         github.routes[runs] = {
             'workflow_runs': [run(9, 'failure'), run(7, 'failure')]
         }
-        (root / 'checkout').rename(root / 'gone-checkout')
+        upstream = root / 'remote' / f'{REPO}.git'
+        git(upstream, 'rm', '-q', 'app.py')
+        commit(upstream, 'no more TODOs')
         gateway.trigger('scout', None, None)
         while not any('nothing new' in n for n in fake.notices):
             await asyncio.sleep(0.05)
@@ -441,8 +426,7 @@ def test_repo_claws_load(
     claw = loaded.claw('scout')
     settings = scout_repos.load_settings(claw.profile)
     assert claw.job('daily').collector == 'scout'
-    assert settings.checkouts == pathlib.Path.home() / 'src' / 'personal'
-    assert f'{OWNER}/bakery' in settings.overrides
+    assert f'{OWNER}/bakery' in settings.excludes
     for profile in sorted((harness.REPO / 'claws').glob('*/')):
         settings = json.loads((profile / 'settings.json').read_text())
         for path in settings['extensions'] + settings['prompts']:

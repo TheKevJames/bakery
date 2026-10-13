@@ -52,7 +52,7 @@ $XDG_STATE_HOME/claws/
     ├── MEMORY.md            # curated long-term memory
     ├── memory/YYYY-MM-DD.md # daily notes (kept forever)
     ├── sessions/            # gitignored: pi session transcripts
-    ├── worktrees/           # gitignored: the claw's clones of the operator's repos
+    ├── clones/              # gitignored: the claw's clones, as <owner>/<repo>
     ├── home/                # gitignored: the claw's XDG config, cache, and data
     └── tmp/                 # gitignored: its pi children's $TMPDIRs
 ```
@@ -420,8 +420,10 @@ call is blocked.
   `read`, `grep`, `find`, `ls`, `bash`, `ask_operator`, `web_search`,
   `web_fetch`, `github`, and `context7`; no `edit` or `write`.
 - `read_paths`: the only readable paths under `$HOME`, besides what pi needs
-  to run (below). Default `~/src/personal` and `$TASK_FOLDER`; baker adds
-  the claw state root. Outside `$HOME` everything is readable except
+  to run (below). Default `$TASK_FOLDER`; baker adds the claw state root.
+  The operator's checkouts are never among them (claws read repos from
+  their own clones, which reflect GitHub rather than unpushed work); the
+  bakery repo is readable only because pi runs from it. Outside `$HOME` everything is readable except
   per-user temp (`/var/folders/...`) and the claw state root, of which a claw
   reads only its own state dir and `_shared`.
 - `deny_read`: paths and globs unreadable even within `read_paths`:
@@ -453,7 +455,7 @@ Enforcement:
      preferences, and the tools pi and the claw extensions run (`pi`,
      `node`, `rg`, `fd`, `gh`, `git`, `task`, `bakery`), each through its
      link on `PATH` and the installation it resolves into (a venv's base
-     interpreter included).
+     interpreter and the source of its editable installs included).
    - Writes: `write_paths`, the claw's state dir and socket dir, its
      `$TMPDIR`, and exactly the files pi writes in its profile (`auth.json`,
      `models-store.json`, `settings.json`, and their locks); the rest of
@@ -491,12 +493,12 @@ Enforcement:
    bash shares pi's sandbox and could read pi's environment.
 3. **The policy extension** enforces `tools`, `confirm`, and `task_tag`, in
    pi's process.
-4. **Repositories and pushing.** `~/src` is read-only to claws. A claw that
-   changes a repo works in its own clone under `<state>/worktrees/`, made
-   with `git clone --reference ~/src/personal/<repo>` (objects borrowed
-   read-only from the operator's checkout) and adding `git worktree`s of it
-   as it needs (`pi/claw-rules/repos.md`, in the context of the claws with
-   bash). It commits on `kjames/bakery-*` branches, pushes over HTTPS, and
+4. **Repositories and pushing.** Claws read and change repos only in their
+   own clones, `<state>/clones/<owner>/<repo>`, cloned from GitHub, fetched
+   and checked out at `origin/HEAD` before every use, with a `git worktree`
+   per piece of work (`pi/claw-rules/repos.md`, in the context of the claws
+   with bash). That includes bakery, whose checkout pi runs from may hold
+   the operator's unmerged work. It commits on `kjames/bakery-*` branches, pushes over HTTPS, and
    opens PRs with `gh`; the operator reviews and merges. The gateway writes
    the claw's git config (`<state>/home/config/git/config`, its `GIT_CONFIG_GLOBAL`, so git never
    trips on an unreadable `~/.gitconfig`) at every start: the claws' GitHub
@@ -623,9 +625,8 @@ Finds things in the operator's repos that belong on the task list. Profile:
   repo the claws' GitHub user can reach (`GET /user/repos?affiliation=
   collaborator`): inviting it is how a repo is added, so the public
   `TheKevJames` repos with rulesets, and no private ones. `scout.toml`
-  holds per-repo overrides by name (`path`, `remote`, `exclude`); the
-  checkout defaults to `<checkouts>/<repo>` (`~/src/personal`), and a repo
-  without one gets no TODO or warning scan, noted in scout's report:
+  holds per-repo `exclude` globs by name. The collector keeps scout's own
+  bare clone of each, in scout's `clones/`:
   - **CI**: the latest completed default-branch run of each workflow failed
     (Dependabot's own update jobs excluded). Link: the first failed run of
     the current failure streak, so a fresh failure after a fix is new.
@@ -639,9 +640,7 @@ Finds things in the operator's repos that belong on the task list. Profile:
   - **Issues and PRs**: all open issues, and PRs not by bots, except those
     labelled `ready-for-human`. Link: their URL.
   - **TODO/FIXME comments** on the default branch, fetched with the read
-    token over HTTPS into `refs/bakery/scout/<branch>` (the operator's
-    checkout and its `origin` refs are untouched), minus per-repo `exclude`
-    globs. One task per comment. Link: `…/blob/<branch>/<path>?todo=<fingerprint>#L<line>`;
+    token over HTTPS into scout's clone, minus per-repo `exclude` globs. One task per comment. Link: `…/blob/<branch>/<path>?todo=<fingerprint>#L<line>`;
     the fingerprint is of the comment's text, so the line can move.
 - **Lineage, not memory**: a candidate is new unless an open task or a
   rejection (`bakery wontfix`) has its link (ignoring the `#L…` anchor).
@@ -672,12 +671,13 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
   tasks), manually
   (`bakery trigger triage queue`), and on repeat until the queue is empty.
 - Per task: claim it, check the source still exists, research (code,
-  history, issues, docs, web; no reproduction, tests, or edits), append notes
+  history in its clones, issues, docs, web; no reproduction, tests, or
+  edits), append notes
   (route and reason, source check, code locations, hypothesis, approach,
   acceptance criteria, open questions), always set `priority` and `size`,
   then re-tag and release:
-  - `bakery/build`: a TheKevJames repo checked out under
-    `~/src/personal`, clear scope, checkable by tests, lint, or CI;
+  - `bakery/build`: a TheKevJames repo the claws can push to, clear
+    scope, checkable by tests, lint, or CI;
   - `bakery/human`: needs a decision on this task, reproduction,
     credentials, outside systems, or anything uncertain;
   - `bakery/blocked`: valid and scoped, but waiting on something checkable:

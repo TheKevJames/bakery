@@ -23,17 +23,18 @@ exactly NO_REPLY.
   note) is new information and supersedes the earlier route. If it was
   blocked on another task, read that task's notes for its decision.
 - Check the source still exists: open the `link` (a GitHub issue or PR, a
-  CI run, or a file at a line) with `github`, or read the local checkout
-  under `~/src/personal/<repo>`. A fixed or removed source makes the task
+  CI run, or a file at a line) with `github`, or read the file in your
+  clone of the repository. A fixed or removed source makes the task
   obsolete.
-- Find the relevant code, history (`git log`, `git blame` in bash), and
-  related issues. Use `web_search`, `web_fetch`, and `context7` for
+- Find the relevant code, history (`git log`, `git blame` in your clone),
+  and related issues. Use `web_search`, `web_fetch`, and `context7` for
   library behavior and documentation.
 - Look for duplicates: open tasks for the same work, eg. the same
   boilerplate TODO in another repository (`task_list` with `summary~` or
   `link~` filters).
-- You may not reproduce problems, run tests, or change anything. If a task
-  needs reproduction to understand, route it to the operator.
+- You may not reproduce problems, run tests, or change anything but your
+  own clones. If a task needs reproduction to understand, route it to the
+  operator.
 
 ## 3. Record
 
@@ -82,9 +83,9 @@ Always set `priority` (`low`, `medium`, `high`) and `size` (`small`,
 Move it with `task_set(id, tag=...)`, then `task_set(id, release=true)`:
 
 - `bakery/build` when all hold: the change is in a TheKevJames repository
-  checked out under `~/src/personal`; the scope is clear and needs no
-  decision from the operator; and success can be checked by tests, lint, or
-  CI.
+  the claws can push to (`github` shows `permissions.push` on the repo);
+  the scope is clear and needs no decision from the operator; and success
+  can be checked by tests, lint, or CI.
 - `bakery/human` when it needs a decision on this task, a preference,
   reproduction, credentials, access to systems outside the repositories, or
   anything you are unsure about.

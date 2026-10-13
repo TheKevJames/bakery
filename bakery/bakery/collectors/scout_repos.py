@@ -1,6 +1,6 @@
 """
 Scout's repos: every one the claws' GitHub user can reach (inviting it adds a
-repo), with per-repo overrides from the claw's `scout.toml`.
+repo), with per-repo exclude globs from the claw's `scout.toml`.
 """
 
 import dataclasses
@@ -23,27 +23,20 @@ SETTINGS_NAME = 'scout.toml'
 @dataclasses.dataclass(frozen=True)
 class Repo:
     name: str  # owner/name
-    path: pathlib.Path
+    clone: pathlib.Path
     exclude: tuple[str, ...]
     remote: str
 
 
 @dataclasses.dataclass(frozen=True)
-class Override:
-    path: pathlib.Path | None
-    exclude: tuple[str, ...]
-    remote: str | None
-
-
-@dataclasses.dataclass(frozen=True)
 class Settings:
-    # Where local checkouts live, as <checkouts>/<repo>, unless overridden.
-    checkouts: pathlib.Path
-    # By owner/name.
-    overrides: dict[str, Override]
+    # Each repo's exclude globs, by owner/name.
+    excludes: dict[str, tuple[str, ...]]
     max_candidates: int
     opt_out_label: str
     api: str
+    # Repos are fetched from <git_url>/<owner>/<name>.git.
+    git_url: str
 
 
 def load_settings(profile: pathlib.Path) -> Settings:
@@ -56,29 +49,21 @@ def load_settings(profile: pathlib.Path) -> Settings:
     table.used.add('repo')
     if not isinstance(raw_repos, list):
         raise toml.ConfigError(f'{SETTINGS_NAME}: repo must be a table array')
-    overrides = {}
+    excludes = {}
     for i, raw in enumerate(raw_repos):
         entry = toml.Table(raw, f'{SETTINGS_NAME}.repo[{i}]')
-        overrides[entry.string('name')] = Override(
-            path=toml.expand(entry.string('path'), profile)
-            if entry.optional('path')
-            else None,
-            exclude=entry.strings('exclude')
-            if entry.optional('exclude')
-            else (),
-            remote=entry.string('remote')
-            if entry.optional('remote')
-            else None,
-        )
+        excludes[entry.string('name')] = entry.strings('exclude')
         entry.done()
     settings = Settings(
-        checkouts=toml.expand(table.string('checkouts'), profile),
-        overrides=overrides,
+        excludes=excludes,
         max_candidates=table.count('max_candidates'),
         opt_out_label=table.string('opt_out_label'),
         api=table.string('api')
         if table.optional('api')
         else 'https://api.github.com',
+        git_url=table.string('git_url')
+        if table.optional('git_url')
+        else 'https://github.com',
     )
     table.done()
     return settings
@@ -90,17 +75,19 @@ def _accessible(gh: github.GitHub) -> list[dict[str, Any]]:
     return [meta for meta in found if not meta['archived']]
 
 
-def repos(gh: github.GitHub, settings: Settings) -> list[Repo]:
+def repos(
+    gh: github.GitHub, settings: Settings, clones: pathlib.Path
+) -> list[Repo]:
+    """Every reachable repo, cloned (if at all) at <clones>/<owner>/<name>."""
     found = []
     for meta in sorted(_accessible(gh), key=operator.itemgetter('full_name')):
         name = meta['full_name']
-        override = settings.overrides.get(name, Override(None, (), None))
         found.append(
             Repo(
                 name=name,
-                path=override.path or settings.checkouts / meta['name'],
-                exclude=override.exclude,
-                remote=override.remote or f'https://github.com/{name}.git',
+                clone=clones / name,
+                exclude=settings.excludes.get(name, ()),
+                remote=f'{settings.git_url}/{name}.git',
             )
         )
     return found
@@ -117,5 +104,5 @@ def check(claw: 'config.Claw') -> list[str]:
     return [
         f'{claw.name}: {SETTINGS_NAME} overrides {name}, which the claws'
         " cannot reach; it's ignored"
-        for name in sorted(set(settings.overrides) - reachable)
+        for name in sorted(set(settings.excludes) - reachable)
     ]
