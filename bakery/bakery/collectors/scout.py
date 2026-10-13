@@ -406,10 +406,7 @@ def _gather(
 
 def collect(claw: 'config.Claw') -> base.Collection:
     settings = scout_repos.load_settings(claw.profile)
-    item = claw.secrets.get('GH_TOKEN')
-    if item is None:
-        return base.Collection(None, ('scout needs a GH_TOKEN secret',))
-    token = secrets.get(item)
+    token = secrets.get(base.GITHUB_TOKEN)
     gh = github.GitHub(settings.api, token)
     found, errors = _gather(gh, settings, token, claw.state_dir / 'clones')
     tracked = tracked_links()

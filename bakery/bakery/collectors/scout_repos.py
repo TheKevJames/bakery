@@ -13,6 +13,7 @@ from typing import Any
 from .. import github
 from .. import secrets
 from ..gateway import toml
+from . import base
 
 if TYPE_CHECKING:
     from ..gateway import config
@@ -96,7 +97,7 @@ def repos(
 def check(claw: 'config.Claw') -> list[str]:
     """Overrides for repos the claws cannot reach (eg. no longer invited)."""
     settings = load_settings(claw.profile)
-    gh = github.GitHub(settings.api, secrets.get(claw.secrets['GH_TOKEN']))
+    gh = github.GitHub(settings.api, secrets.get(base.GITHUB_TOKEN))
     try:
         reachable = {meta['full_name'] for meta in _accessible(gh)}
     except github.GitHubError as e:

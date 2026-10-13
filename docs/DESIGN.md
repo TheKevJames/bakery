@@ -316,6 +316,11 @@ which holds all of the operator's shell's secrets when the gateway is
 started from a shell. A missing secret fails the run. Secrets are handed to
 pi and its extension tools, not to bash (see [Safety](#safety)).
 
+The gateway also reads secrets of its own from the Keychain, by fixed item
+names, and never hands them to a claw: `DISCORD_BOT_TOKEN`, and
+`BAKERY_GITHUB` for collectors (`bakery/bakery/collectors/base.py`), which
+only ever make GET requests and git fetches with it.
+
 `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, and `XDG_DATA_HOME` point into the
 claw's own `home/` (in its state dir), so tools find an empty config and
 keep their caches there instead of failing on the unreadable real ones under
@@ -668,10 +673,13 @@ Finds things in the operator's repos that belong on the task list. Profile:
   TODOs; the rest wait for the next run. Repos are collected in parallel
   (8 at a time). Repos that cannot be read are reported in `#bakery` and in
   scout's report; the others still run.
-- Scout reads untrusted issue and PR text, so its `GH_TOKEN`, for the
-  collector and the model alike, is `BAKERY_GITHUB_READONLY`: a classic PAT
-  with no scopes, which reads public data and can list the repos its user
-  collaborates on, but cannot write.
+- Scout reads untrusted issue and PR text, so the model's `GH_TOKEN` is
+  `BAKERY_GITHUB_READONLY`: a classic PAT with no scopes, which reads public
+  data and can list the repos its user collaborates on, but cannot write.
+  The collector, which runs in the gateway and never acts on what it reads,
+  uses the gateway's `BAKERY_GITHUB`: GitHub refuses Actions log downloads
+  ("Must have admin rights to Repository") to a token with no scopes, even
+  on public repos and despite its docs.
 - The model (Haiku, high thinking, $2 per run, ask policy `assume`) writes
   each candidate up with `task_add` (into `bakery > triage`) and reports what
   it added.

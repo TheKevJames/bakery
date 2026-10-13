@@ -1,6 +1,11 @@
-"""What a collector returns."""
+"""What a collector returns, and what every collector shares."""
 
 import dataclasses
+
+# The Keychain item collectors read GitHub with: the gateway's, never handed
+# to a claw. Scout's model only gets a scopeless token, but GitHub refuses
+# Actions log downloads to those, even on public repos.
+GITHUB_TOKEN = 'BAKERY_GITHUB'
 
 
 @dataclasses.dataclass(frozen=True)
