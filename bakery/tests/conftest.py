@@ -1,4 +1,5 @@
 import http.server
+import logging
 import os
 import pathlib
 import shutil
@@ -10,6 +11,7 @@ from collections.abc import Iterator
 import pytest
 
 from bakery import secrets
+from testing import gateway as testing_gateway
 from testing import harness
 
 
@@ -56,6 +58,19 @@ def fixture_run_pi(
 
     yield make
     shutil.rmtree(sockets)
+
+
+@pytest.fixture(name='logs', scope='function')
+def fixture_logs() -> Iterator[testing_gateway.LogWatch]:
+    """What bakery logs, from INFO up."""
+    logger = logging.getLogger('bakery')
+    level = logger.level
+    watch = testing_gateway.LogWatch()
+    logger.addHandler(watch)
+    logger.setLevel(logging.INFO)
+    yield watch
+    logger.removeHandler(watch)
+    logger.setLevel(level)
 
 
 @pytest.fixture(name='keychain', scope='function', autouse=True)

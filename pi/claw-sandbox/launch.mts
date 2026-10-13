@@ -27,6 +27,11 @@ const FORWARDED_SIGNALS: NodeJS.Signals[] = ["SIGTERM", "SIGINT", "SIGHUP"];
 // macOS reports seatbelt denials through its log stream, shortly after the
 // operation fails.
 const VIOLATION_GRACE_MS = 100;
+// sandbox-runtime's proxy leaves a CONNECT tunnel half-open when the command
+// abandons a request mid-flight, and reset() then waits on it until the
+// upstream next sends or closes (for a model, possibly minutes). The command
+// has exited by then, and process.exit tears the tunnel down anyway.
+const RESET_TIMEOUT_MS = 1000;
 
 function required(name: string): string {
   const value = process.env[name];
@@ -103,7 +108,7 @@ async function main(argv: string[]): Promise<number> {
     return code;
   } finally {
     unsubscribe();
-    await SandboxManager.reset();
+    await Promise.race([SandboxManager.reset(), sleep(RESET_TIMEOUT_MS)]);
     fs.rmSync(tmpdir, { recursive: true, force: true });
   }
 }

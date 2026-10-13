@@ -1,8 +1,7 @@
 import asyncio
 import pathlib
 import sqlite3
-import time
-from collections.abc import Mapping
+import threading
 
 import pytest
 
@@ -13,12 +12,11 @@ from bakery.gateway import ledger
 from testing import gateway as testing_gateway
 from testing import harness
 
-Reply = harness.Reply
 
-
-async def ctl(record: Mapping[str, object]) -> object:
-    """A control request, as the CLI sends it."""
-    return await asyncio.to_thread(control.send, record)
+def active_keys(claw_status: dict[str, object]) -> list[object]:
+    active = claw_status['active']
+    assert isinstance(active, list)
+    return [run['work_key'] for run in active]
 
 
 def test_run_settles_then_resumes_same_session(
@@ -30,27 +28,29 @@ def test_run_settles_then_resumes_same_session(
     )  # fmt: skip
     fake = testing_gateway.FakeChannel()
     fake_llm.queue(
-        Reply(tool='bash', args={'command': 'echo hi'}, prompt_tokens=2),
-        Reply(text='swept', prompt_tokens=1),
+        harness.Reply(
+            tool='bash', args={'command': 'echo hi'}, prompt_tokens=2
+        ),
+        harness.Reply(text='swept', prompt_tokens=1),
     )
 
     async def scenario(gateway: core.Gateway) -> None:
-        data = await ctl({'type': 'trigger', 'claw': 'scout'})
+        data = await testing_gateway.ctl({'type': 'trigger', 'claw': 'scout'})
         assert isinstance(data, dict)
         key = data['work_key']
         first = await fake.wait(key)
         assert (first.status, first.final_text) == ('settled', 'swept')
         assert (first.turns, first.cost_usd) == (2, 3.0)
 
-        await ctl({'type': 'resume', 'target': key})
+        await testing_gateway.ctl({'type': 'resume', 'target': key})
         second = await fake.wait(key)
         assert second.status == 'settled'
         assert 'swept' in fake_llm.transcript()
 
-        budget = await ctl({'type': 'budget'})
+        budget = await testing_gateway.ctl({'type': 'budget'})
         assert isinstance(budget, dict)
         assert budget['claws']['scout']['spent_usd'] == 3.0
-        status = await ctl({'type': 'status'})
+        status = await testing_gateway.ctl({'type': 'status'})
         assert isinstance(status, dict)
         assert 'daily' in status['claws']['scout']['next']
         assert gateway.runs.last_claw(key) == 'scout'
@@ -64,15 +64,23 @@ def test_run_settles_then_resumes_same_session(
     [
         (
             'cost_usd = 2.0',
-            [Reply(tool='bash', args={'command': 'true'}, prompt_tokens=3)],
+            [
+                harness.Reply(
+                    tool='bash', args={'command': 'true'}, prompt_tokens=3
+                )
+            ],
             'cost limit reached ($2.00)',
         ),
         (
             'turns = 2',
-            [Reply(tool='bash', args={'command': 'true'})] * 5,
+            [harness.Reply(tool='bash', args={'command': 'true'})] * 5,
             'turn limit reached (2)',
         ),
-        ('minutes = 0.01', [Reply(delay=5)], 'time limit reached (0.01m)'),
+        (
+            'minutes = 0.01',
+            [harness.Reply(hold=threading.Event())],
+            'time limit reached (0.01m)',
+        ),
     ],
 )
 def test_limits_park_runs(
@@ -103,7 +111,7 @@ def test_daily_budget_parks_without_calling_the_model(
         root, {'scout': '[limits]\ndaily_cost_usd = 2.0\n'}
     )
     fake = testing_gateway.FakeChannel()
-    fake_llm.queue(Reply(prompt_tokens=3))
+    fake_llm.queue(harness.Reply(prompt_tokens=3))
 
     async def scenario(gateway: core.Gateway) -> None:
         first = await fake.wait(gateway.trigger('scout', None, 'one'))
@@ -135,7 +143,9 @@ def test_dialogs_go_to_the_channel_off_the_clock(
         return {'confirmed': True}
 
     fake = testing_gateway.FakeChannel(dialogs=slow_yes)
-    fake_llm.queue(Reply(tool='bash', args={'command': 'echo approved'}))
+    fake_llm.queue(
+        harness.Reply(tool='bash', args={'command': 'echo approved'})
+    )
 
     async def scenario(gateway: core.Gateway) -> None:
         run = await fake.wait(gateway.trigger('build', None, 'go'))
@@ -153,7 +163,7 @@ def test_extension_errors_fail_the_run(
         root, {'scout': ''}, extensions={'scout': ['faulty.ts']}
     )
     fake = testing_gateway.FakeChannel()
-    fake_llm.queue(Reply(tool='bash', args={'command': 'true'}))
+    fake_llm.queue(harness.Reply(tool='bash', args={'command': 'true'}))
 
     async def scenario(gateway: core.Gateway) -> None:
         run = await fake.wait(gateway.trigger('scout', None, 'go'))
@@ -170,30 +180,40 @@ def test_slots_pause_and_shutdown(
         root, {'a': '', 'b': ''}, gateway={'max_processes': 1}
     )
     fake = testing_gateway.FakeChannel()
-    fake_llm.queue(Reply(delay=1), Reply(), Reply(delay=30))
+    release = threading.Event()
+    fake_llm.queue(
+        harness.Reply(hold=release),
+        harness.Reply(),
+        harness.Reply(),
+        harness.Reply(hold=threading.Event()),
+    )
 
     async def scenario(gateway: core.Gateway) -> None:
         first = gateway.trigger('a', None, 'first')
         second = gateway.trigger('b', None, 'second')
-        await asyncio.sleep(0.3)
-        assert list(gateway.active) == [first]  # one process for everyone
-        assert [r.work_key for r in gateway.queue] == [second]
+        await asyncio.to_thread(fake_llm.wait_requests, 1)
+        a = await testing_gateway.claw_status('a')
+        b = await testing_gateway.claw_status('b')
+        # One process for everyone: b's run waits for a's.
+        assert active_keys(a) == [first]
+        assert (b['active'], b['queued']) == ([], [second])
+        release.set()
         assert (await fake.wait(first)).status == 'settled'
         assert (await fake.wait(second)).status == 'settled'
 
-        await ctl({'type': 'pause', 'target': 'a'})
+        await testing_gateway.ctl({'type': 'pause', 'target': 'a'})
         held = gateway.trigger('a', None, 'held')
-        await asyncio.sleep(0.3)
-        assert not gateway.active
-        await ctl({'type': 'resume', 'target': 'a'})
-        while not gateway.active:
-            await asyncio.sleep(0.05)
-        # The third reply hangs; stopping the gateway interrupts it.
-        assert held in gateway.active
+        # Queued after the held run, so it only goes first if a is paused.
+        after = gateway.trigger('b', None, 'after')
+        assert (await fake.wait(after)).status == 'settled'
+        a = await testing_gateway.claw_status('a')
+        assert (a['active'], a['queued']) == ([], [held])
+        await testing_gateway.ctl({'type': 'resume', 'target': 'a'})
+        await asyncio.to_thread(fake_llm.wait_requests, 4)
+        # Its reply hangs; stopping the gateway interrupts it.
+        assert active_keys(await testing_gateway.claw_status('a')) == [held]
 
-    started = time.monotonic()
     testing_gateway.run_gateway(claws, fake, scenario)
-    assert time.monotonic() - started < 20
     assert fake.finished[-1].status == 'interrupted'
 
 
@@ -202,13 +222,14 @@ def test_pause_abort_parks_in_flight_runs(
 ) -> None:
     claws = testing_gateway.make_claws(root, {'a': ''})
     fake = testing_gateway.FakeChannel()
-    fake_llm.queue(Reply(delay=30))
+    fake_llm.queue(harness.Reply(hold=threading.Event()))
 
     async def scenario(gateway: core.Gateway) -> None:
         key = gateway.trigger('a', None, 'slow')
-        while key not in fake.started:
-            await asyncio.sleep(0.05)
-        await ctl({'type': 'pause', 'target': 'all', 'abort': True})
+        await asyncio.to_thread(fake_llm.wait_requests, 1)  # in flight
+        await testing_gateway.ctl(
+            {'type': 'pause', 'target': 'all', 'abort': True}
+        )
         run = await fake.wait(key)
         assert (run.status, run.reason) == ('parked', 'paused')
 
@@ -223,7 +244,10 @@ def test_silent_jobs_report_no_text(
                'prompt = "check"\nsilent_ok = true\n'}
     )  # fmt: skip
     fake = testing_gateway.FakeChannel()
-    fake_llm.queue(Reply(text='NO_REPLY'), Reply(text='something happened'))
+    fake_llm.queue(
+        harness.Reply(text='NO_REPLY'),
+        harness.Reply(text='something happened'),
+    )
 
     async def scenario(gateway: core.Gateway) -> None:
         quiet = await fake.wait(gateway.trigger('a', 'beat', None))
@@ -246,13 +270,14 @@ def test_control_rejects_bad_requests_and_configs(root: pathlib.Path) -> None:
             ({'type': 'bogus'}, 'unknown request: bogus'),
         ):
             with pytest.raises(control.ControlError, match=error):
-                await ctl(record)
+                await testing_gateway.ctl(record)
 
+        loaded = gateway.config
         claw_toml = claws / 'a' / 'claw.toml'
         claw_toml.write_text(claw_toml.read_text() + '[limits]\nturns = 0\n')
         with pytest.raises(control.ControlError, match='turns: must be'):
-            await ctl({'type': 'reload'})
-        assert gateway.config.claw('a').limits.turns == 50
+            await testing_gateway.ctl({'type': 'reload'})
+        assert gateway.config == loaded
 
     testing_gateway.run_gateway(claws, fake, scenario)
 
@@ -283,8 +308,10 @@ def test_secrets_reach_pi_but_not_bash(
     monkeypatch.setenv('BAKERY_TEST_MISSING', 'env-value')
     fake = testing_gateway.FakeChannel()
     fake_llm.queue(
-        Reply(tool='env_of', args={'name': 'GRANTED'}),
-        Reply(tool='bash', args={'command': 'env; git config user.name'}),
+        harness.Reply(tool='env_of', args={'name': 'GRANTED'}),
+        harness.Reply(
+            tool='bash', args={'command': 'env; git config user.name'}
+        ),
     )
 
     async def scenario(gateway: core.Gateway) -> None:

@@ -6,7 +6,6 @@ import http.server
 import io
 import json
 import threading
-import time
 import zipfile
 from collections.abc import Generator
 
@@ -26,8 +25,10 @@ class FakeGitHub:
     requests: list[tuple[str, str | None]] = dataclasses.field(
         default_factory=list
     )
-    # Seconds each response takes, to keep a collection in progress.
-    delay: float = 0.0
+    # Responses wait while this is clear, to keep a collection in progress.
+    released: threading.Event = dataclasses.field(
+        default_factory=threading.Event
+    )
 
 
 def logs_zip(files: dict[str, str]) -> bytes:
@@ -41,7 +42,7 @@ def logs_zip(files: dict[str, str]) -> bytes:
 def _handler(fake: FakeGitHub) -> type:
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self) -> None:
-            time.sleep(fake.delay)
+            fake.released.wait()
             auth = self.headers.get('Authorization')
             fake.requests.append((self.path, auth))
             required = fake.authorized.get(self.path)
@@ -80,6 +81,7 @@ def _handler(fake: FakeGitHub) -> type:
 @contextlib.contextmanager
 def serve() -> Generator[FakeGitHub]:
     fake = FakeGitHub()
+    fake.released.set()
     server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), _handler(fake))
     fake.url = f'http://127.0.0.1:{server.server_port}'
     thread = threading.Thread(
@@ -89,4 +91,5 @@ def serve() -> Generator[FakeGitHub]:
     try:
         yield fake
     finally:
+        fake.released.set()
         server.shutdown()

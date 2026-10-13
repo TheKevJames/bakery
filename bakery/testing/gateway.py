@@ -4,11 +4,14 @@ import asyncio
 import collections
 import dataclasses
 import json
+import logging
 import pathlib
 import re
 import textwrap
+import threading
 from collections.abc import Awaitable
 from collections.abc import Callable
+from collections.abc import Mapping
 
 from bakery.chat import relay
 from bakery.gateway import channel
@@ -37,8 +40,6 @@ class FakeChannel:
     """Records what the gateway reports; `dialogs` answers dialogs."""
 
     dialogs: Dialog = _deny
-    started: list[str] = dataclasses.field(default_factory=list)
-    progress: list[channel.RunInfo] = dataclasses.field(default_factory=list)
     finished: list[channel.RunInfo] = dataclasses.field(default_factory=list)
     asked: list[dict[str, object]] = dataclasses.field(default_factory=list)
     notices: list[str] = dataclasses.field(default_factory=list)
@@ -47,19 +48,22 @@ class FakeChannel:
             default_factory=lambda: collections.defaultdict(asyncio.Queue)
         )
     )
+    _changed: asyncio.Event = dataclasses.field(default_factory=asyncio.Event)
 
     async def notice(self, text: str) -> None:
         self.notices.append(text)
+        self._changed.set()
 
     async def run_started(self, info: channel.RunInfo) -> None:
-        self.started.append(info.work_key)
+        del info
 
     async def run_progress(self, info: channel.RunInfo) -> None:
-        self.progress.append(dataclasses.replace(info))
+        del info
 
     async def run_finished(self, info: channel.RunInfo) -> None:
         self.finished.append(info)
         self._done[info.work_key].put_nowait(info)
+        self._changed.set()
 
     async def dialog(
         self, info: channel.RunInfo, request: dict[str, object]
@@ -70,6 +74,50 @@ class FakeChannel:
     async def wait(self, work_key: str) -> channel.RunInfo:
         """The next finished run of `work_key`."""
         return await asyncio.wait_for(self._done[work_key].get(), RUN_TIMEOUT)
+
+    async def until(self, predicate: Callable[[], object]) -> None:
+        """Wait until `predicate()` is truthy after something is reported."""
+        async with asyncio.timeout(RUN_TIMEOUT):
+            while not predicate():
+                self._changed.clear()
+                await self._changed.wait()
+
+
+class LogWatch(logging.Handler):
+    """Collects log messages, to wait on what only gateway.log shows."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.messages: list[str] = []
+        self._logged = threading.Condition()
+
+    def emit(self, record: logging.LogRecord) -> None:
+        with self._logged:
+            self.messages.append(record.getMessage())
+            self._logged.notify_all()
+
+    def wait_for(self, text: str) -> None:
+        """Block until a message containing `text` is logged."""
+        with self._logged:
+            logged = self._logged.wait_for(
+                lambda: any(text in m for m in self.messages), RUN_TIMEOUT
+            )
+        assert logged, text
+
+
+async def ctl(record: Mapping[str, object]) -> object:
+    """A control request, as the CLI sends it."""
+    return await asyncio.to_thread(control.send, record)
+
+
+async def claw_status(claw: str) -> dict[str, object]:
+    """`claw`'s entry in the control socket's status."""
+    status = await ctl({'type': 'status'})
+    assert isinstance(status, dict)
+    claws = status['claws']
+    assert isinstance(claws, dict)
+    entry: dict[str, object] = claws[claw]
+    return entry
 
 
 def make_claws(

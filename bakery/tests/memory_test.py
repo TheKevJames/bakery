@@ -1,13 +1,12 @@
 import datetime
 import pathlib
-import subprocess
 
 from bakery.gateway import core
+from testing import commands
 from testing import gateway as testing_gateway
 from testing import harness
 from testing import tasks as testing_tasks
 
-Reply = harness.Reply
 MEMORY = 'pi/claw-extensions/memory'
 DREAM = """
 [[job]]
@@ -16,10 +15,6 @@ cron = "0 3 * * *"
 prompt = "/dream"
 silent_ok = true
 """
-
-
-def call(tool: str, **args: object) -> harness.Reply:
-    return Reply(tool=tool, args=args)
 
 
 def state_dir(root: pathlib.Path, claw: str = 'a') -> pathlib.Path:
@@ -32,12 +27,7 @@ def today_note(root: pathlib.Path) -> pathlib.Path:
 
 
 def git_log(root: pathlib.Path) -> str:
-    return subprocess.run(
-        ('git', '-C', str(root / 'state' / 'claws'), 'log', '--format=%s'),
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
+    return commands.git(root / 'state' / 'claws', 'log', '--format=%s')
 
 
 def test_memory_append_records_sources(
@@ -48,9 +38,13 @@ def test_memory_append_records_sources(
     )
     fake = testing_gateway.FakeChannel()
     fake_llm.queue(
-        call('memory_append', text='Operator prefers tabs', source='operator'),
-        call('memory_append', text='Issue says use spaces', source='external'),
-        Reply(text='done'),
+        harness.call(
+            'memory_append', text='Operator prefers tabs', source='operator'
+        ),
+        harness.call(
+            'memory_append', text='Issue says use spaces', source='external'
+        ),
+        harness.Reply(text='done'),
     )
 
     async def scenario(gateway: core.Gateway) -> None:
@@ -68,17 +62,21 @@ def test_dream_job_curates_memory_and_keeps_its_settings_on_resume(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     claws = testing_gateway.make_claws(
-        root, {'a': DREAM}, extensions={'a': [MEMORY]}
+        root,
+        {'a': DREAM, 'b': ''},
+        extensions={'a': [MEMORY]},
+        gateway={'max_processes': 1},
     )
     fake = testing_gateway.FakeChannel()
     fake_llm.queue(
-        call('memory_edit', content='# Memory\n\n- likes tabs\n'),
-        Reply(text='NO_REPLY'),
-        call(
+        harness.call('memory_edit', content='# Memory\n\n- likes tabs\n'),
+        harness.Reply(text='NO_REPLY'),
+        harness.Reply(text='b done'),
+        harness.call(
             'memory_edit',
             edits=[{'oldText': 'likes tabs', 'newText': 'likes tabs (v2)'}],
         ),
-        Reply(text='updated'),
+        harness.Reply(text='updated'),
     )
 
     async def scenario(gateway: core.Gateway) -> None:
@@ -87,8 +85,10 @@ def test_dream_job_curates_memory_and_keeps_its_settings_on_resume(
         assert quiet.status == 'settled', quiet.reason
         assert quiet.final_text is None
         assert 'time to consolidate your memory' in fake_llm.transcript()
-        # A fresh child must still get the job's settings.
-        assert gateway.pool.evict_idle()
+        # A fresh child must still get the job's settings: b's run, with
+        # room for one child, evicts a's.
+        other = await fake.wait(gateway.trigger('b', None, 'go'))
+        assert other.final_text == 'b done'
         gateway.message('a', key, 'one more thing')
         loud = await fake.wait(key)
         assert loud.final_text == 'updated'
@@ -109,9 +109,9 @@ def test_flush_before_compaction(
     )
     fake = testing_gateway.FakeChannel()
     fake_llm.queue(
-        Reply(text='the answer'),
-        call('memory_append', text='flushed fact', source='self'),
-        Reply(text='NO_REPLY'),
+        harness.Reply(text='the answer'),
+        harness.call('memory_append', text='flushed fact', source='self'),
+        harness.Reply(text='NO_REPLY'),
     )
 
     async def scenario(gateway: core.Gateway) -> None:
@@ -135,14 +135,16 @@ def test_operator_updates_are_filed_for_the_operator(
         {'oldText': '## Preferences\n', 'newText': '## Preferences\n- tabs\n'}
     ]
     fake_llm.queue(
-        call('propose_operator_update', edits=edit, reason='said so'),
-        call('propose_operator_update', edits=edit, reason='said so again'),
-        call(
+        harness.call('propose_operator_update', edits=edit, reason='said so'),
+        harness.call(
+            'propose_operator_update', edits=edit, reason='said so again'
+        ),
+        harness.call(
             'propose_operator_update',
             edits=[{'oldText': 'x', 'newText': 'y'}],
             reason='r',
         ),
-        Reply(text='done'),
+        harness.Reply(text='done'),
     )
     fake = testing_gateway.FakeChannel()
 
@@ -155,12 +157,7 @@ def test_operator_updates_are_filed_for_the_operator(
     assert 'Filed as task #bakery:1' in results[0]
     assert 'Already proposed as task #bakery:1' in results[1]
     assert 'text not found' in results[2]
-    shown = subprocess.run(
-        ('task', 'bakery:1', 'show'),
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
+    shown = testing_tasks.task('bakery:1', 'show')
     assert 'bakery > human' in shown
     assert '+ - tabs' in shown
     assert 'said so' in shown
@@ -184,9 +181,9 @@ def test_compaction_counts_towards_the_run_cost(
     )
     fake = testing_gateway.FakeChannel()
     fake_llm.queue(
-        Reply(tool='bash', args={'command': 'true'}, prompt_tokens=20),
-        Reply(text='the summary', prompt_tokens=7),
-        Reply(text='done'),
+        harness.Reply(tool='bash', args={'command': 'true'}, prompt_tokens=20),
+        harness.Reply(text='the summary', prompt_tokens=7),
+        harness.Reply(text='done'),
     )
 
     async def scenario(gateway: core.Gateway) -> None:

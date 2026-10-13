@@ -816,6 +816,14 @@ memory flush runs on its unit's model. The gateway runs whatever `pi` is on
   every request so tests can assert on the exact system prompt and
   transcript. The Discord adapter sits behind an interface with a fake
   implementation.
+- Tests wait on events, never on time: a model call in flight is a held
+  reply (released by the test, or ended by pi hanging up), and "X did not
+  happen" is shown by waiting for a later event that X would have preceded.
+  Tests observe the gateway from outside (control `status`, channel events,
+  the ledger, logs), not its in-memory state.
+- Hermetic: no real network, credentials, or Keychain items.
+- The suite runs in parallel (pytest-xdist; `-n0` for serial) with a 30s
+  per-test timeout, so tests share no state beyond their own temp dirs.
 - One manual end-to-end smoke test against real pi on a cheap model.
 
 ## Delivery plan
