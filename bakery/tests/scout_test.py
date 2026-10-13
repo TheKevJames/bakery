@@ -18,6 +18,7 @@ from bakery.gateway import core
 from testing import fake_github
 from testing import gateway as testing_gateway
 from testing import harness
+from testing import tasks as testing_tasks
 
 Reply = harness.Reply
 OWNER = 'TheKevJames'
@@ -174,7 +175,7 @@ def fixture_github(
 ) -> Iterator[fake_github.FakeGitHub]:
     keychain['BAKERY_TEST_GH'] = TOKEN
     monkeypatch.setenv('TASK_FOLDER', str(root / 'tasks'))
-    (root / 'tasks').mkdir()
+    testing_tasks.create(root / 'tasks')
     initial = git(make_upstream(root), 'rev-parse', 'HEAD~').strip()
     with fake_github.serve() as fake:
         serve_repo(fake, initial)
@@ -223,11 +224,29 @@ def test_collects_new_candidates_in_priority_order(
     task('add', 'old', '--link', f'{blob}?todo={fixme}#L99')
     # Rejections stay tracked once done; other done tasks free their link.
     issues = f'https://github.com/{REPO}/issues'
-    task('add', 'no', '--tag', 'bakery/wontfix', '--link', f'{issues}/5')
-    task('add', 'fixed', '--tag', 'bakery/build', '--link', f'{issues}/1')
-    wontfix.add(2, 'not ours')
-    task('2', 'done')
-    task('3', 'done')
+    task(
+        'add',
+        'no',
+        '-n',
+        'bakery',
+        '--tag',
+        'wontfix',
+        '--link',
+        f'{issues}/5',
+    )
+    task(
+        'add',
+        'fixed',
+        '-n',
+        'bakery',
+        '--tag',
+        'build',
+        '--link',
+        f'{issues}/1',
+    )
+    wontfix.add('bakery:1', 'not ours')
+    task('bakery:1', 'done')
+    task('bakery:2', 'done')
     collection = scout.collect(claw)
 
     warning = scout.fingerprint('DeprecationWarning: old api')
@@ -334,11 +353,12 @@ def test_scout_adds_tasks_then_finds_nothing_new(
 
     testing_gateway.run_gateway(claws, fake, scenario)
     [added] = json.loads(task('list', '--json'))
-    assert (added['summary'], added['link'], added['tag']) == (
-        'Fix CI',
-        ci_link,
-        'bakery/triage',
-    )
+    assert (
+        added['summary'],
+        added['link'],
+        added['namespace'],
+        added['tag'],
+    ) == ('Fix CI', ci_link, 'bakery', 'triage')
     assert len(fake_llm.requests) == 2
 
 
@@ -348,24 +368,31 @@ def test_task_claims_and_adds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv('TASK_FOLDER', str(root / 'tasks'))
-    (root / 'tasks').mkdir()
-    task('add', 'mine', '--tag', 'bakery/triage')
-    task('add', 'theirs', '--tag', 'bakery/triage', '--owner', 'operator')
+    testing_tasks.create(root / 'tasks')
+    task('add', 'mine', '-n', 'bakery', '--tag', 'triage')
+    task(
+        'add',
+        'theirs',
+        '-n',
+        'bakery',
+        '--tag',
+        'triage',
+        '--owner',
+        'operator',
+    )
+    task('add', "the operator's")
     claws = testing_gateway.make_claws(
         root,
         {
             'triage': """
                 [tasks]
-                tag = "bakery/human"
+                tag = "human"
             """
         },
         extensions={'triage': ['pi/claw-extensions/task.ts']},
     )
     fake_llm.queue(
-        Reply(
-            tool='task_set',
-            args={'id': 1, 'claim': True, 'tag': 'bakery/build'},
-        ),
+        Reply(tool='task_set', args={'id': 1, 'claim': True, 'tag': 'build'}),
         Reply(tool='task_set', args={'id': 2, 'claim': True}),
         Reply(tool='task_set', args={'id': 2, 'release': True}),
         Reply(
@@ -382,6 +409,9 @@ def test_task_claims_and_adds(
                 'size': 'small',
             },
         ),
+        # The sandbox lets claws read every namespace, but write only theirs.
+        Reply(tool='bash', args={'command': 'task list -f namespace=default'}),
+        Reply(tool='bash', args={'command': 'task 1 set --summary mine'}),
         Reply(text='done'),
     )
     fake = testing_gateway.FakeChannel()
@@ -395,15 +425,20 @@ def test_task_claims_and_adds(
     assert '"owner": "triage"' in results[0]
     assert 'owned by operator' in results[1]
     assert 'not claimed by triage' in results[2]
-    final = json.loads(task('show', '1', '--json'))
+    assert "1: the operator's" in results[5]
+    assert 'attempt to write a readonly database' in results[6]
+    assert (
+        json.loads(task('show', '1', '--json'))['summary'] == "the operator's"
+    )
+    final = json.loads(task('show', 'bakery:1', '--json'))
     assert (final['owner'], final['tag'], final['description']) == (
         None,
-        'bakery/build',
+        'build',
         'n',
     )
-    added = json.loads(task('show', '3', '--json'))
+    added = json.loads(task('show', 'bakery:3', '--json'))
     assert (added['tag'], added['priority'], added['size']) == (
-        'bakery/human',
+        'human',
         'high',
         'small',
     )
@@ -430,5 +465,5 @@ def test_repo_claws_load(
     assert (queue.collector, queue.repeat) == ('triage', True)
     baker = loaded.claw('baker')
     assert baker.job('review').collector == 'baker'
-    assert baker.tasks.tag == 'bakery/human'
+    assert baker.tasks.tag == 'human'
     assert state.root() in baker.policy.read_paths

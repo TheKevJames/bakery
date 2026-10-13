@@ -14,6 +14,7 @@ from bakery.collectors import wontfix
 from bakery.gateway import config
 from bakery.gateway import ledger
 from testing import gateway as testing_gateway
+from testing import tasks as testing_tasks
 
 REVIEW = """
 [[job]]
@@ -94,7 +95,7 @@ def fixture_world(
     root: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> config.Claw:
     monkeypatch.setenv('TASK_FOLDER', str(root / 'tasks'))
-    (root / 'tasks').mkdir()
+    testing_tasks.create(root / 'tasks')
     claws = testing_gateway.make_claws(root, {'baker': REVIEW, 'scout': ''})
     base = state.root()
     scout = base / 'scout'
@@ -181,17 +182,17 @@ def test_digest_covers_activity_since_the_last_review(
         )
     )
     for tag, slug, summary in (
-        ('bakery/wontfix', 'x', 'Never this'),
-        ('bakery/human', 'y', 'Fixed'),
-        ('bakery/human', 'z', 'Still open'),
+        ('wontfix', 'x', 'Never this'),
+        ('human', 'y', 'Fixed'),
+        ('human', 'z', 'Still open'),
     ):
         subprocess.run(
-            ('task', 'add', '--tag', tag, '--link', f'baker:plumbing/{slug}',
-             '--', summary),
+            ('task', 'add', '-n', 'bakery', '--tag', tag,
+             '--link', f'baker:plumbing/{slug}', '--', summary),
             check=True,
         )  # fmt: skip
-    wontfix.add(1, 'not a gap')
-    for ident in ('1', '2'):
+    wontfix.add('bakery:1', 'not a gap')
+    for ident in ('bakery:1', 'bakery:2'):
         subprocess.run(('task', ident, 'done'), check=True)
 
     text = baker.collect(world).text
@@ -228,7 +229,9 @@ def test_digest_covers_activity_since_the_last_review(
     assert '- [rejected] Never this (baker:plumbing/x)' in text
     assert 'wontfix: add baker:plumbing/x' in text
     assert 'baker:plumbing/y' not in text
-    assert '[bakery/human] None/None Still open (baker:plumbing/z)' in text
+    assert (
+        '- #bakery:3 [human] None/None Still open (baker:plumbing/z)' in text
+    )
     assert 'ERROR bakery.gateway.core: committing state after' in text
     assert 'old trouble' not in text
 

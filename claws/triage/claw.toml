@@ -1,7 +1,7 @@
-# triage: researches each task in `bakery/triage` (scout's, and those the
-# operator hands over), records its priority, size, and notes, and routes it to
-# bakery/build, bakery/human, bakery/blocked, or bakery/wontfix; then sends
-# blocked tasks back to bakery/triage once what they wait on clears.
+# triage: researches each task tagged `triage` in the claws' namespace
+# (scout's, and those the operator hands over), records its priority, size,
+# and notes, and routes it to build, human, blocked, or wontfix; then sends
+# blocked tasks back to triage once what they wait on clears.
 # Research only: no reproduction, no edits.
 
 model = "anthropic/claude-sonnet-5-5"
@@ -26,7 +26,7 @@ watch = "${TASK_FOLDER}"
 debounce_seconds = 120
 
 # Blocked tasks whose blocking tasks have all cleared (eg. the operator
-# answered one in bakery/human and it was re-triaged), back to bakery/triage. Runs only when
+# answered one in human and it was re-triaged), back to triage. Runs only when
 # there are some, so it watches the task list too.
 [[job]]
 name = "unblock"

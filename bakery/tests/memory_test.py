@@ -5,6 +5,7 @@ import subprocess
 from bakery.gateway import core
 from testing import gateway as testing_gateway
 from testing import harness
+from testing import tasks as testing_tasks
 
 Reply = harness.Reply
 MEMORY = 'pi/claw-extensions/memory'
@@ -126,7 +127,7 @@ def test_flush_before_compaction(
 def test_operator_updates_are_filed_for_the_operator(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
-    (root / 'tasks').mkdir()
+    testing_tasks.create(root / 'tasks')
     claws = testing_gateway.make_claws(
         root, {'a': ''}, extensions={'a': [MEMORY]}
     )
@@ -151,11 +152,14 @@ def test_operator_updates_are_filed_for_the_operator(
 
     testing_gateway.run_gateway(claws, fake, scenario)
     results = fake_llm.tool_results()
-    assert 'Filed as task #1' in results[0]
-    assert 'Already proposed as task #1' in results[1]
+    assert 'Filed as task #bakery:1' in results[0]
+    assert 'Already proposed as task #bakery:1' in results[1]
     assert 'text not found' in results[2]
     shown = subprocess.run(
-        ('task', '1', 'show'), capture_output=True, text=True, check=True
+        ('task', 'bakery:1', 'show'),
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout
     assert 'bakery > human' in shown
     assert '+ - tabs' in shown

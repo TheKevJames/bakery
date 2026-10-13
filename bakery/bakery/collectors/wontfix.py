@@ -48,16 +48,16 @@ def _save(rejections: dict[str, Rejection], message: str) -> None:
     state.commit(message)
 
 
-def add(ident: int, reason: str) -> str:
-    """Reject task `ident`'s lineage; returns the lineage."""
+def add(address: str, reason: str) -> str:
+    """Reject the lineage of task `[namespace:]id`; returns the lineage."""
     if not reason.strip():
         raise WontfixError('the reason is empty')
     try:
-        task = tasks.shown(ident)
+        task = tasks.shown(address)
     except tasks.TaskError as e:
         raise WontfixError(str(e)) from e
     if not task['link']:
-        raise WontfixError(f'task {ident} has no link')
+        raise WontfixError(f'task {address} has no link')
     link = tasks.lineage(str(task['link']))
     rejections = load()
     if link in rejections:
@@ -79,7 +79,7 @@ def do_add(args: argparse.Namespace) -> int:
     try:
         print(f'rejected {add(args.id, args.reason)}')
     except WontfixError as e:
-        sys.exit(f'cannot reject #{args.id}: {e}')
+        sys.exit(f'cannot reject {args.id}: {e}')
     return 0
 
 
@@ -104,7 +104,9 @@ def add_parsers(add_parser: Callable[..., argparse.ArgumentParser]) -> None:
         'wontfix', help='links scout and baker never file again'
     ).add_subparsers(dest='wontfix_command')
     add_ = sub.add_parser('add', help="reject a task's link; keeps the task")
-    add_.add_argument('id', type=int, help='task id')
+    add_.add_argument(
+        'id', help='task id, as `task` takes it: `[namespace:]id`'
+    )
     add_.add_argument('--reason', required=True, help='why, in one line')
     add_.set_defaults(func=do_add)
     rm = sub.add_parser('rm', help='file a rejected link again')

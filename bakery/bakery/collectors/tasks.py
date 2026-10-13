@@ -4,14 +4,15 @@ import json
 import re
 import subprocess
 
-TAG_RE = re.compile(r'[a-z0-9][a-z0-9_.-]*(/[a-z0-9][a-z0-9_.-]*)*')
-# Claws only change tasks tagged under this section; the rest are the
-# operator's.
+TAG_RE = re.compile(r'[a-z0-9][a-z0-9_.-]*')
+# The claws' namespace of the task list: the sandbox lets them write only its
+# directory, so every other task is the operator's.
 NAMESPACE = 'bakery'
 
 
-def in_namespace(tag: str) -> bool:
-    return tag.startswith(f'{NAMESPACE}/')
+def ref(task: dict[str, object]) -> str:
+    """A listed task's address, `<namespace>:<id>`."""
+    return f'{task["namespace"]}:{task["id"]}'
 
 
 class TaskError(Exception):
@@ -29,10 +30,13 @@ def listed(*args: str) -> list[dict[str, object]]:
     return tasks
 
 
-def shown(ident: int) -> dict[str, object]:
-    """One task; TaskError, with `task`'s message, if it cannot be shown."""
+def shown(address: str) -> dict[str, object]:
+    """
+    One task, by `[namespace:]id` (a bare id is in `default`); TaskError, with
+    `task`'s message, if it cannot be shown.
+    """
     result = subprocess.run(
-        ('task', 'show', str(ident), '--json'),
+        ('task', 'show', address, '--json'),
         capture_output=True,
         text=True,
         check=False,

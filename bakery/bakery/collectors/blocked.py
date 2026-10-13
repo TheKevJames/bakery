@@ -1,11 +1,12 @@
 """
-Blockers: what a `bakery/blocked` task waits on.
+Blockers: what a `blocked` task, in the claws' namespace, waits on.
 
-Triage ends a blocked task's notes with a list, one blocker per line:
+Triage ends a blocked task's notes with a list, one blocker per line, naming
+tasks by `<namespace>:<id>`:
 
     **Blocked on:**
-    - #184 decided
-    - #14 done
+    - #bakery:184 decided
+    - #default:14 done
     - https://github.com/beancount/beangulp/issues/4: closed with total price
 
 Only the description's last such list counts, so later notes supersede it.
@@ -23,15 +24,18 @@ from typing import Literal
 
 from . import tasks
 
-TAG = 'bakery/blocked'
+TAG = 'blocked'
 DONE = 'done'
-# A task still here has not been decided, so `#B decided` waits on it.
+# A claws' task still here has not been decided, so `#B decided` waits on it.
 # The operator's own tasks record no decisions, so only `#B done` may wait on
 # them.
-UNDECIDED = frozenset({'bakery/triage', 'bakery/human', TAG})
+UNDECIDED = frozenset({'triage', 'human', TAG})
 
 HEADING = '**Blocked on:**'
-TASK_RE = re.compile(r'#(?P<ident>\d+) (?P<until>decided|done)')
+TASK_RE = re.compile(
+    r'#(?P<namespace>[a-z0-9][a-z0-9_.-]*):(?P<ident>\d+)'
+    r' (?P<until>decided|done)'
+)
 EXTERNAL_RE = re.compile(r'(?P<url>https?://\S+): (?P<condition>\S.*)')
 
 
@@ -41,11 +45,16 @@ class BlockerError(ValueError):
 
 @dataclasses.dataclass(frozen=True)
 class TaskBlocker:
+    namespace: str
     ident: int
     until: Literal['decided', 'done']
 
+    @property
+    def ref(self) -> str:
+        return f'{self.namespace}:{self.ident}'
+
     def __str__(self) -> str:
-        return f'#{self.ident} {self.until}'
+        return f'#{self.ref} {self.until}'
 
 
 @dataclasses.dataclass(frozen=True)
@@ -82,40 +91,43 @@ def _entry(entry: str) -> Blocker:
         until: Literal['decided', 'done'] = (
             'decided' if found['until'] == 'decided' else 'done'
         )
-        return TaskBlocker(int(found['ident']), until)
+        return TaskBlocker(found['namespace'], int(found['ident']), until)
     if found := EXTERNAL_RE.fullmatch(entry):
         return ExternalBlocker(found['url'], found['condition'])
     raise BlockerError(
-        f'{entry!r} is not `#<id> decided`, `#<id> done`, or'
-        ' `<url>: <condition>`'
+        f'{entry!r} is not `#<namespace>:<id> decided`,'
+        ' `#<namespace>:<id> done`, or `<url>: <condition>`'
     )
 
 
 @dataclasses.dataclass(frozen=True)
 class Board:
-    """The task list, as blockers need it: open tasks' tags."""
+    """The task list, as blockers need it: open tasks' tags, by ref."""
 
-    tags: dict[int, str]
+    tags: dict[str, str]
 
     @classmethod
     def load(cls) -> 'Board':
-        return cls({int(str(t['id'])): str(t['tag']) for t in tasks.listed()})
+        return cls({tasks.ref(t): str(t['tag']) for t in tasks.listed()})
 
     def state(self, blocker: TaskBlocker) -> str:
         """Its task's tag, or DONE once there is no such task."""
         # Done tasks are deleted, so a typo also reads as done; `problems`
         # refuses it as already cleared.
-        return self.tags.get(blocker.ident, DONE)
+        return self.tags.get(blocker.ref, DONE)
 
     def cleared(self, blocker: TaskBlocker) -> bool:
         state = self.state(blocker)
         if blocker.until == 'done':
             return state == DONE
-        return state not in UNDECIDED
+        return blocker.namespace != tasks.NAMESPACE or state not in UNDECIDED
 
 
 def problems(ident: int, description: str | None, board: Board) -> list[str]:
-    """Why task `ident` cannot be blocked by its description; [] if it can."""
+    """
+    Why the claws' task `ident` cannot be blocked by its description; [] if it
+    can.
+    """
     try:
         blockers = parse(description)
     except BlockerError as e:
@@ -124,18 +136,21 @@ def problems(ident: int, description: str | None, board: Board) -> list[str]:
     for blocker in blockers:
         if not isinstance(blocker, TaskBlocker):
             continue
-        if blocker.ident == ident:
+        if blocker.ref == f'{tasks.NAMESPACE}:{ident}':
             found.append(f'{blocker}: a task cannot block itself')
             continue
         state = board.state(blocker)
-        if not (DONE in (blocker.until, state) or tasks.in_namespace(state)):
+        if not (
+            DONE in (blocker.until, state)
+            or blocker.namespace == tasks.NAMESPACE
+        ):
             found.append(
-                f"{blocker}: #{blocker.ident} is the operator's ({state}),"
-                f' so use `#{blocker.ident} done`'
+                f"{blocker}: #{blocker.ref} is the operator's ({state}),"
+                f' so use `#{blocker.ref} done`'
             )
         elif board.cleared(blocker):
             if state == DONE:
-                state = f'#{blocker.ident} is done or does not exist'
+                state = f'#{blocker.ref} is done or does not exist'
             found.append(
                 f'{blocker}: already cleared ({state});'
                 ' route on its own merits instead'
@@ -146,7 +161,8 @@ def problems(ident: int, description: str | None, board: Board) -> list[str]:
 def check(ident: int, append: str = '') -> list[str]:
     """`problems` for task `ident` once `append` is appended to its notes."""
     try:
-        description = str(tasks.shown(ident)['description'] or '')
+        shown = tasks.shown(f'{tasks.NAMESPACE}:{ident}')
+        description = str(shown['description'] or '')
     except tasks.TaskError as e:
         return [str(e)]
     # Joined as `task set --description-append` joins it.
@@ -156,7 +172,9 @@ def check(ident: int, append: str = '') -> list[str]:
 
 def do_check(args: argparse.Namespace) -> int:
     if found := check(args.id, args.append):
-        sys.exit(f'cannot block #{args.id}: ' + '; '.join(found))
+        sys.exit(
+            f'cannot block #{tasks.NAMESPACE}:{args.id}: ' + '; '.join(found)
+        )
     return 0
 
 
@@ -169,7 +187,9 @@ def add_parsers(add_parser: Callable[..., argparse.ArgumentParser]) -> None:
             help=f"fail unless a task's {HEADING} list is valid, for task_set",
         )
     )
-    check_.add_argument('id', type=int, help='task id')
+    check_.add_argument(
+        'id', type=int, help=f'id of a task in {tasks.NAMESPACE}'
+    )
     check_.add_argument(
         '--append', default='', help='notes about to be appended to it'
     )

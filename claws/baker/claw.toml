@@ -19,9 +19,8 @@ policy = "assume"  # its tasks are its questions for the operator
 read_paths = ["${TASK_FOLDER}", "${XDG_STATE_HOME}/claws"]
 
 [tasks]
-# Never bakery/build: fixes change the claws themselves, so the operator
-# approves.
-tag = "bakery/human"
+# Never build: fixes change the claws themselves, so the operator approves.
+tag = "human"
 
 # After the 03:00 dreams, so it sees what they promoted.
 [[job]]
