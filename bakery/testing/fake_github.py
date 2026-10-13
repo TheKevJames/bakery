@@ -20,6 +20,9 @@ class FakeGitHub:
     next_pages: dict[str, str] = dataclasses.field(default_factory=dict)
     # path -> redirect target path
     redirects: dict[str, str] = dataclasses.field(default_factory=dict)
+    # path -> the only token it serves; others get GitHub's 403, as a
+    # scopeless token does for Actions logs
+    authorized: dict[str, str] = dataclasses.field(default_factory=dict)
     requests: list[tuple[str, str | None]] = dataclasses.field(
         default_factory=list
     )
@@ -41,6 +44,10 @@ def _handler(fake: FakeGitHub) -> type:
             time.sleep(fake.delay)
             auth = self.headers.get('Authorization')
             fake.requests.append((self.path, auth))
+            required = fake.authorized.get(self.path)
+            if required is not None and auth != f'Bearer {required}':
+                self.send_error(403, 'Must have admin rights to Repository.')
+                return
             if self.path in fake.redirects:
                 self.send_response(302)
                 self.send_header(

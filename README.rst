@@ -48,10 +48,10 @@ existing item:
   user (``thekevjames-bakery``, signed in as it: Settings → Developer settings
   → Tokens (classic)), with only the ``repo`` scope and a one-year expiry. That
   user is a collaborator on the public ``TheKevJames`` repositories the claws
-  work on.
+  work on. The gateway's collectors use it too, only to read.
 - ``BAKERY_GITHUB_READONLY``: another classic token of the same user, with no
-  scopes, so it only reads public data. Scout, which reads untrusted issue and
-  PR text, uses it instead of ``BAKERY_GITHUB``.
+  scopes, so it only reads public data. Scout's model, which reads untrusted
+  issue and PR text, uses it instead of ``BAKERY_GITHUB``.
 
 Check which are stored, without printing their values:
 

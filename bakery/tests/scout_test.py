@@ -9,6 +9,7 @@ import pytest
 
 from bakery import state
 from bakery.chat import render
+from bakery.collectors import base as collectors_base
 from bakery.collectors import scout
 from bakery.collectors import scout_repos
 from bakery.collectors import wontfix
@@ -23,7 +24,8 @@ from testing import tasks as testing_tasks
 Reply = harness.Reply
 OWNER = 'TheKevJames'
 REPO = f'{OWNER}/thing'
-TOKEN = 'test-token'
+COLLECTOR_TOKEN = 'collector-token'
+MODEL_TOKEN = 'model-token'
 
 
 def git(path: pathlib.Path, *args: str) -> str:
@@ -130,6 +132,7 @@ def serve_repo(fake: fake_github.FakeGitHub, initial: str) -> None:
         ]
     }
     fake.redirects[f'{base}/actions/runs/8/logs'] = '/blob/logs.zip'
+    fake.authorized[f'{base}/actions/runs/8/logs'] = COLLECTOR_TOKEN
     fake.routes['/blob/logs.zip'] = fake_github.logs_zip(
         {
             '1_test.txt': (
@@ -173,7 +176,8 @@ def fixture_github(
     keychain: dict[str, str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[fake_github.FakeGitHub]:
-    keychain['BAKERY_TEST_GH'] = TOKEN
+    keychain[collectors_base.GITHUB_TOKEN] = COLLECTOR_TOKEN
+    keychain['BAKERY_TEST_GH'] = MODEL_TOKEN
     monkeypatch.setenv('TASK_FOLDER', str(root / 'tasks'))
     testing_tasks.create(root / 'tasks')
     initial = git(make_upstream(root), 'rev-parse', 'HEAD~').strip()
@@ -276,7 +280,7 @@ def test_collects_new_candidates_in_priority_order(
     ]
     # Log downloads follow a redirect without leaking the token to it.
     assert ('/blob/logs.zip', None) in github.requests
-    assert (f'/repos/{REPO}', f'Bearer {TOKEN}') in github.requests
+    assert (f'/repos/{REPO}', f'Bearer {COLLECTOR_TOKEN}') in github.requests
     # Scout's own clone, in its state, is the one pi/claw-rules/repos.md has
     # the model use; the collector keeps working once the model has used it.
     clone = claw.state_dir / 'clones' / REPO
