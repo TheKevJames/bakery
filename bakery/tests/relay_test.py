@@ -32,12 +32,6 @@ def run(
     testing_gateway.run_gateway(claws, bot, wrapped)
 
 
-async def until(predicate: Callable[[], object]) -> None:
-    async with asyncio.timeout(chat.WAIT_TIMEOUT):
-        while not predicate():
-            await asyncio.sleep(0.02)
-
-
 def test_gateway_runs_get_a_thread_with_status_and_reply(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
@@ -119,15 +113,16 @@ def test_messages_steer_in_flight_runs(
     async def scenario(
         gateway: core.Gateway, bot: relay.Relay, fake: chat.FakeTransport
     ) -> None:
+        del gateway
         await bot.on_message(chat.OPERATOR, 'build', None, 600, 'start')
         [thread] = fake.threads
-        await until(lambda: len(fake_llm.requests) == 1)
+        await asyncio.to_thread(fake_llm.wait_requests, 1)
         await bot.on_message(chat.OPERATOR, 'build', thread, 601, 'use tabs')
         await fake.message(thread, '✅')
         assert 'use tabs' in fake_llm.transcript()
         # One run: the message joined it rather than queueing another.
         assert len(fake_llm.requests) == 2
-        assert not gateway.queue
+        assert (await testing_gateway.claw_status('build'))['queued'] == []
 
     run(claws, scenario)
 
@@ -237,7 +232,8 @@ def test_silent_jobs_only_post_when_they_have_news(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     claws = testing_gateway.make_claws(
-        root, {'a': '[[job]]\nname = "beat"\ncron = "0 * * * *"\n'
+        root, {'a': '[concurrency]\nmax_active = 1\n'
+               '[[job]]\nname = "beat"\ncron = "0 * * * *"\n'
                'prompt = "check"\nsilent_ok = true\n'}
     )  # fmt: skip
     fake_llm.queue(Reply(text='NO_REPLY'), Reply(text='news!'))
@@ -246,10 +242,8 @@ def test_silent_jobs_only_post_when_they_have_news(
         gateway: core.Gateway, bot: relay.Relay, fake: chat.FakeTransport
     ) -> None:
         del bot
-        quiet = gateway.trigger('a', 'beat', None)
-        await until(
-            lambda: gateway.runs.last_claw(quiet) and not gateway.active
-        )
+        # One at a time: the quiet run is over by the time the loud one posts.
+        gateway.trigger('a', 'beat', None)
         loud = gateway.trigger('a', 'beat', None)
         await fake.until(lambda: fake.threads)
         thread = fake.thread_named(loud)
@@ -261,8 +255,10 @@ def test_silent_jobs_only_post_when_they_have_news(
 
 def test_commands(root: pathlib.Path, fake_llm: harness.FakeLLM) -> None:
     claws = testing_gateway.make_claws(
-        root, {'scout': '[limits]\ndaily_cost_usd = 1.0\n'}
-    )
+        root,
+        {'scout': '[limits]\ndaily_cost_usd = 1.0\n'
+                  '[concurrency]\nmax_active = 1\n'},
+    )  # fmt: skip
     fake_llm.queue(Reply(prompt_tokens=2))
 
     async def scenario(
@@ -285,8 +281,8 @@ def test_commands(root: pathlib.Path, fake_llm: harness.FakeLLM) -> None:
         first = await bot.on_command(
             chat.OPERATOR, 'trigger', {'claw': 'scout', 'prompt': 'one'}
         )
-        key = first.text.removeprefix('queued ')
-        await until(lambda: gateway.runs.last_claw(key) and not gateway.active)
+        assert first.text.startswith('queued ')
+        # One at a time: the second run starts once the first has paid.
         gateway.trigger('scout', None, 'two')
         await fake.until(
             lambda: 'scout has exhausted its daily budget' in fake.notices()

@@ -5,6 +5,8 @@ import dataclasses
 import http.server
 import json
 import pathlib
+import select
+import socket
 import subprocess
 import threading
 import time
@@ -15,17 +17,23 @@ FAKE_PROVIDER = pathlib.Path(__file__).parent / 'fake_provider.ts'
 # fake_provider.ts prices input at $1 per token, so a reply's `prompt_tokens`
 # is exactly what it costs.
 DOLLARS_PER_PROMPT_TOKEN = 1.0
+WAIT_TIMEOUT = 60.0
 
 
 @dataclasses.dataclass(frozen=True)
 class Reply:
-    """One scripted model response: text, or a single tool call."""
+    """
+    One scripted model response: text, or a single tool call.
+
+    With `hold`, the response waits until it is set, or the client hangs up
+    (as pi does when its run is aborted): a model call in flight.
+    """
 
     text: str = 'OK'
     tool: str | None = None
     args: dict[str, object] = dataclasses.field(default_factory=dict)
     prompt_tokens: int = 0
-    delay: float = 0.0
+    hold: threading.Event | None = None
 
 
 @dataclasses.dataclass
@@ -42,9 +50,20 @@ class FakeLLM:
     script: collections.deque[Reply] = dataclasses.field(
         default_factory=collections.deque
     )
+    received: threading.Condition = dataclasses.field(
+        default_factory=threading.Condition
+    )
 
     def queue(self, *replies: Reply) -> None:
         self.script.extend(replies)
+
+    def wait_requests(self, count: int) -> None:
+        """Block until at least `count` requests have arrived."""
+        with self.received:
+            arrived = self.received.wait_for(
+                lambda: len(self.requests) >= count, WAIT_TIMEOUT
+            )
+        assert arrived, (count, len(self.requests))
 
     def system_prompt(self, index: int = -1) -> str:
         messages = self.requests[index]['messages']
@@ -102,9 +121,12 @@ def _render(reply: Reply) -> Iterator[bytes]:
     yield b'data: [DONE]\n\n'
 
 
-def handler(llm: FakeLLM) -> type:
-    lock = threading.Lock()
+def _hung_up(connection: socket.socket) -> bool:
+    readable, _, _ = select.select([connection], [], [], 0)
+    return bool(readable) and not connection.recv(1, socket.MSG_PEEK)
 
+
+def handler(llm: FakeLLM) -> type:
     class Handler(http.server.BaseHTTPRequestHandler):
         # Claws reach this through their sandbox's HTTP proxy, which
         # truncates large close-delimited (HTTP/1.0, unframed) responses to
@@ -113,10 +135,16 @@ def handler(llm: FakeLLM) -> type:
 
         def do_POST(self) -> None:
             length = int(self.headers['Content-Length'])
-            with lock:
+            with llm.received:
                 llm.requests.append(json.loads(self.rfile.read(length)))
                 reply = llm.script.popleft() if llm.script else Reply()
-            time.sleep(reply.delay)
+                llm.received.notify_all()
+            if reply.hold is not None:
+                # Polled: a hang-up has no event to wait on alongside hold.
+                while not reply.hold.wait(0.02):
+                    if _hung_up(self.connection):
+                        self.close_connection = True
+                        return
             body = b''.join(_render(reply))
             self.send_response(200)
             self.send_header('Content-Type', 'text/event-stream')

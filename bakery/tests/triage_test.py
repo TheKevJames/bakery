@@ -90,7 +90,10 @@ def triage_claws(root: pathlib.Path, claw_toml: str = QUEUE) -> pathlib.Path:
 
 
 def test_works_through_the_queue_one_task_per_unit(
-    root: pathlib.Path, tasks: pathlib.Path, fake_llm: harness.FakeLLM
+    root: pathlib.Path,
+    tasks: pathlib.Path,
+    fake_llm: harness.FakeLLM,
+    logs: testing_gateway.LogWatch,
 ) -> None:
     del tasks
     task('add', 'handed over by the operator', '-n', 'bakery')
@@ -117,8 +120,7 @@ def test_works_through_the_queue_one_task_per_unit(
         )
         # The repeat after it finds nothing left: bakery:2 is scheduled, and
         # the operator's own triage is not the claws'.
-        await asyncio.sleep(0.5)
-        assert not gateway.active and not gateway.queue
+        await asyncio.to_thread(logs.wait_for, 'triage/queue: nothing new')
 
     testing_gateway.run_gateway(triage_claws(root), fake, scenario)
     assert json.dumps('<task id="1" waiting="1">')[1:-1] in (
@@ -152,9 +154,9 @@ def test_a_task_left_waiting_is_not_repeated(
     async def scenario(gateway: core.Gateway) -> None:
         gateway.trigger('triage', None, None)
         await fake.wait('triage/task-1')
-        async with asyncio.timeout(10):
-            while not any('still waiting' in n for n in fake.notices):
-                await asyncio.sleep(0.05)
+        await fake.until(
+            lambda: any('still waiting' in n for n in fake.notices)
+        )
 
     testing_gateway.run_gateway(triage_claws(root), fake, scenario)
     assert len(fake_llm.requests) == 1
@@ -341,16 +343,15 @@ def test_file_changes_trigger_after_a_quiet_period(
 
     async def scenario(gateway: core.Gateway) -> None:
         del gateway
-        await asyncio.sleep(0.2)
-        assert not fake_llm.requests  # nothing fires at startup
         for i in range(4):  # a burst of changes...
             (watched / 'sub' / f'{i}.md').write_text(str(i))
             await asyncio.sleep(0.1)
         assert not fake.finished
-        async with asyncio.timeout(10):
-            while not fake.finished:
-                await asyncio.sleep(0.05)
-        await asyncio.sleep(0.5)  # ...is one run
+        await fake.until(lambda: fake.finished)
+        # ...is one run: a claw's runs are serial and outlast a poll, so any
+        # other fire (at startup, or again after this one) is still queued.
+        status = await testing_gateway.claw_status('a')
+        assert (status['active'], status['queued']) == ([], [])
 
     testing_gateway.run_gateway(claws, fake, scenario)
     assert [r.trigger for r in fake.finished] == ['watch:react']

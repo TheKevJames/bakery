@@ -319,7 +319,7 @@ def test_scout_adds_tasks_then_finds_nothing_new(
     fake = testing_gateway.FakeChannel()
 
     async def scenario(gateway: core.Gateway) -> None:
-        github.delay = 0.3
+        github.released.clear()
         triggered = await asyncio.to_thread(
             control.send, {'type': 'trigger', 'claw': 'scout'}
         )
@@ -333,7 +333,7 @@ def test_scout_adds_tasks_then_finds_nothing_new(
             await asyncio.to_thread(
                 control.send, {'type': 'trigger', 'claw': 'scout'}
             )
-        github.delay = 0.0
+        github.released.set()
         first = await fake.wait(key)
         assert first.status == 'settled', first.reason
         assert 'actions/runs/7' in fake_llm.transcript(0)
@@ -352,8 +352,7 @@ def test_scout_adds_tasks_then_finds_nothing_new(
         git(upstream, 'rm', '-q', 'app.py')
         commit(upstream, 'no more TODOs')
         gateway.trigger('scout', None, None)
-        while not any('nothing new' in n for n in fake.notices):
-            await asyncio.sleep(0.05)
+        await fake.until(lambda: any('nothing new' in n for n in fake.notices))
 
     testing_gateway.run_gateway(claws, fake, scenario)
     [added] = json.loads(task('list', '--json'))

@@ -161,9 +161,10 @@ def test_network_refuses_only_other_unix_sockets(
         call('bash', command=f'python3 -c "{connect}"'),
         # A claw's only GitHub token is its GH_TOKEN (test claws have none);
         # the operator's, in the Keychain, stays unreachable.
-        call('bash', command='gh auth token'),
-        # Offline, this fails upstream rather than at the sandbox.
-        call('bash', command=f'{status} https://example.com'),
+        call('bash', command='security default-keychain'),
+        # Never resolves (RFC 6761): the proxy lets it through to fail
+        # upstream (502) rather than refusing it (403).
+        call('bash', command='curl -sS -m 5 https://example.invalid'),
     ]
 
     with socket.socket(socket.AF_UNIX) as unix_server:
@@ -176,11 +177,11 @@ def test_network_refuses_only_other_unix_sockets(
     assert results[0].strip() == '501'
     assert results[1].strip() == '501'
     assert 'sandbox policy blocked it' in results[2]
-    assert 'no oauth token' in results[3]
-    assert 'sandbox policy blocked it' not in results[4]
+    assert 'A default keychain could not be found' in results[3]
+    assert 'CONNECT tunnel failed, response 502' in results[4]
     logged = violations(root, 'a')
     assert 'localhost' not in logged
-    assert 'example.com' not in logged
+    assert 'example.invalid' not in logged
 
 
 def _pdf(words: list[str]) -> bytes:
