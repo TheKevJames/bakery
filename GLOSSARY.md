@@ -42,6 +42,12 @@ them.
 The claw that reviews how the other claws work and files a task for each gap
 it finds.
 
+### Code
+
+**Clone**:
+A claw's own copy of a repository, cloned from GitHub into its state.
+_Avoid_: checkout, mirror
+
 ### Work
 
 **Job**:

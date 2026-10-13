@@ -2,7 +2,7 @@
 Claw state: $XDG_STATE_HOME/claws, a local-only git repo.
 
 Memory and identity files are committed after every change so a poisoned or
-botched edit can be reviewed and rolled back; transcripts, worktrees, each
+botched edit can be reviewed and rolled back; transcripts, clones, each
 claw's home and temp dirs, and the gateway's runtime files are ignored.
 """
 
@@ -16,7 +16,7 @@ SHARED = '_shared'
 GITIGNORE = """\
 /_gateway/
 /*/sessions/
-/*/worktrees/
+/*/clones/
 /*/home/
 /*/tmp/
 """

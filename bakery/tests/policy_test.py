@@ -3,6 +3,7 @@ import asyncio
 import functools
 import http.server
 import json
+import os
 import pathlib
 import socket
 import threading
@@ -52,6 +53,22 @@ def violations(root: pathlib.Path, claw: str) -> str:
     return ''.join(p.read_text() for p in logs.glob('*.jsonl'))
 
 
+def install_editable(
+    venv: pathlib.Path, tool: str, source: pathlib.Path
+) -> None:
+    """A venv whose `tool` runs from `source`, as `uv pip install -e`."""
+    (venv / 'bin').mkdir(parents=True)
+    (venv / 'pyvenv.cfg').write_text(f'home = {venv / "bin"}\n')
+    script = venv / 'bin' / tool
+    script.write_text(f'#!/bin/sh\ncat {source}/code.py\n')
+    script.chmod(0o755)
+    dist = venv / 'lib' / 'python3.14' / 'site-packages' / 'x.dist-info'
+    dist.mkdir(parents=True)
+    (dist / 'direct_url.json').write_text(
+        json.dumps({'url': source.as_uri(), 'dir_info': {'editable': True}})
+    )
+
+
 def test_file_access_follows_the_policy(
     root: pathlib.Path,
     fake_llm: harness.FakeLLM,
@@ -65,6 +82,12 @@ def test_file_access_follows_the_policy(
     repo.mkdir(parents=True)
     (repo / 'code.py').write_text('fine')
     (repo / '.env').write_text('hunter3')
+    tool = home / 'src' / 'personal' / 'tool'
+    tool.mkdir()
+    (tool / 'code.py').write_text('editable')
+    (tool.parent / 'other').write_text('hunter5')
+    install_editable(root / 'venv', 'task', tool)
+    monkeypatch.setenv('PATH', f'{root / "venv" / "bin"}:{os.environ["PATH"]}')
     out = root / 'out'
     out.mkdir()
     state = root / 'state' / 'claws'
@@ -77,7 +100,7 @@ def test_file_access_follows_the_policy(
             'a': f"""
                 [policy]
                 tools = ["read", "write", "bash"]
-                read_paths = {toml_list(['~/src/personal', state / 'b'])}
+                read_paths = {toml_list(['~/src/personal/repo', state / 'b'])}
                 write_paths = {toml_list([out])}
             """,
             'b': '',
@@ -99,6 +122,9 @@ def test_file_access_follows_the_policy(
         call('write', path=str(root / 'w.txt'), content='w'),
         call('bash', command=f'echo b > {out}/b.txt && cat {out}/b.txt'),
         call('bash', command=f'echo b > {root}/b.txt'),
+        # A runtime tool reads its editable source, but nothing beside it.
+        call('bash', command='task'),
+        call('bash', command=f'cat {home}/src/personal/other'),
     ]
 
     run, results = run_calls(claws, fake_llm, 'a', calls)
@@ -114,7 +140,8 @@ def test_file_access_follows_the_policy(
     assert results[11].strip().endswith('b')
     assert not (root / 'w.txt').exists()
     assert not (root / 'b.txt').exists()
-    for refused in (0, 1, 3, 4, 7, 10, 12):
+    assert 'editable' in results[13]
+    for refused in (0, 1, 3, 4, 7, 10, 12, 14):
         assert 'sandbox policy blocked it' in results[refused], refused
     assert f'file-read-data {home.resolve()}/.ssh/key' in violations(root, 'a')
 
