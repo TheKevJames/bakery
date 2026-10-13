@@ -1,13 +1,9 @@
-import asyncio
 import json
-import os
 import pathlib
-import subprocess
 from collections.abc import Iterator
 
 import pytest
 
-from bakery import state
 from bakery.chat import render
 from bakery.collectors import base as collectors_base
 from bakery.collectors import scout
@@ -16,36 +12,21 @@ from bakery.collectors import wontfix
 from bakery.gateway import config
 from bakery.gateway import control
 from bakery.gateway import core
+from testing import commands
 from testing import fake_github
 from testing import gateway as testing_gateway
 from testing import harness
 from testing import tasks as testing_tasks
 
-Reply = harness.Reply
 OWNER = 'TheKevJames'
 REPO = f'{OWNER}/thing'
 COLLECTOR_TOKEN = 'collector-token'
 MODEL_TOKEN = 'model-token'
 
 
-def git(path: pathlib.Path, *args: str) -> str:
-    return subprocess.run(
-        ('git', '-C', str(path), *args),
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
-
-
-def task(*args: str) -> str:
-    return subprocess.run(
-        ('task', *args), capture_output=True, text=True, check=True
-    ).stdout
-
-
 def commit(path: pathlib.Path, message: str) -> None:
-    git(path, 'add', '.')
-    git(
+    commands.git(path, 'add', '.')
+    commands.git(
         path,
         '-c', 'user.name=t', '-c', 'user.email=t@t',
         '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', message,
@@ -61,7 +42,7 @@ def make_upstream(root: pathlib.Path) -> pathlib.Path:
         'def other():\n    # FIXME: slow\n    return 1\n'
     )
     (upstream / 'vendor' / 'lib.py').write_text('# TODO: theirs\n')
-    git(upstream, 'init', '-q', '-b', 'main')
+    commands.git(upstream, 'init', '-q', '-b', 'main')
     commit(upstream, 'init')
     # Workflow 4 changes after its run, so that run's warnings are stale.
     (upstream / '.github' / 'workflows').mkdir(parents=True)
@@ -172,15 +153,12 @@ exclude = ["x/**"]
 
 @pytest.fixture(name='github', scope='function')
 def fixture_github(
-    root: pathlib.Path,
-    keychain: dict[str, str],
-    monkeypatch: pytest.MonkeyPatch,
+    root: pathlib.Path, keychain: dict[str, str]
 ) -> Iterator[fake_github.FakeGitHub]:
     keychain[collectors_base.GITHUB_TOKEN] = COLLECTOR_TOKEN
     keychain['BAKERY_TEST_GH'] = MODEL_TOKEN
-    monkeypatch.setenv('TASK_FOLDER', str(root / 'tasks'))
     testing_tasks.create(root / 'tasks')
-    initial = git(make_upstream(root), 'rev-parse', 'HEAD~').strip()
+    initial = commands.git(make_upstream(root), 'rev-parse', 'HEAD~').strip()
     with fake_github.serve() as fake:
         serve_repo(fake, initial)
         yield fake
@@ -225,10 +203,10 @@ def test_collects_new_candidates_in_priority_order(
     # Already tracked, at another line: still the same lineage.
     blob = f'https://github.com/{REPO}/blob/main/app.py'
     fixme = scout.fingerprint('    # FIXME: slow')
-    task('add', 'old', '--link', f'{blob}?todo={fixme}#L99')
+    testing_tasks.task('add', 'old', '--link', f'{blob}?todo={fixme}#L99')
     # Rejections stay tracked once done; other done tasks free their link.
     issues = f'https://github.com/{REPO}/issues'
-    task(
+    testing_tasks.task(
         'add',
         'no',
         '-n',
@@ -238,7 +216,7 @@ def test_collects_new_candidates_in_priority_order(
         '--link',
         f'{issues}/5',
     )
-    task(
+    testing_tasks.task(
         'add',
         'fixed',
         '-n',
@@ -249,8 +227,8 @@ def test_collects_new_candidates_in_priority_order(
         f'{issues}/1',
     )
     wontfix.add('bakery:1', 'not ours')
-    task('bakery:1', 'done')
-    task('bakery:2', 'done')
+    testing_tasks.task('bakery:1', 'done')
+    testing_tasks.task('bakery:2', 'done')
     collection = scout.collect(claw)
 
     warning = scout.fingerprint('DeprecationWarning: old api')
@@ -284,8 +262,8 @@ def test_collects_new_candidates_in_priority_order(
     # Scout's own clone, in its state, is the one pi/claw-rules/repos.md has
     # the model use; the collector keeps working once the model has used it.
     clone = claw.state_dir / 'clones' / REPO
-    git(clone, 'fetch', '-q')
-    git(clone, 'checkout', '-q', '--detach', 'origin/HEAD')
+    commands.git(clone, 'fetch', '-q')
+    commands.git(clone, 'checkout', '-q', '--detach', 'origin/HEAD')
     assert 'TODO: handle errors' in (clone / 'app.py').read_text()
     assert candidates(scout.collect(claw).text) == found
 
@@ -310,29 +288,26 @@ def test_scout_adds_tasks_then_finds_nothing_new(
     claws = scout_claws(root, github.url, 1)
     ci_link = f'https://github.com/{REPO}/actions/runs/7'
     fake_llm.queue(
-        Reply(
+        harness.Reply(
             tool='task_add',
             args={'summary': 'Fix CI', 'description': 'd', 'link': ci_link},
         ),
-        Reply(text='added 1'),
+        harness.Reply(text='added 1'),
     )
     fake = testing_gateway.FakeChannel()
 
     async def scenario(gateway: core.Gateway) -> None:
         github.released.clear()
-        triggered = await asyncio.to_thread(
-            control.send, {'type': 'trigger', 'claw': 'scout'}
-        )
+        trigger = {'type': 'trigger', 'claw': 'scout'}
+        triggered = await testing_gateway.ctl(trigger)
         assert isinstance(triggered, dict)
         key = triggered['work_key']
         assert triggered['collecting']
-        status = await asyncio.to_thread(control.send, {'type': 'status'})
+        status = await testing_gateway.ctl({'type': 'status'})
         assert isinstance(status, dict)
         assert f'{key} (collecting)' in render.status(status)
         with pytest.raises(control.ControlError, match='already running'):
-            await asyncio.to_thread(
-                control.send, {'type': 'trigger', 'claw': 'scout'}
-            )
+            await testing_gateway.ctl(trigger)
         github.released.set()
         first = await fake.wait(key)
         assert first.status == 'settled', first.reason
@@ -349,13 +324,13 @@ def test_scout_adds_tasks_then_finds_nothing_new(
             'workflow_runs': [run(9, 'failure'), run(7, 'failure')]
         }
         upstream = root / 'remote' / f'{REPO}.git'
-        git(upstream, 'rm', '-q', 'app.py')
+        commands.git(upstream, 'rm', '-q', 'app.py')
         commit(upstream, 'no more TODOs')
         gateway.trigger('scout', None, None)
         await fake.until(lambda: any('nothing new' in n for n in fake.notices))
 
     testing_gateway.run_gateway(claws, fake, scenario)
-    [added] = json.loads(task('list', '--json'))
+    [added] = json.loads(testing_tasks.task('list', '--json'))
     assert (
         added['summary'],
         added['link'],
@@ -363,110 +338,3 @@ def test_scout_adds_tasks_then_finds_nothing_new(
         added['tag'],
     ) == ('Fix CI', ci_link, 'bakery', 'triage')
     assert len(fake_llm.requests) == 2
-
-
-def test_task_claims_and_adds(
-    root: pathlib.Path,
-    fake_llm: harness.FakeLLM,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv('TASK_FOLDER', str(root / 'tasks'))
-    testing_tasks.create(root / 'tasks')
-    task('add', 'mine', '-n', 'bakery', '--tag', 'triage')
-    task(
-        'add',
-        'theirs',
-        '-n',
-        'bakery',
-        '--tag',
-        'triage',
-        '--owner',
-        'operator',
-    )
-    task('add', "the operator's")
-    claws = testing_gateway.make_claws(
-        root,
-        {
-            'triage': """
-                [tasks]
-                tag = "human"
-            """
-        },
-        extensions={'triage': ['pi/claw-extensions/task.ts']},
-    )
-    fake_llm.queue(
-        Reply(tool='task_set', args={'id': 1, 'claim': True, 'tag': 'build'}),
-        Reply(tool='task_set', args={'id': 2, 'claim': True}),
-        Reply(tool='task_set', args={'id': 2, 'release': True}),
-        Reply(
-            tool='task_set',
-            args={'id': 1, 'release': True, 'description_append': 'n'},
-        ),
-        Reply(
-            tool='task_add',
-            args={
-                'summary': 'new',
-                'description': 'd',
-                'link': 'baker:plumbing/x',
-                'priority': 'high',
-                'size': 'small',
-            },
-        ),
-        # The sandbox lets claws read every namespace, but write only theirs.
-        Reply(tool='bash', args={'command': 'task list -f namespace=default'}),
-        Reply(tool='bash', args={'command': 'task 1 set --summary mine'}),
-        Reply(text='done'),
-    )
-    fake = testing_gateway.FakeChannel()
-
-    async def scenario(gateway: core.Gateway) -> None:
-        done = await fake.wait(gateway.trigger('triage', None, 'go'))
-        assert done.status == 'settled', done.reason
-
-    testing_gateway.run_gateway(claws, fake, scenario)
-    results = fake_llm.tool_results()
-    assert '"owner": "triage"' in results[0]
-    assert 'owned by operator' in results[1]
-    assert 'not claimed by triage' in results[2]
-    assert "1: the operator's" in results[5]
-    assert 'attempt to write a readonly database' in results[6]
-    assert (
-        json.loads(task('show', '1', '--json'))['summary'] == "the operator's"
-    )
-    final = json.loads(task('show', 'bakery:1', '--json'))
-    assert (final['owner'], final['tag'], final['description']) == (
-        None,
-        'build',
-        'n',
-    )
-    added = json.loads(task('show', 'bakery:3', '--json'))
-    assert (added['tag'], added['priority'], added['size']) == (
-        'human',
-        'high',
-        'small',
-    )
-    assert os.environ['TASK_FOLDER'] == str(root / 'tasks')
-
-
-def test_repo_claws_load(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv('TASK_FOLDER', str(tmp_path))  # triage watches it
-    monkeypatch.setenv('XDG_STATE_HOME', str(tmp_path))  # baker reads it
-    loaded = config.load(harness.REPO / 'claws')
-    claw = loaded.claw('scout')
-    settings = scout_repos.load_settings(claw.profile)
-    assert claw.job('daily').collector == 'scout'
-    assert f'{OWNER}/bakery' in settings.excludes
-    for profile in sorted((harness.REPO / 'claws').glob('*/')):
-        settings = json.loads((profile / 'settings.json').read_text())
-        for path in settings['extensions'] + settings['prompts']:
-            if path.startswith(('-builtin:', '+builtin:')):
-                continue  # pi's built-in extensions, by name
-            assert (profile / path).exists(), path
-    queue = loaded.claw('triage').job('queue')
-    assert (queue.collector, queue.repeat) == ('triage', True)
-    baker = loaded.claw('baker')
-    assert baker.job('review').collector == 'baker'
-    assert baker.tasks.tag == 'human'
-    assert state.root() in baker.policy.read_paths

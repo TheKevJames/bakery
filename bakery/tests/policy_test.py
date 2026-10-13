@@ -5,6 +5,7 @@ import json
 import os
 import pathlib
 import socket
+import sys
 import threading
 import urllib.parse
 
@@ -16,12 +17,6 @@ from bakery.gateway import core
 from testing import gateway as testing_gateway
 from testing import harness
 
-Reply = harness.Reply
-
-
-def call(tool: str, **args: object) -> harness.Reply:
-    return Reply(tool=tool, args=args)
-
 
 def run_calls(
     claws: pathlib.Path,
@@ -32,7 +27,7 @@ def run_calls(
 ) -> tuple[channel.RunInfo, list[str]]:
     """Run one unit whose model makes `calls`; returns the tool results."""
     fake = fake or testing_gateway.FakeChannel()
-    fake_llm.queue(*calls, Reply(text='done'))
+    fake_llm.queue(*calls, harness.Reply(text='done'))
     done: list[channel.RunInfo] = []
 
     async def scenario(gateway: core.Gateway) -> None:
@@ -60,7 +55,8 @@ def install_editable(
     script = venv / 'bin' / tool
     script.write_text(f'#!/bin/sh\ncat {source}/code.py\n')
     script.chmod(0o755)
-    dist = venv / 'lib' / 'python3.14' / 'site-packages' / 'x.dist-info'
+    python = f'python{sys.version_info.major}.{sys.version_info.minor}'
+    dist = venv / 'lib' / python / 'site-packages' / 'x.dist-info'
     dist.mkdir(parents=True)
     (dist / 'direct_url.json').write_text(
         json.dumps({'url': source.as_uri(), 'dir_info': {'editable': True}})
@@ -106,22 +102,24 @@ def test_file_access_follows_the_policy(
     (claws / 'a' / 'auth.json').write_text('{}')
     (claws / 'b' / 'auth.json').write_text('{"b": "hunter4"}')
     calls = [
-        call('read', path=str(home / '.ssh' / 'key')),
-        call('bash', command=f'cat {home}/.ssh/key'),
-        call('read', path=str(repo / 'code.py')),
-        call('read', path=str(repo / '.env')),
-        call('read', path=str(state / 'c' / 'MEMORY.md')),
-        call('read', path=str(state / 'a' / 'MEMORY.md')),
-        call('bash', command=f'cat {state}/b/MEMORY.md'),
-        call('read', path=str(claws / 'b' / 'auth.json')),
-        call('read', path=str(claws / 'a' / 'auth.json')),
-        call('write', path=str(out / 'w.txt'), content='w'),
-        call('write', path=str(root / 'w.txt'), content='w'),
-        call('bash', command=f'echo b > {out}/b.txt && cat {out}/b.txt'),
-        call('bash', command=f'echo b > {root}/b.txt'),
+        harness.call('read', path=str(home / '.ssh' / 'key')),
+        harness.call('bash', command=f'cat {home}/.ssh/key'),
+        harness.call('read', path=str(repo / 'code.py')),
+        harness.call('read', path=str(repo / '.env')),
+        harness.call('read', path=str(state / 'c' / 'MEMORY.md')),
+        harness.call('read', path=str(state / 'a' / 'MEMORY.md')),
+        harness.call('bash', command=f'cat {state}/b/MEMORY.md'),
+        harness.call('read', path=str(claws / 'b' / 'auth.json')),
+        harness.call('read', path=str(claws / 'a' / 'auth.json')),
+        harness.call('write', path=str(out / 'w.txt'), content='w'),
+        harness.call('write', path=str(root / 'w.txt'), content='w'),
+        harness.call(
+            'bash', command=f'echo b > {out}/b.txt && cat {out}/b.txt'
+        ),
+        harness.call('bash', command=f'echo b > {root}/b.txt'),
         # A runtime tool reads its editable source, but nothing beside it.
-        call('bash', command='task'),
-        call('bash', command=f'cat {home}/src/personal/other'),
+        harness.call('bash', command='task'),
+        harness.call('bash', command=f'cat {home}/src/personal/other'),
     ]
 
     run, results = run_calls(claws, fake_llm, 'a', calls)
@@ -154,17 +152,17 @@ def test_network_refuses_only_other_unix_sockets(
         f"import socket; socket.socket(socket.AF_UNIX).connect('{unix_path}')"
     )
     calls = [
-        call('bash', command=f'{status} http://localhost:{port}/'),
-        call(
+        harness.call('bash', command=f'{status} http://localhost:{port}/'),
+        harness.call(
             'bash', command=f'{status} --noproxy "*" http://127.0.0.1:{port}/'
         ),
-        call('bash', command=f'python3 -c "{connect}"'),
+        harness.call('bash', command=f'python3 -c "{connect}"'),
         # A claw's only GitHub token is its GH_TOKEN (test claws have none);
         # the operator's, in the Keychain, stays unreachable.
-        call('bash', command='security default-keychain'),
+        harness.call('bash', command='security default-keychain'),
         # Never resolves (RFC 6761): the proxy lets it through to fail
         # upstream (502) rather than refusing it (403).
-        call('bash', command='curl -sS -m 5 https://example.invalid'),
+        harness.call('bash', command='curl -sS -m 5 https://example.invalid'),
     ]
 
     with socket.socket(socket.AF_UNIX) as unix_server:
@@ -236,8 +234,8 @@ def test_web_fetch_makes_pages_readable_in_the_sandbox(
         threading.Thread(target=server.serve_forever, daemon=True).start()
         base = f'http://localhost:{server.server_port}'
         calls = [
-            call('web_fetch', url=f'{base}/page.html'),
-            call('web_fetch', url=f'{base}/doc.pdf'),
+            harness.call('web_fetch', url=f'{base}/page.html'),
+            harness.call('web_fetch', url=f'{base}/doc.pdf'),
         ]
         run, results = run_calls(claws, fake_llm, 'a', calls)
         server.shutdown()

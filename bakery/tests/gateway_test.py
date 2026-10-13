@@ -12,8 +12,6 @@ from bakery.gateway import ledger
 from testing import gateway as testing_gateway
 from testing import harness
 
-Reply = harness.Reply
-
 
 def active_keys(claw_status: dict[str, object]) -> list[object]:
     active = claw_status['active']
@@ -30,8 +28,10 @@ def test_run_settles_then_resumes_same_session(
     )  # fmt: skip
     fake = testing_gateway.FakeChannel()
     fake_llm.queue(
-        Reply(tool='bash', args={'command': 'echo hi'}, prompt_tokens=2),
-        Reply(text='swept', prompt_tokens=1),
+        harness.Reply(
+            tool='bash', args={'command': 'echo hi'}, prompt_tokens=2
+        ),
+        harness.Reply(text='swept', prompt_tokens=1),
     )
 
     async def scenario(gateway: core.Gateway) -> None:
@@ -64,17 +64,21 @@ def test_run_settles_then_resumes_same_session(
     [
         (
             'cost_usd = 2.0',
-            [Reply(tool='bash', args={'command': 'true'}, prompt_tokens=3)],
+            [
+                harness.Reply(
+                    tool='bash', args={'command': 'true'}, prompt_tokens=3
+                )
+            ],
             'cost limit reached ($2.00)',
         ),
         (
             'turns = 2',
-            [Reply(tool='bash', args={'command': 'true'})] * 5,
+            [harness.Reply(tool='bash', args={'command': 'true'})] * 5,
             'turn limit reached (2)',
         ),
         (
             'minutes = 0.01',
-            [Reply(hold=threading.Event())],
+            [harness.Reply(hold=threading.Event())],
             'time limit reached (0.01m)',
         ),
     ],
@@ -107,7 +111,7 @@ def test_daily_budget_parks_without_calling_the_model(
         root, {'scout': '[limits]\ndaily_cost_usd = 2.0\n'}
     )
     fake = testing_gateway.FakeChannel()
-    fake_llm.queue(Reply(prompt_tokens=3))
+    fake_llm.queue(harness.Reply(prompt_tokens=3))
 
     async def scenario(gateway: core.Gateway) -> None:
         first = await fake.wait(gateway.trigger('scout', None, 'one'))
@@ -139,7 +143,9 @@ def test_dialogs_go_to_the_channel_off_the_clock(
         return {'confirmed': True}
 
     fake = testing_gateway.FakeChannel(dialogs=slow_yes)
-    fake_llm.queue(Reply(tool='bash', args={'command': 'echo approved'}))
+    fake_llm.queue(
+        harness.Reply(tool='bash', args={'command': 'echo approved'})
+    )
 
     async def scenario(gateway: core.Gateway) -> None:
         run = await fake.wait(gateway.trigger('build', None, 'go'))
@@ -157,7 +163,7 @@ def test_extension_errors_fail_the_run(
         root, {'scout': ''}, extensions={'scout': ['faulty.ts']}
     )
     fake = testing_gateway.FakeChannel()
-    fake_llm.queue(Reply(tool='bash', args={'command': 'true'}))
+    fake_llm.queue(harness.Reply(tool='bash', args={'command': 'true'}))
 
     async def scenario(gateway: core.Gateway) -> None:
         run = await fake.wait(gateway.trigger('scout', None, 'go'))
@@ -176,7 +182,10 @@ def test_slots_pause_and_shutdown(
     fake = testing_gateway.FakeChannel()
     release = threading.Event()
     fake_llm.queue(
-        Reply(hold=release), Reply(), Reply(), Reply(hold=threading.Event())
+        harness.Reply(hold=release),
+        harness.Reply(),
+        harness.Reply(),
+        harness.Reply(hold=threading.Event()),
     )
 
     async def scenario(gateway: core.Gateway) -> None:
@@ -213,7 +222,7 @@ def test_pause_abort_parks_in_flight_runs(
 ) -> None:
     claws = testing_gateway.make_claws(root, {'a': ''})
     fake = testing_gateway.FakeChannel()
-    fake_llm.queue(Reply(hold=threading.Event()))
+    fake_llm.queue(harness.Reply(hold=threading.Event()))
 
     async def scenario(gateway: core.Gateway) -> None:
         key = gateway.trigger('a', None, 'slow')
@@ -235,7 +244,10 @@ def test_silent_jobs_report_no_text(
                'prompt = "check"\nsilent_ok = true\n'}
     )  # fmt: skip
     fake = testing_gateway.FakeChannel()
-    fake_llm.queue(Reply(text='NO_REPLY'), Reply(text='something happened'))
+    fake_llm.queue(
+        harness.Reply(text='NO_REPLY'),
+        harness.Reply(text='something happened'),
+    )
 
     async def scenario(gateway: core.Gateway) -> None:
         quiet = await fake.wait(gateway.trigger('a', 'beat', None))
@@ -260,11 +272,12 @@ def test_control_rejects_bad_requests_and_configs(root: pathlib.Path) -> None:
             with pytest.raises(control.ControlError, match=error):
                 await testing_gateway.ctl(record)
 
+        loaded = gateway.config
         claw_toml = claws / 'a' / 'claw.toml'
         claw_toml.write_text(claw_toml.read_text() + '[limits]\nturns = 0\n')
         with pytest.raises(control.ControlError, match='turns: must be'):
             await testing_gateway.ctl({'type': 'reload'})
-        assert gateway.config.claw('a').limits.turns == 50
+        assert gateway.config == loaded
 
     testing_gateway.run_gateway(claws, fake, scenario)
 
@@ -295,8 +308,10 @@ def test_secrets_reach_pi_but_not_bash(
     monkeypatch.setenv('BAKERY_TEST_MISSING', 'env-value')
     fake = testing_gateway.FakeChannel()
     fake_llm.queue(
-        Reply(tool='env_of', args={'name': 'GRANTED'}),
-        Reply(tool='bash', args={'command': 'env; git config user.name'}),
+        harness.Reply(tool='env_of', args={'name': 'GRANTED'}),
+        harness.Reply(
+            tool='bash', args={'command': 'env; git config user.name'}
+        ),
     )
 
     async def scenario(gateway: core.Gateway) -> None:

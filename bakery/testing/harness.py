@@ -36,6 +36,11 @@ class Reply:
     hold: threading.Event | None = None
 
 
+def call(tool: str, **args: object) -> Reply:
+    """A reply calling `tool` with `args`."""
+    return Reply(tool=tool, args=args)
+
+
 @dataclasses.dataclass
 class FakeLLM:
     """
@@ -107,7 +112,7 @@ def _render(reply: Reply) -> Iterator[bytes]:
         yield _chunk({'role': 'assistant', 'content': reply.text}, None)
         yield _chunk({}, 'stop', reply.prompt_tokens)
     else:
-        call = {
+        tool_call = {
             'index': 0,
             'id': f'call_{time.monotonic_ns()}',
             'type': 'function',
@@ -116,7 +121,7 @@ def _render(reply: Reply) -> Iterator[bytes]:
                 'arguments': json.dumps(reply.args),
             },
         }
-        yield _chunk({'role': 'assistant', 'tool_calls': [call]}, None)
+        yield _chunk({'role': 'assistant', 'tool_calls': [tool_call]}, None)
         yield _chunk({}, 'tool_calls', reply.prompt_tokens)
     yield b'data: [DONE]\n\n'
 

@@ -12,7 +12,6 @@ from testing import chat
 from testing import gateway as testing_gateway
 from testing import harness
 
-Reply = harness.Reply
 ASK = 'pi/claw-extensions/ask-operator.ts'
 
 
@@ -38,9 +37,10 @@ def test_gateway_runs_get_a_thread_with_status_and_reply(
     claws = testing_gateway.make_claws(root, {'scout': ''})
     long_reply = '\n'.join(f'line {i} ' + 'x' * 300 for i in range(40))
     fake_llm.queue(
-        Reply(tool='bash', args={'command': 'true'}), Reply(text='all done')
+        harness.Reply(tool='bash', args={'command': 'true'}),
+        harness.Reply(text='all done'),
     )
-    fake_llm.queue(Reply(text=long_reply))
+    fake_llm.queue(harness.Reply(text=long_reply))
 
     async def scenario(
         gateway: core.Gateway, bot: relay.Relay, fake: chat.FakeTransport
@@ -59,9 +59,10 @@ def test_gateway_runs_get_a_thread_with_status_and_reply(
         await fake.until(
             lambda: any(m.attachment for m in fake.in_thread(thread))
         )
-        [attached] = [m for m in fake.in_thread(thread) if m.attachment]
-        assert attached.attachment is not None
-        assert attached.attachment.data.decode() == long_reply
+        [attachment] = [
+            a for m in fake.in_thread(thread) if (a := m.attachment)
+        ]
+        assert attachment.data.decode() == long_reply
         # Both runs of the unit share its one thread.
         assert len(fake.threads) == 1
 
@@ -72,7 +73,9 @@ def test_operator_messages_start_and_continue_threads(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     claws = testing_gateway.make_claws(root, {'triage': ''})
-    fake_llm.queue(Reply(text='first answer'), Reply(text='second answer'))
+    fake_llm.queue(
+        harness.Reply(text='first answer'), harness.Reply(text='second answer')
+    )
 
     async def scenario(
         gateway: core.Gateway, bot: relay.Relay, fake: chat.FakeTransport
@@ -107,7 +110,8 @@ def test_messages_steer_in_flight_runs(
 ) -> None:
     claws = testing_gateway.make_claws(root, {'build': ''})
     fake_llm.queue(
-        Reply(tool='bash', args={'command': 'sleep 1'}), Reply(text='done')
+        harness.Reply(tool='bash', args={'command': 'sleep 1'}),
+        harness.Reply(text='done'),
     )
 
     async def scenario(
@@ -133,7 +137,9 @@ def test_confirm_dialogs_are_buttons(
     claws = testing_gateway.make_claws(
         root, {'build': ''}, extensions={'build': ['confirm_bash.ts']}
     )
-    fake_llm.queue(Reply(tool='bash', args={'command': 'echo approved'}))
+    fake_llm.queue(
+        harness.Reply(tool='bash', args={'command': 'echo approved'})
+    )
 
     async def scenario(
         gateway: core.Gateway, bot: relay.Relay, fake: chat.FakeTransport
@@ -164,11 +170,11 @@ def test_ask_operator_is_answered_by_a_thread_reply(
         root, {'triage': ''}, extensions={'triage': [ASK]}
     )
     fake_llm.queue(
-        Reply(
+        harness.Reply(
             tool='ask_operator',
             args={'question': 'Which repo?', 'assumption': 'all'},
         ),
-        Reply(text='thanks'),
+        harness.Reply(text='thanks'),
     )
 
     async def scenario(
@@ -199,11 +205,11 @@ def test_unanswered_questions_park_until_resumed(
         extensions={'build': [ASK]},
     )
     fake_llm.queue(
-        Reply(
+        harness.Reply(
             tool='ask_operator',
             args={'question': 'Merge?', 'assumption': 'no'},
         ),
-        Reply(text='resumed fine'),
+        harness.Reply(text='resumed fine'),
     )
 
     async def scenario(
@@ -236,7 +242,7 @@ def test_silent_jobs_only_post_when_they_have_news(
                '[[job]]\nname = "beat"\ncron = "0 * * * *"\n'
                'prompt = "check"\nsilent_ok = true\n'}
     )  # fmt: skip
-    fake_llm.queue(Reply(text='NO_REPLY'), Reply(text='news!'))
+    fake_llm.queue(harness.Reply(text='NO_REPLY'), harness.Reply(text='news!'))
 
     async def scenario(
         gateway: core.Gateway, bot: relay.Relay, fake: chat.FakeTransport
@@ -259,7 +265,7 @@ def test_commands(root: pathlib.Path, fake_llm: harness.FakeLLM) -> None:
         {'scout': '[limits]\ndaily_cost_usd = 1.0\n'
                   '[concurrency]\nmax_active = 1\n'},
     )  # fmt: skip
-    fake_llm.queue(Reply(prompt_tokens=2))
+    fake_llm.queue(harness.Reply(prompt_tokens=2))
 
     async def scenario(
         gateway: core.Gateway, bot: relay.Relay, fake: chat.FakeTransport
@@ -300,7 +306,9 @@ def test_stopping_cancels_pending_questions(
         root, {'triage': ''}, extensions={'triage': [ASK]}
     )
     fake_llm.queue(
-        Reply(tool='ask_operator', args={'question': 'Hm?', 'assumption': 'x'})
+        harness.Reply(
+            tool='ask_operator', args={'question': 'Hm?', 'assumption': 'x'}
+        )
     )
     fake = chat.FakeTransport()
     bot = relay.Relay(fake, chat.OPERATOR)

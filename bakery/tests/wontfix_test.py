@@ -2,37 +2,34 @@ import datetime
 import json
 import pathlib
 import subprocess
-import sys
 
 import pytest
 
 from bakery import state
 from bakery.collectors import wontfix
+from testing import commands
 from testing import tasks as testing_tasks
 
 
-def run(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(args, capture_output=True, text=True, check=False)
-
-
 def bakery(*args: str) -> subprocess.CompletedProcess[str]:
-    return run(sys.executable, '-m', 'bakery.cli', 'wontfix', *args)
+    return commands.bakery('wontfix', *args)
 
 
 @pytest.fixture(name='tasks', scope='function')
 def fixture_tasks(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: pathlib.Path,
+    task_folder: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv('XDG_STATE_HOME', str(tmp_path / 'state'))
-    monkeypatch.setenv('TASK_FOLDER', str(tmp_path / 'tasks'))
-    testing_tasks.create(tmp_path / 'tasks')
+    testing_tasks.create(task_folder)
     for args in (
         ('-n', 'bakery', '--tag', 'wontfix', '--link', 'https://x/a?todo=f#L3',
          'a'),
         ('-n', 'bakery', '--tag', 'wontfix', 'no link'),
         ('--link', 'https://x/b', 'mine'),
     ):  # fmt: skip
-        run('task', 'add', *args).check_returncode()
+        testing_tasks.task('add', *args)
 
 
 def test_rejections_are_recorded_by_lineage_and_committed(tasks: None) -> None:
@@ -65,7 +62,7 @@ def test_rejections_are_recorded_by_lineage_and_committed(tasks: None) -> None:
         'https://x/b': {'date': today, 'reason': 'mine', 'summary': 'mine'},
     }
     # Rejecting keeps the task: the operator closes it themself.
-    assert len(json.loads(run('task', 'list', '--json').stdout)) == 3
+    assert len(json.loads(testing_tasks.task('list', '--json'))) == 3
     assert 'https://x/b\n    mine\n    mine\n' in bakery('list').stdout
 
     assert bakery('rm', 'https://x/b').returncode == 0

@@ -1,7 +1,6 @@
 import datetime
 import json
 import pathlib
-import subprocess
 import time
 from collections.abc import Iterable
 from collections.abc import Mapping
@@ -77,24 +76,25 @@ def write_session(
 
 def add_run(
     runs: ledger.Ledger,
+    monkeypatch: pytest.MonkeyPatch,
     claw: str,
     job: str,
     started: float,
-    status: str = 'settled',
+    status: ledger.Status = ledger.Status.settled,
     reason: str | None = None,
 ) -> None:
-    runs.db.execute(
-        'INSERT INTO runs (claw, work_key, trigger, started_at, status,'
-        ' reason, cost_usd, turns, job) VALUES (?, ?, ?, ?, ?, ?, 0.5, 3, ?)',
-        (claw, f'{claw}/{job}-x', f'cron:{job}', started, status, reason, job),
-    )
+    """A finished run of `job`, as the gateway records one at `started`."""
+    with monkeypatch.context() as clock:
+        clock.setattr(time, 'time', lambda: started)
+        run_id = runs.start(claw, f'{claw}/{job}-x', f'cron:{job}', job)
+        runs.record(run_id, cost_usd=0.5, turns=3)
+        runs.finish(run_id, status, reason)
 
 
 @pytest.fixture(name='world', scope='function')
 def fixture_world(
     root: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> config.Claw:
-    monkeypatch.setenv('TASK_FOLDER', str(root / 'tasks'))
     testing_tasks.create(root / 'tasks')
     claws = testing_gateway.make_claws(root, {'baker': REVIEW, 'scout': ''})
     base = state.root()
@@ -118,12 +118,17 @@ def fixture_world(
 
 
 def test_digest_covers_activity_since_the_last_review(
-    world: config.Claw,
+    world: config.Claw, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     runs = ledger.Ledger(ledger.default_path())
-    add_run(runs, 'scout', 'daily', SINCE - 600, 'failed', 'too old')
-    add_run(runs, 'baker', 'review', SINCE)
-    add_run(runs, 'scout', 'daily', SINCE + 60, 'parked', 'cost limit')
+    failed, parked = ledger.Status.failed, ledger.Status.parked
+    add_run(
+        runs, monkeypatch, 'scout', 'daily', SINCE - 600, failed, 'too old'
+    )
+    add_run(runs, monkeypatch, 'baker', 'review', SINCE)
+    add_run(
+        runs, monkeypatch, 'scout', 'daily', SINCE + 60, parked, 'cost limit'
+    )
     scout = state.root() / 'scout'
     gh = 'gh run view 1 --log-failed'
     write_session(
@@ -186,14 +191,13 @@ def test_digest_covers_activity_since_the_last_review(
         ('human', 'y', 'Fixed'),
         ('human', 'z', 'Still open'),
     ):
-        subprocess.run(
-            ('task', 'add', '-n', 'bakery', '--tag', tag,
-             '--link', f'baker:plumbing/{slug}', '--', summary),
-            check=True,
+        testing_tasks.task(
+            'add', '-n', 'bakery', '--tag', tag,
+            '--link', f'baker:plumbing/{slug}', '--', summary,
         )  # fmt: skip
     wontfix.add('bakery:1', 'not a gap')
     for ident in ('bakery:1', 'bakery:2'):
-        subprocess.run(('task', ident, 'done'), check=True)
+        testing_tasks.task(ident, 'done')
 
     text = baker.collect(world).text
 
@@ -236,8 +240,8 @@ def test_digest_covers_activity_since_the_last_review(
     assert 'old trouble' not in text
 
     # Only baker itself ran since its last review: nothing to review.
-    add_run(runs, 'baker', 'review', SINCE + 120)
-    add_run(runs, 'baker', 'dream', SINCE + 130)
+    add_run(runs, monkeypatch, 'baker', 'review', SINCE + 120)
+    add_run(runs, monkeypatch, 'baker', 'dream', SINCE + 130)
     assert baker.collect(world).text is None
 
 
