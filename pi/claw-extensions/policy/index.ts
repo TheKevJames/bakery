@@ -2,23 +2,21 @@
  * Policy Extension (claws only)
  *
  * The claw's whole pi runs in an OS sandbox (pi/claw-sandbox/launch.mts),
- * which enforces its paths (and refuses unix sockets but its own, and names
- * other than localhost resolving to this machine). This enforces the rest of its policy (BAKERY_POLICY, set by the
- * gateway):
- *
- * - only allowlisted tools are declared to the model, and any other call is
- *   blocked;
- * - calls matching a `confirm` pattern need the operator's approval (a pi dialog, which
- *   the gateway turns into Discord buttons);
- * - results showing a sandbox refusal get a note saying so, so neither the
- *   model nor a later reader mistakes it for eg. missing auth or files.
+ * which enforces its policy: its paths (and refuses unix sockets but its own,
+ * and names other than localhost resolving to this machine). Which tools a
+ * claw uses is not policy: it gets pi's default tools and every extension
+ * tool its profile loads, since bash shares that one sandbox and so could do
+ * whatever a withheld tool would. Results showing a sandbox refusal get a note saying so, so
+ * neither the model nor a later reader mistakes it for eg. missing auth or
+ * files.
  *
  * Bash is not handed the claw's secrets, except those the gateway leaves
  * out of BAKERY_POLICY's secret_names (its `bash_secrets`). That is hygiene,
  * not a boundary: bash shares pi's sandbox, so it could read them from pi's
  * environment.
  *
- * Without a valid policy every tool call is blocked.
+ * Without a valid policy (BAKERY_POLICY, set by the gateway) pi fails to
+ * start, and every tool call is blocked.
  */
 import {
   type BashOperations,
@@ -26,9 +24,7 @@ import {
   createLocalBashOperations,
   type ExtensionAPI,
 } from "@earendil-works/pi-coding-agent";
-import { type Policy, parsePolicy, toolAllowed } from "./rules.ts";
-
-type Verdict = { block: true; reason: string } | undefined;
+import { type Policy, parsePolicy } from "./rules.ts";
 
 // What sandbox refusals look like: seatbelt's EPERM, and the network proxy's
 // 403 (its body, or curl's, Node's fetch's, or Go's report of it).
@@ -38,10 +34,6 @@ const SANDBOX_NOTE =
   "If the output above shows an operation refused (Operation not permitted, EPERM, or a proxy 403), " +
   "this claw's sandbox policy blocked it: it restricts which paths the claw may use, and refuses unix sockets and names other than localhost resolving to this machine. " +
   "This is not a missing credential, permission, or file; use a tool instead, or report the gap.";
-
-function block(reason: string): Verdict {
-  return { block: true, reason };
-}
 
 function withoutSecrets(policy: Policy): BashOperations {
   const local = createLocalBashOperations();
@@ -80,27 +72,10 @@ export default function policyExtension(pi: ExtensionAPI) {
 
   pi.on("before_agent_start", async () => {
     if (!policy) throw new Error(error);
-    const allowed = policy;
-    pi.setActiveTools(
-      pi
-        .getAllTools()
-        .map((tool) => tool.name)
-        .filter((name) => toolAllowed(name, allowed)),
-    );
   });
 
-  pi.on("tool_call", async (event, ctx) => {
-    if (!policy) return block(error);
-    if (!toolAllowed(event.toolName, policy)) {
-      return block(`${event.toolName} is not allowed by this claw's policy`);
-    }
-    const input = event.input as Record<string, unknown>;
-    const command = event.toolName === "bash" ? String(input.command ?? "") : "";
-    if (policy.confirm.some((re) => re.test(event.toolName) || (command && re.test(command)))) {
-      const summary = command || JSON.stringify(input).slice(0, 500);
-      const approved = await ctx.ui.confirm(`Allow ${event.toolName}?`, summary);
-      if (!approved) return block("denied by the operator");
-    }
+  pi.on("tool_call", async () => {
+    if (!policy) return { block: true, reason: error };
     return undefined;
   });
 }

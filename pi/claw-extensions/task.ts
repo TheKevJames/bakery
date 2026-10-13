@@ -1,14 +1,18 @@
 /**
  * Task Extension (claws only)
  *
- * Tools over the shared `task` list (`task` CLI, $TASK_FOLDER), which the
- * operator uses too. A claw's `policy.tools` decides which tools it gets. Claims are always
- * made as the claw itself (BAKERY_CLAW), and `task_add` files into the claw's
- * policy `task_tag` (BAKERY_TASK_TAG); `task` serializes concurrent writers.
- * Claws read every task but only change those tagged under their namespace
- * (BAKERY_TASK_NAMESPACE): the rest are the operator's. Releasing a claim is
- * the exception, so a task the operator takes over never keeps a claw as its
- * owner.
+ * Tools that change the shared `task` list (`task` CLI, $TASK_FOLDER), which
+ * the operator uses too; claws read it with `task list` and `task show` in
+ * bash. Claims are always made as the claw itself (BAKERY_CLAW), and
+ * `task_add` files into the claw's `[tasks] tag` (BAKERY_TASK_TAG); `task`
+ * serializes concurrent writers. Claws read every task but only change those
+ * tagged under their namespace (BAKERY_TASK_NAMESPACE): the rest are the
+ * operator's. Releasing a claim is the exception, so a task the operator takes
+ * over never keeps a claw as its owner.
+ *
+ * These checks are guard rails on the easy path, not a boundary: bash shares
+ * pi's sandbox, which can write $TASK_FOLDER, so the rules hold because the
+ * claws follow them.
  */
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -78,37 +82,6 @@ const Size = Type.Union([Type.Literal("small"), Type.Literal("medium"), Type.Lit
 export default function tasks(pi: ExtensionAPI) {
   pi.registerTool(
     defineTool({
-      name: "task_list",
-      label: "List Tasks",
-      description:
-        "List tasks as JSON. Filters are comma-separated `field<op>value` on summary, tag, owner, " +
-        "link, priority, or size, with = (equals), != , ~ (contains), !~; eg. " +
-        "`tag=bakery/build,owner=` (unowned).",
-      parameters: Type.Object({
-        filter: Type.Optional(Type.String()),
-      }),
-      async execute(_id, params, signal) {
-        const args = ["list", "--json"];
-        if (params.filter) args.push("-f", params.filter);
-        return text(await task(pi, args, signal));
-      },
-    }),
-  );
-
-  pi.registerTool(
-    defineTool({
-      name: "task_show",
-      label: "Show Task",
-      description: "Show one task as JSON, including its description.",
-      parameters: Type.Object({ id: Id }),
-      async execute(_id, params, signal) {
-        return text(await task(pi, ["show", String(params.id), "--json"], signal));
-      },
-    }),
-  );
-
-  pi.registerTool(
-    defineTool({
       name: "task_add",
       label: "Add Task",
       description:
@@ -176,33 +149,6 @@ export default function tasks(pi: ExtensionAPI) {
         if (args.length > 2) await task(pi, args, signal);
         if (params.release) await task(pi, ["unset", id, "owner"], signal);
         return text(await task(pi, ["show", id, "--json"], signal));
-      },
-    }),
-  );
-
-  pi.registerTool(
-    defineTool({
-      name: "task_link",
-      label: "Link Task",
-      description: "Set a task's link (eg. to the pull request implementing it)." + NS_HINT,
-      parameters: Type.Object({ id: Id, url: Type.String() }),
-      async execute(_id, params, signal) {
-        assertWritable(String(params.id), await show(pi, String(params.id), signal));
-        await task(pi, ["set", String(params.id), "--link", params.url], signal);
-        return text(await task(pi, ["show", String(params.id), "--json"], signal));
-      },
-    }),
-  );
-
-  pi.registerTool(
-    defineTool({
-      name: "task_done",
-      label: "Complete Task",
-      description: "Mark a task done (one-off tasks are deleted; recurring ones advance)." + NS_HINT,
-      parameters: Type.Object({ id: Id }),
-      async execute(_id, params, signal) {
-        assertWritable(String(params.id), await show(pi, String(params.id), signal));
-        return text(await task(pi, ["done", String(params.id)], signal));
       },
     }),
   );

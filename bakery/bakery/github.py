@@ -1,6 +1,5 @@
 """A minimal, read-only GitHub REST client."""
 
-import datetime
 import json
 import re
 import urllib.error
@@ -12,10 +11,6 @@ TIMEOUT = 30.0
 # Responses are arbitrary JSON, shaped by each endpoint.
 Json = Any
 NEXT_LINK = re.compile(r'<([^>]+)>;\s*rel="next"')
-# Sent with every response to a request made with an expiring classic token,
-# eg. `2027-10-11 23:00:00 UTC`.
-EXPIRATION_HEADER = 'GitHub-Authentication-Token-Expiration'
-EXPIRATION_FORMAT = '%Y-%m-%d %H:%M:%S %Z'
 
 
 class GitHubError(Exception):
@@ -28,8 +23,6 @@ class GitHub:
     def __init__(self, api: str, token: str) -> None:
         self.api = api.rstrip('/')
         self.token = token
-        # When the token expires, once a response has said.
-        self.token_expires: datetime.datetime | None = None
 
     def _open(self, url: str) -> tuple[bytes, str | None]:
         request = urllib.request.Request(url)
@@ -43,14 +36,9 @@ class GitHub:
             with urllib.request.urlopen(request, timeout=TIMEOUT) as resp:
                 body: bytes = resp.read()
                 link: str | None = resp.headers.get('Link')
-                expires = resp.headers.get(EXPIRATION_HEADER)
         except OSError as e:
             status = e.code if isinstance(e, urllib.error.HTTPError) else None
             raise GitHubError(f'GET {url}: {e}', status) from e
-        if expires:
-            self.token_expires = datetime.datetime.strptime(
-                expires, EXPIRATION_FORMAT
-            ).replace(tzinfo=datetime.UTC)
         return body, link
 
     def _url(self, path: str, params: dict[str, str] | None) -> str:

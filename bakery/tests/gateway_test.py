@@ -270,7 +270,7 @@ def test_secrets_reach_pi_but_not_bash(
     claws = testing_gateway.make_claws(
         root,
         {
-            'a': f'{secrets}\n[policy]\ntools = ["bash", "env_of"]\n',
+            'a': secrets,
             'b': 'secrets = ["BAKERY_FAKE_LLM_URL", "BAKERY_TEST_MISSING"]\n',
         },
         extensions={'a': ['env_of.ts']},

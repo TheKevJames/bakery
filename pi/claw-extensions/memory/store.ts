@@ -51,15 +51,6 @@ export function append(text: string, source: Source, now = new Date()): string {
   return path.relative(memoryDir(), file);
 }
 
-/** A memory file named relative to the memory dir: MEMORY.md or memory/*.md. */
-export function resolve(name: string): string {
-  const normal = path.posix.normalize(name);
-  if (normal !== "MEMORY.md" && !/^memory\/[^/]+\.md$/.test(normal)) {
-    throw new Error(`not a memory file: ${name} (use MEMORY.md or memory/<file>.md)`);
-  }
-  return path.join(memoryDir(), normal);
-}
-
 export function readOrEmpty(file: string): string {
   return fs.existsSync(file) ? fs.readFileSync(file, "utf-8") : "";
 }

@@ -1,8 +1,8 @@
 """
-A claw's `[policy]`: what its pi child may do. Paths are enforced by the OS
-sandbox the child runs in (see sandbox.py); tools and confirmations by
-pi/claw-extensions/policy in the child, to which the gateway passes them as
-BAKERY_POLICY.
+A claw's `[policy]`: the paths its pi child may read and write, enforced by
+the OS sandbox the child runs in (see sandbox.py). Which tools it uses, and how
+it uses the task list, are rules in its instructions, not policy: bash shares
+pi's sandbox, so nothing pi's process could refuse would bind bash.
 """
 
 import dataclasses
@@ -13,20 +13,9 @@ from collections.abc import Iterable
 
 from . import toml
 
-TAG_RE = re.compile(r'[a-z0-9][a-z0-9_.-]*(/[a-z0-9][a-z0-9_.-]*)*')
-# Claws only change tasks tagged under this section; the rest are the
-# operator's.
-NAMESPACE = 'bakery'
-
-
-def in_namespace(tag: str) -> bool:
-    return tag.startswith(f'{NAMESPACE}/')
-
 
 @dataclasses.dataclass(frozen=True)
 class Policy:
-    # Tool names; `*` matches any characters (eg. `task_*`).
-    tools: tuple[str, ...]
     # Absolute paths under $HOME the claw may read; the rest of $HOME is
     # unreadable. Outside $HOME, everything but per-user temp is readable.
     read_paths: tuple[pathlib.Path, ...]
@@ -34,11 +23,6 @@ class Policy:
     deny_read: tuple[str, ...]
     # Absolute paths the claw may write, besides its own state and profile.
     write_paths: tuple[pathlib.Path, ...]
-    # Regexes; a matching tool name or bash command needs the operator's
-    # approval.
-    confirm: tuple[str, ...]
-    # The task list section `task_add` files into, under NAMESPACE.
-    task_tag: str
 
 
 def _pattern(raw: str, base: pathlib.Path) -> str:
@@ -54,25 +38,7 @@ def _pattern(raw: str, base: pathlib.Path) -> str:
 
 def parse(table: toml.Table, profile: pathlib.Path) -> Policy:
     """Relative paths are relative to the claw's profile dir."""
-    confirm = table.strings('confirm')
-    for pattern in confirm:
-        try:
-            re.compile(pattern)
-        except re.error as e:
-            raise toml.ConfigError(
-                f'{table.where}.confirm: bad regex {pattern!r}: {e}'
-            ) from None
-    task_tag = table.string('task_tag')
-    if not TAG_RE.fullmatch(task_tag):
-        raise toml.ConfigError(
-            f'{table.where}.task_tag: {task_tag!r} is not a lowercase tag path'
-        )
-    if not in_namespace(task_tag):
-        raise toml.ConfigError(
-            f'{table.where}.task_tag: {task_tag!r} is not under {NAMESPACE}/'
-        )
     policy = Policy(
-        tools=table.strings('tools'),
         read_paths=tuple(
             toml.expand(p, profile) for p in table.strings('read_paths')
         ),
@@ -82,18 +48,11 @@ def parse(table: toml.Table, profile: pathlib.Path) -> Policy:
         write_paths=tuple(
             toml.expand(p, profile) for p in table.strings('write_paths')
         ),
-        confirm=confirm,
-        task_tag=task_tag,
     )
     table.done()
     return policy
 
 
-def serialize(policy: Policy, *, secret_names: Iterable[str]) -> str:
-    return json.dumps(
-        {
-            'tools': policy.tools,
-            'confirm': policy.confirm,
-            'secret_names': sorted(secret_names),
-        }
-    )
+def serialize(*, secret_names: Iterable[str]) -> str:
+    """BAKERY_POLICY, for pi/claw-extensions/policy."""
+    return json.dumps({'secret_names': sorted(secret_names)})

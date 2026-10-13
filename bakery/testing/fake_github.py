@@ -25,8 +25,6 @@ class FakeGitHub:
     )
     # Seconds each response takes, to keep a collection in progress.
     delay: float = 0.0
-    # Sent with every response.
-    headers: dict[str, str] = dataclasses.field(default_factory=dict)
 
 
 def logs_zip(files: dict[str, str]) -> bytes:
@@ -58,8 +56,6 @@ def _handler(fake: FakeGitHub) -> type:
                 body if isinstance(body, bytes) else json.dumps(body).encode()
             )
             self.send_response(200)
-            for name, value in fake.headers.items():
-                self.send_header(name, value)
             if self.path in fake.next_pages:
                 link = fake.url + fake.next_pages[self.path]
                 self.send_header('Link', f'<{link}>; rel="next"')

@@ -13,10 +13,6 @@ import pathlib
 import re
 from collections.abc import Iterator
 
-# The reasons pi/claw-extensions/policy blocks a call with.
-POLICY_BLOCKS = re.compile(
-    r"is not allowed by this claw's policy$|denied by the operator$"
-)
 # The sandbox's refusals as tools report them (as in the policy extension's
 # SANDBOX_REFUSAL): seatbelt's EPERM, and the network proxy's 403.
 SANDBOX_REFUSAL = re.compile(
@@ -43,18 +39,13 @@ class ToolCall:  # pylint: disable=too-many-instance-attributes
     is_error: bool
     text: str
 
-    def restriction(self) -> tuple[str, tuple[str, ...]] | None:
-        """('policy' | 'sandbox', lines) if the claw's policy refused it."""
-        if self.is_error and POLICY_BLOCKS.search(self.text.strip()):
-            return 'policy', (self.text.strip(),)
-        denied = tuple(
+    def refusals(self) -> tuple[str, ...]:
+        """The lines of its result showing the sandbox refusing something."""
+        return tuple(
             line.strip()
             for line in self.text.splitlines()
             if SANDBOX_REFUSAL.search(line) and not SANDBOX_NOTE.search(line)
         )
-        if denied:
-            return 'sandbox', denied
-        return None
 
 
 def _timestamp(raw: str) -> datetime.datetime:

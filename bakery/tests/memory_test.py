@@ -14,7 +14,6 @@ name = "dream"
 cron = "0 3 * * *"
 prompt = "/dream"
 silent_ok = true
-tools = ["memory_edit"]
 """
 
 
@@ -40,7 +39,9 @@ def git_log(root: pathlib.Path) -> str:
     ).stdout
 
 
-def test_memory_tools(root: pathlib.Path, fake_llm: harness.FakeLLM) -> None:
+def test_memory_append_records_sources(
+    root: pathlib.Path, fake_llm: harness.FakeLLM
+) -> None:
     claws = testing_gateway.make_claws(
         root, {'a': ''}, extensions={'a': [MEMORY]}
     )
@@ -48,10 +49,6 @@ def test_memory_tools(root: pathlib.Path, fake_llm: harness.FakeLLM) -> None:
     fake_llm.queue(
         call('memory_append', text='Operator prefers tabs', source='operator'),
         call('memory_append', text='Issue says use spaces', source='external'),
-        call('memory_search', query='TABS spaces'),
-        call('memory_get', file=f'memory/{today_note(root).name}'),
-        call('memory_get', file='../_shared/OPERATOR.md'),
-        call('memory_edit', content='overwritten'),
         Reply(text='done'),
     )
 
@@ -60,20 +57,13 @@ def test_memory_tools(root: pathlib.Path, fake_llm: harness.FakeLLM) -> None:
         assert run.status == 'settled', run.reason
 
     testing_gateway.run_gateway(claws, fake, scenario)
-    results = fake_llm.tool_results()
     note = today_note(root).read_text()
     assert '· operator\n\nOperator prefers tabs' in note
     assert '· external\n\nIssue says use spaces' in note
-    assert results[2].count(today_note(root).name) == 2
-    assert 'Operator prefers tabs' in results[3]
-    assert 'not a memory file' in results[4]
-    # Only dream runs may rewrite MEMORY.md.
-    assert 'Tool memory_edit not found' in results[5]
-    assert not (state_dir(root) / 'MEMORY.md').exists()
     assert git_log(root).splitlines()[0].endswith(': settled')
 
 
-def test_dream_job_curates_memory_and_keeps_its_tools_on_resume(
+def test_dream_job_curates_memory_and_keeps_its_settings_on_resume(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     claws = testing_gateway.make_claws(

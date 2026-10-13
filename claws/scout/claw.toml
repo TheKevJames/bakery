@@ -2,25 +2,23 @@
 # (CI failures and warnings, issues and PRs, TODO comments) and adds them for
 # triage.
 # Candidates are gathered deterministically by bakery/bakery/collectors/
-# scout.py from scout.toml; the model only writes them up.
+# scout.py from scout.toml; the model only writes them up. Scout reads
+# untrusted issue and PR text, so its GitHub token is read-only: a classic PAT
+# with no scopes, which reads public repositories (all the claws work on).
 
 model = "anthropic/claude-haiku-5-5"
 thinking = "high"
+# Replaces the default list.
+secrets = [
+    "ANTHROPIC_API_KEY",
+    "GH_TOKEN=BAKERY_GITHUB_READONLY",
+]
 
 [limits]
 cost_usd = 2.0
 
 [ask]
 policy = "assume"  # never interrupt the operator; note assumptions in the report
-
-[policy]
-# Read-only, and no bash: the collector gathers everything scout needs.
-tools = [
-    "read", "grep", "find", "ls",
-    "web_fetch", "github", "context7",
-    "memory_append", "memory_search", "memory_get",
-    "task_list", "task_add",
-]
 
 [[job]]
 name = "daily"

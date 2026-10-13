@@ -21,6 +21,7 @@ import croniter
 
 from .. import collectors
 from .. import state
+from ..collectors import tasks
 from . import policy as policy_
 from . import toml
 
@@ -77,10 +78,9 @@ class Job:
     prompt: str
     active_hours: ActiveHours | None
     silent_ok: bool
-    # Overrides for this job's units of work; tools are added to the policy.
+    # Overrides for this job's units of work.
     model: str | None
     thinking: str | None
-    tools: tuple[str, ...]
     # A bakery.collectors name: gathers input first; nothing found, no run.
     collector: str | None
     # After a run settles, start the next (until the collector finds
@@ -100,6 +100,12 @@ class Memory:
     flush_margin_tokens: int
     # The largest MEMORY.md may grow; keep it within its context.toml budget.
     max_chars: int
+
+
+@dataclasses.dataclass(frozen=True)
+class Tasks:
+    # The task list section `task_add` files into, under tasks.NAMESPACE.
+    tag: str
 
 
 @dataclasses.dataclass(frozen=True)
@@ -128,6 +134,7 @@ class Claw:
     bash_secrets: tuple[str, ...]
     git: Git
     policy: policy_.Policy
+    tasks: Tasks
     jobs: tuple[Job, ...]
 
     @property
@@ -227,7 +234,6 @@ def _job(table: toml.Table, names: set[str], shared: set[str]) -> Job:
             if table.optional('thinking')
             else None
         ),
-        tools=table.strings('tools') if table.optional('tools') else (),
         collector=_collector(table),
         repeat=table.boolean('repeat') if table.optional('repeat') else False,
         watch=(
@@ -279,6 +285,20 @@ def _git(table: toml.Table) -> Git:
     return git
 
 
+def _tasks(table: toml.Table) -> Tasks:
+    tag = table.string('tag')
+    if not tasks.TAG_RE.fullmatch(tag):
+        raise ConfigError(
+            f'{table.where}.tag: {tag!r} is not a lowercase tag path'
+        )
+    if not tasks.in_namespace(tag):
+        raise ConfigError(
+            f'{table.where}.tag: {tag!r} is not under {tasks.NAMESPACE}/'
+        )
+    table.done()
+    return Tasks(tag=tag)
+
+
 def _claw(
     name: str,
     profile: pathlib.Path,
@@ -319,6 +339,7 @@ def _claw(
         bash_secrets=_bash_secrets(table, secrets),
         git=_git(table.table('git')),
         policy=policy_.parse(table.table('policy'), profile),
+        tasks=_tasks(table.table('tasks')),
         ask=Ask(
             policy=ask.string('policy', ASK_POLICIES),
             timeout_hours=ask.positive('timeout_hours'),

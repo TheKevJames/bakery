@@ -131,17 +131,14 @@ def _grouped(
     return lines
 
 
-def _restrictions(calls: list[transcripts.ToolCall]) -> Section:
-    keyed = []
-    for call in calls:
-        restriction = call.restriction()
-        if restriction is None:
-            continue
-        kind, found = restriction
-        for line in found:
-            keyed.append(((call.claw, kind, _short(PID.sub('', line))), call))
+def _refusals(calls: list[transcripts.ToolCall]) -> Section:
+    keyed = [
+        ((call.claw, 'sandbox', _short(PID.sub('', line))), call)
+        for call in calls
+        for line in call.refusals()
+    ]
     return Section(
-        "Calls the claws' policy or sandbox refused",
+        "Calls the claws' sandbox refused",
         _grouped(keyed),
         8_000,
         'search the transcripts for "operation not permitted" and "403"',
@@ -176,7 +173,7 @@ def _violations(root: pathlib.Path, window: datetime.datetime) -> Section:
 def _errors(calls: list[transcripts.ToolCall]) -> Section:
     keyed = []
     for call in calls:
-        if not call.is_error or call.restriction() is not None:
+        if not call.is_error or call.refusals():
             continue
         lines = [line for line in call.text.splitlines() if line.strip()]
         # Bash output leads with whatever the command printed; its exit code
@@ -269,7 +266,7 @@ def _tasks() -> Section:
         'Your tasks (open, and rejected)',
         lines,
         5_000,
-        f'task_list with filter link~{TASK_LINK_PREFIX}, and rejections in'
+        f"task list --json -f 'link~{TASK_LINK_PREFIX}', and rejections in"
         f' {wontfix.path()}',
     )
 
@@ -326,7 +323,7 @@ def collect(claw: 'config.Claw') -> base.Collection:
     sections = (
         _runs(runs, root),
         _tools(calls),
-        _restrictions(calls),
+        _refusals(calls),
         _violations(root, window),
         _errors(calls),
         _memory(root, claw_dirs, calls, since),

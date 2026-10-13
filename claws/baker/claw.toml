@@ -15,17 +15,13 @@ turns = 100
 policy = "assume"  # its tasks are its questions for the operator
 
 [policy]
-tools = [
-    "read", "grep", "find", "ls", "bash",
-    "web_search", "web_fetch", "github", "context7",
-    "memory_append", "memory_search", "memory_get",
-    "task_list", "task_show", "task_add",
-]
 # Every claw's state, and the gateway's runs, logs, and sandbox violations.
 read_paths = ["${TASK_FOLDER}", "${XDG_STATE_HOME}/claws"]
+
+[tasks]
 # Never bakery/build: fixes change the claws themselves, so the operator
 # approves.
-task_tag = "bakery/human"
+tag = "bakery/human"
 
 # After the 03:00 dreams, so it sees what they promoted.
 [[job]]

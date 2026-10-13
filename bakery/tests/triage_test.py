@@ -14,8 +14,6 @@ from testing import harness
 
 Reply = harness.Reply
 QUEUE = """
-[policy]
-tools = ["task_list", "task_show", "task_set"]
 [[job]]
 name = "queue"
 cron = "0 * * * *"
@@ -24,8 +22,6 @@ collector = "triage"
 repeat = true
 """
 BLOCKED = """
-[policy]
-tools = ["task_list", "task_show", "task_set"]
 [[job]]
 name = "queue"
 cron = "0 * * * *"
@@ -291,24 +287,19 @@ def test_claws_only_change_bakery_tasks(
     fake_llm.queue(
         call(id=3, claim=True),
         call(id=3, description_append='notes'),
-        Reply(tool='task_link', args={'id': 3, 'url': 'https://x'}),
-        Reply(tool='task_done', args={'id': 3}),
         call(id=1, tag='dev'),
         call(id=4, release=True),
         Reply(text='done'),
     )
     fake = testing_gateway.FakeChannel()
-    claw_toml = QUEUE.replace(
-        '"task_set"', '"task_set", "task_link", "task_done"'
-    )
 
     async def scenario(gateway: core.Gateway) -> None:
         gateway.trigger('triage', None, None)
         await fake.wait('triage/task-1')
 
-    testing_gateway.run_gateway(triage_claws(root, claw_toml), fake, scenario)
+    testing_gateway.run_gateway(triage_claws(root, QUEUE), fake, scenario)
     *refused, moved, released = fake_llm.tool_results()
-    assert len(refused) == 4
+    assert len(refused) == 2
     assert all("task 3 is the operator's (tagged dev)" in r for r in refused)
     assert 'dev is not under bakery/' in moved
     assert '"owner": null' in released

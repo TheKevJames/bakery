@@ -23,7 +23,7 @@ enabled = true
 # sandbox, so it could read the others from pi's environment.
 secrets = [
     "ANTHROPIC_API_KEY",
-    "GH_TOKEN=BAKERY_GITHUB",      # github, gh, git: the claws' GitHub user
+    "GH_TOKEN=BAKERY_GITHUB",      # gh, git: the claws' GitHub user
 ]
 # For git and gh in the claw's own clones; GitHub's rulesets keep it off the
 # operator's default branches.
@@ -33,20 +33,15 @@ bash_secrets = ["GH_TOKEN"]
 
 # Paths are enforced by the OS sandbox the claw's whole pi runs in (see
 # bakery/bakery/gateway/sandbox.py), so they bind pi, bash, and every tool
-# alike; tools and confirm by pi/claw-extensions/policy. The sandbox also lets
-# every claw reach any host, except by a name other than localhost resolving
-# to this machine (loopback, link-local, its own addresses), and no unix
-# socket but its own.
+# alike. Tools are not policy: every claw has pi's default tools and every
+# extension tool its profile loads, and its instructions say which to use.
+# The sandbox also lets every claw reach any host, except by a name other
+# than localhost resolving to this machine (loopback, link-local, its own
+# addresses), and no unix socket but its own.
 # Relative paths are relative to the claw's profile (claws/<name>/); ~ and
 # ${VAR} expand.
 # A claw's value for a key replaces the default list; repeat what it keeps.
 [claw.policy]
-# Tool names; `*` matches any characters. Anything else is blocked.
-tools = [
-    "read", "grep", "find", "ls", "bash",
-    "ask_operator", "web_search", "web_fetch", "github", "context7",
-    "memory_append", "memory_search", "memory_get", "propose_operator_update",
-]
 # The only readable paths under $HOME, besides what pi needs to run (its
 # install, the bakery repo, the claw's profile, own state, and _shared).
 # Outside $HOME everything is readable but per-user temp and the claw state
@@ -64,11 +59,10 @@ deny_read = [
 # $TMPDIR; the rest of the repo is read-only. The memory tools are the
 # intended writers of memory, but bash could write it.
 write_paths = ["${TASK_FOLDER}"]
-# Regexes on tool names or bash commands that need the operator's approval in
-# Discord.
-confirm = []
+
+[claw.tasks]
 # The task list section task_add files into.
-task_tag = "bakery/triage"
+tag = "bakery/triage"
 
 # The identity of the claw's commits (the claws' GitHub user), in the git
 # config the gateway writes into the claw's home at every start.
@@ -104,7 +98,6 @@ prompt = "/dream"  # pi/claw-prompts/dream.md
 model = "anthropic/claude-opus-5-5"
 thinking = "medium"
 silent_ok = true
-tools = ["memory_edit"]  # only dream runs may rewrite MEMORY.md
 
 # A claw's own jobs, in its claw.toml:
 #
@@ -116,4 +109,3 @@ tools = ["memory_edit"]  # only dream runs may rewrite MEMORY.md
 # silent_ok = false             # true: no thread unless it has news
 # model = "..."                 # optional overrides for the job's runs
 # thinking = "..."
-# tools = []                    # added to the claw's policy.tools

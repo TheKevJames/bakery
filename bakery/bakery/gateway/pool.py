@@ -18,6 +18,7 @@ import time
 from .. import paths
 from .. import secrets
 from .. import state
+from ..collectors import tasks
 from . import config
 from . import policy
 from . import rpc
@@ -59,14 +60,8 @@ async def _check_startup(proc: rpc.PiProcess) -> None:
         raise rpc.RpcError('; '.join(errors))
 
 
-def child_env(
-    claw: config.Claw, job: config.Job | None, sid: str
-) -> dict[str, str]:
+def child_env(claw: config.Claw, sid: str) -> dict[str, str]:
     """Raises secrets.SecretError if a configured secret is missing."""
-    tools = job.tools if job is not None else ()
-    claw_policy = dataclasses.replace(
-        claw.policy, tools=(*claw.policy.tools, *tools)
-    )
     env = {
         name: value
         for name, value in os.environ.items()
@@ -93,12 +88,11 @@ def child_env(
             # proxy otherwise, and the sandbox refuses direct connections.
             'NODE_USE_ENV_PROXY': '1',
             'BAKERY_POLICY': policy.serialize(
-                claw_policy,
-                secret_names=set(claw.secrets) - set(claw.bash_secrets),
+                secret_names=set(claw.secrets) - set(claw.bash_secrets)
             ),
             'BAKERY_CLAW': claw.name,
-            'BAKERY_TASK_TAG': claw.policy.task_tag,
-            'BAKERY_TASK_NAMESPACE': policy.NAMESPACE,
+            'BAKERY_TASK_TAG': claw.tasks.tag,
+            'BAKERY_TASK_NAMESPACE': tasks.NAMESPACE,
             'PI_CODING_AGENT_DIR': str(claw.profile),
             'PI_CODING_AGENT_BAKERY_DIR': str(sandbox.sockets(claw)),
             'BAKERY_ASK_POLICY': claw.ask.policy,
@@ -132,7 +126,7 @@ def child_spec(
         # claw without its policy.
         '--extension', str(policy_extension()),
     )  # fmt: skip
-    return command, child_env(claw, job, sid)
+    return command, child_env(claw, sid)
 
 
 @dataclasses.dataclass

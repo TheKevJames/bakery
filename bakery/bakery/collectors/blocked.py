@@ -21,7 +21,6 @@ import sys
 from collections.abc import Callable
 from typing import Literal
 
-from ..gateway import policy
 from . import tasks
 
 TAG = 'bakery/blocked'
@@ -129,7 +128,7 @@ def problems(ident: int, description: str | None, board: Board) -> list[str]:
             found.append(f'{blocker}: a task cannot block itself')
             continue
         state = board.state(blocker)
-        if not (DONE in (blocker.until, state) or policy.in_namespace(state)):
+        if not (DONE in (blocker.until, state) or tasks.in_namespace(state)):
             found.append(
                 f"{blocker}: #{blocker.ident} is the operator's ({state}),"
                 f' so use `#{blocker.ident} done`'

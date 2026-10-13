@@ -6,8 +6,8 @@ It is time to consolidate your memory. Your daily notes (`memory/YYYY-MM-DD.md`)
 record what happened; `MEMORY.md` is the curated memory every future run starts
 from, so a mistake here repeats in every run until it is corrected.
 
-1. Read `MEMORY.md` and the daily notes since its last consolidation (use
-   `memory_get`; `memory_search` helps find related entries).
+1. Read `MEMORY.md` and the daily notes since its last consolidation, in
+   `$BAKERY_MEMORY_DIR` (`rg` there helps find related entries).
 2. Update `MEMORY.md` with `memory_edit`: add durable facts, decisions, and
    lessons; correct or remove entries that are now wrong; merge duplicates.
    Keep it concise and organized by topic, not by date. Record the date you

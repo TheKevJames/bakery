@@ -9,7 +9,7 @@ daemon and controlled over Discord. Its terms are defined in
 
 | Path | Contents |
 | --- | --- |
-| `pi/` | Shared pi resources: `extensions/`, `claw-extensions/` (claws only: `policy/`, `memory/`, `task.ts`, `ask-operator.ts`, `github.ts`), `claw-sandbox/` (the claws' sandbox launcher), `claw-prompts/` (claws only, eg. `/dream`), `skills/` (incl. vendored), `prompts/`, `agents/`, `rules/` (instruction fragments). |
+| `pi/` | Shared pi resources: `extensions/`, `claw-extensions/` (claws only: `policy/`, `memory/`, `task.ts`, `ask-operator.ts`), `claw-sandbox/` (the claws' sandbox launcher), `claw-prompts/` (claws only, eg. `/dream`), `skills/` (incl. vendored), `prompts/`, `agents/`, `rules/` (instruction fragments). |
 | `interactive/` | The interactive profile; used directly as `PI_CODING_AGENT_DIR`. |
 | `claws/<name>/` | One profile per claw: `claw.toml`, `context.toml`, `settings.json`, `SOUL.md`, `IDENTITY.md`, `AGENTS.md`. |
 | `bakery/` | Python project: the `bakery` CLI, the gateway, and collectors. |
@@ -27,9 +27,9 @@ that is gitignored. Pi also rewrites `settings.json` (e.g.
 Claw profiles list their extensions explicitly rather than loading all of
 `pi/extensions/`: they need `context/`, `bakery.ts`, `time-awareness.ts`,
 `ketch.ts`, `context7.ts`, and `pi/claw-extensions/` (the gateway adds
-`policy/` itself), and load `pi/claw-prompts/` as prompts, but not the
-TUI-only extensions or `subagent/` (its child pi runs would escape the
-gateway's cost ledger).
+`policy/` itself), inject `pi/claw-rules/` through their `context.toml`,
+and load `pi/claw-prompts/` as prompts, but not the TUI-only extensions or
+`subagent/` (its child pi runs would escape the gateway's cost ledger).
 
 Every profile disables pi's built-in `codemode`, `tool-search`,
 `llama.cpp`, and `mcp` extensions (`-builtin:<name>` in its `extensions`),
@@ -119,20 +119,18 @@ cloning or when the lockfile changes (dotsystem's `sync` does this).
 
 ## Memory
 
-Memory lives in the claw's state dir and is meant to be written through
-tools (`pi/claw-extensions/memory/`). Bash shares pi's sandbox, which can
-write the claw's state dir, so this is convention rather than enforcement;
-the state repo's commits keep every change reviewable.
+Memory lives in the claw's state dir (`$BAKERY_MEMORY_DIR`), which claws
+read like any other files, and is meant to be written through tools
+(`pi/claw-extensions/memory/`). Bash shares pi's sandbox, which can write
+the claw's state dir, so this is convention rather than enforcement; the
+state repo's commits keep every change reviewable.
 
 - `memory_append(text, source)` — a timestamped entry in today's
   `memory/YYYY-MM-DD.md`, tagged with its memory source: `operator`, `self`,
   or `external`.
-- `memory_search(query)` — case-insensitive keyword search (ripgrep) over
-  `MEMORY.md` and the daily notes, newest first, capped at 50 lines.
-- `memory_get(file, offset?, limit?)` — read `MEMORY.md` or a daily note.
 - `memory_edit(edits | content)` — `MEMORY.md` only: exact replacements or a
-  full rewrite, capped at `[memory] max_chars` (20k, its context budget). Not
-  in the default tools; only the dream job adds it.
+  full rewrite, capped at `[memory] max_chars` (20k, its context budget).
+  Every run has it, but its description says it is only for the dream job.
 
 Curation:
 
@@ -144,7 +142,7 @@ Curation:
   model and context, so its cost is accounted.
 - **Dream job**: defined once in `claws/defaults.toml` (03:00 daily,
   `prompt = "/dream"` from `pi/claw-prompts/dream.md`, Opus with medium
-  thinking, `silent_ok`, `tools = ["memory_edit"]`). It distills recent
+  thinking, `silent_ok`). It distills recent
   daily notes into `MEMORY.md` and never promotes `external` notes, which
   stay in the daily notes as evidence; its report lists what it held back.
   It also leaves out volatile references (task ids, line numbers, counts),
@@ -245,8 +243,8 @@ transcripts.
 - **cron**: 5-field expressions in `claw.toml`, Europe/Lisbon, optional
   `active_hours`. Missed runs (Mac asleep, gateway down) are skipped. Jobs in
   `defaults.toml`'s `[claw]` table apply to every claw (a claw's job of the
-  same name replaces one); a job may override `model` and `thinking` and add
-  `tools` for its units of work, which keep them on later runs (eg. replies).
+  same name replaces one); a job may override `model` and `thinking` for its
+  units of work, which keep them on later runs (eg. replies).
   `bakery trigger <claw>` runs the claw's only own job; shared jobs (eg.
   `dream`) must be named.
 - **heartbeat**: a cron job flagged `silent_ok` (eg. every claw's dream,
@@ -408,17 +406,26 @@ gateway's `Channel`), `transport` (the interface), `discord_transport`
 
 Prompt-level rules are not enforcement. Each claw's `[policy]` (defaults in
 `claws/defaults.toml`, overridable per claw; there are no named tiers; a
-claw's value for a key replaces the default list) is enforced in two places:
-paths by the OS sandbox the claw's whole pi runs in, and tools,
-confirmations, and `task_tag` by `pi/claw-extensions/policy/`, which the
-gateway always loads with `--extension` so no profile can omit it. The
-gateway passes the latter as `BAKERY_POLICY`; without a valid one, every tool
-call is blocked.
+claw's value for a key replaces the default list) is enforced by the OS
+sandbox the claw's whole pi runs in, and its GitHub token limits what it can
+do there. Nothing else is a boundary: bash shares pi's sandbox, so anything
+pi's process could refuse, bash could do anyway. So:
 
-- `tools`: names or `*` patterns (eg. `task_*`). Only these are
-  declared to the model, and any other call is blocked. The default allows
-  `read`, `grep`, `find`, `ls`, `bash`, `ask_operator`, `web_search`,
-  `web_fetch`, `github`, and `context7`; no `edit` or `write`.
+- Every claw has pi's default tools (`read`, `bash`, `edit`, `write`) and
+  every extension tool its profile loads. Which to use, and how, are rules
+  in its instructions.
+- The task tools' checks (the namespace, claims, `[tasks] tag`, blocked
+  lists) are guard rails on the easy path; `pi/claw-rules/tasks.md` tells
+  every claw to change tasks only through them.
+- `memory_edit` is meant only for the dream job, by its description.
+
+`pi/claw-extensions/policy/`, which the gateway always loads with
+`--extension` so no profile can omit it, keeps from bash the secrets it is
+not handed (see below) and notes sandbox refusals. The gateway passes it `BAKERY_POLICY`;
+without a valid one, pi fails to start and every tool call is blocked.
+
+The `[policy]` keys:
+
 - `read_paths`: the only readable paths under `$HOME`, besides what pi needs
   to run (below). Default `$TASK_FOLDER`; baker adds the claw state root.
   The operator's checkouts are never among them (claws read repos from
@@ -433,11 +440,10 @@ call is blocked.
 - `write_paths`: writable besides the claw's own state dir, pi's files in its
   profile, and its `$TMPDIR`. Default `$TASK_FOLDER`. The memory tools are
   the intended writers of memory, but bash could write it too.
-- `confirm`: regexes on tool names or bash commands; a match asks the
-  operator in Discord (Approve/Deny) before running.
-- `task_tag`: the task list section `task_add` files into (default
-  `bakery/triage`); the model cannot choose another. It must be under
-  `bakery/` (`policy.NAMESPACE`).
+
+A claw's `[tasks] tag` is the task list section `task_add` files into
+(default `bakery/triage`); the tool does not let the model choose another.
+It must be under `bakery/` (`tasks.NAMESPACE`).
 
 Enforcement:
 
@@ -491,13 +497,11 @@ Enforcement:
 2. **Secrets** reach pi's environment; bash only gets a claw's
    `bash_secrets` (default `GH_TOKEN`). That is hygiene, not a boundary:
    bash shares pi's sandbox and could read pi's environment.
-3. **The policy extension** enforces `tools`, `confirm`, and `task_tag`, in
-   pi's process.
-4. **Repositories and pushing.** Claws read and change repos only in their
+3. **Repositories and pushing.** Claws read and change repos only in their
    own clones, `<state>/clones/<owner>/<repo>`, cloned from GitHub, fetched
    and checked out at `origin/HEAD` before every use, with a `git worktree`
-   per piece of work (`pi/claw-rules/repos.md`, in the context of the claws
-   with bash). That includes bakery, whose checkout pi runs from may hold
+   per piece of work (`pi/claw-rules/repos.md`, in every claw's context).
+   That includes bakery, whose checkout pi runs from may hold
    the operator's unmerged work. It commits on `kjames/bakery-*` branches, pushes over HTTPS, and
    opens PRs with `gh`; the operator reviews and merges. The gateway writes
    the claw's git config (`<state>/home/config/git/config`, its `GIT_CONFIG_GLOBAL`, so git never
@@ -559,19 +563,20 @@ What claws rely on:
 - property tests (DB round-trip, SQL filters against a reference; concurrent
   writers lose nothing).
 
-Claws use it through tools in `pi/claw-extensions/task.ts`: `task_list`,
-`task_show`, `task_add` (with an optional priority and size), `task_set`
-(tag, claim, release, append notes), `task_link`, and `task_done`.
-`task_set` refuses to move a task to `bakery/blocked` unless `bakery
-blocked check` accepts its blockers (see triage). Each claw's
-`policy.tools` selects which it gets; claims are always made as the claw
-itself (`BAKERY_CLAW`), and `task_add` always files into the claw's
-`policy.task_tag`.
+Claws read it with `task list --json` and `task show --json` in bash, and
+change it through tools in `pi/claw-extensions/task.ts`: `task_add` (with an
+optional priority and size) and `task_set` (tag, claim, release, append
+notes). `task_set` refuses to move a task to `bakery/blocked` unless
+`bakery blocked check` accepts its blockers (see triage). Claims are always
+made as the claw itself (`BAKERY_CLAW`), and `task_add` always files into
+the claw's `[tasks] tag`. Which claw uses which tool is a rule in its
+`AGENTS.md`; no claw completes or deletes tasks (a deleted task's source
+would be filed again).
 
 Claws read every task, but only change tasks in the namespace, `bakery/`
-(the gateway's `policy.NAMESPACE`, passed as `BAKERY_TASK_NAMESPACE`); the
-rest are the operator's. `task_set`, `task_link`, and `task_done` refuse any
-other task, and `task_set` refuses to move a task out of `bakery/`.
+(`tasks.NAMESPACE`, passed as `BAKERY_TASK_NAMESPACE`); the rest are the
+operator's. `task_set` refuses any other task, and refuses to move a task
+out of `bakery/`.
 Releasing a claim is the exception, so a task the operator takes out of
 `bakery/` never keeps a claw as its owner. The check and the write are
 separate `task` calls, so a task the operator moves in that moment can
@@ -614,7 +619,7 @@ All configuration (models, limits, schedules, ask policy, concurrency) lives
 in each claw's `claw.toml`. Models have no default: every claw sets `model`
 and `thinking` (one of pi's levels, `off` to `max`).
 
-### scout — read-only
+### scout — read-only GitHub
 
 Finds things in the operator's repos that belong on the task list. Profile:
 `claws/scout/` (`claw.toml`, `scout.toml`, `AGENTS.md`, `SOUL.md`,
@@ -626,7 +631,9 @@ Finds things in the operator's repos that belong on the task list. Profile:
   collaborator`): inviting it is how a repo is added, so the public
   `TheKevJames` repos with rulesets, and no private ones. `scout.toml`
   holds per-repo `exclude` globs by name. The collector keeps scout's own
-  bare clone of each, in scout's `clones/`:
+  clone of each, in scout's `clones/`: an ordinary clone, as
+  `pi/claw-rules/repos.md` has the model use, from which the collector only
+  reads refs:
   - **CI**: the latest completed default-branch run of each workflow failed
     (Dependabot's own update jobs excluded). Link: the first failed run of
     the current failure streak, so a fresh failure after a fix is new.
@@ -639,8 +646,9 @@ Finds things in the operator's repos that belong on the task list. Profile:
     its date. Link: the workflow URL with `?warning=<fingerprint>`.
   - **Issues and PRs**: all open issues, and PRs not by bots, except those
     labelled `ready-for-human`. Link: their URL.
-  - **TODO/FIXME comments** on the default branch, fetched with the read
-    token over HTTPS into scout's clone, minus per-repo `exclude` globs. One task per comment. Link: `…/blob/<branch>/<path>?todo=<fingerprint>#L<line>`;
+  - **TODO/FIXME comments** on the default branch, fetched with scout's
+    token over HTTPS into scout's clone, minus per-repo `exclude` globs. One
+    task per comment. Link: `…/blob/<branch>/<path>?todo=<fingerprint>#L<line>`;
     the fingerprint is of the comment's text, so the line can move.
 - **Lineage, not memory**: a candidate is new unless an open task or a
   rejection (`bakery wontfix`) has its link (ignoring the `#L…` anchor).
@@ -651,12 +659,13 @@ Finds things in the operator's repos that belong on the task list. Profile:
   TODOs; the rest wait for the next run. Repos are collected in parallel
   (8 at a time). Repos that cannot be read are reported in `#bakery` and in
   scout's report; the others still run.
-- GitHub reports the claws' token's expiry with every response; within 30
-  days of it, the collector reports it in `#bakery`, once per token
-  (`_gateway/github-token-expiry`).
-- The model (Haiku, high thinking, $2 per run, ask policy `assume`, no
-  bash) writes each candidate up with `task_add` (into `bakery/triage`) and
-  reports what it added.
+- Scout reads untrusted issue and PR text, so its `GH_TOKEN`, for the
+  collector and the model alike, is `BAKERY_GITHUB_READONLY`: a classic PAT
+  with no scopes, which reads public data and can list the repos its user
+  collaborates on, but cannot write.
+- The model (Haiku, high thinking, $2 per run, ask policy `assume`) writes
+  each candidate up with `task_add` (into `bakery/triage`) and reports what
+  it added.
 
 ### triage — read-only + web
 
@@ -710,9 +719,8 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
   `bakery/triage` likewise. The collector also reports blocked tasks it
   cannot read (eg. moved by hand without a valid list) in `#bakery`; weekly,
   rather than hourly in `unblock`, so they do not flood it.
-- Tools: read-only defaults (bash without writes), web, `github`,
-  `context7`, memory, `ask_operator`, and `task_list`, `task_show`,
-  `task_set`.
+- Task tools: `task_set` only; it never adds tasks, which would file them
+  into its own queue.
 - Ask policy `ask`, falling back to `assume`; every question's assumption is
   "route this task to bakery/human", so an unanswered question routes it
   there and the reply says triage could not finish.
@@ -729,7 +737,8 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
 - Polls its PRs every 10 minutes; new review comments or failing CI resume
   that task's unit of work in the same thread.
 - Merged → `done`. Closed unmerged → `bakery/human` with a note, released.
-- `task` allowlist: triage's plus `link` and `done`.
+- Task tools: triage's, plus `task_link` and `task_done`, to be added back
+  to `task.ts` with build.
 - Ask policy: `ask`, falling back to `park`.
 
 ### baker — reads every claw, files for the operator
@@ -743,7 +752,7 @@ Reviews how the claws learn and files a task for each gap. Profile:
   settled review:
   - runs by claw, job, and outcome;
   - tool calls and failures per tool;
-  - calls the policy or sandbox refused, and other failed calls, grouped,
+  - calls the sandbox refused, and other failed calls, grouped,
     with how many units of work each spans;
   - everything the sandbox blocked (its violation logs), whether a tool
     result showed it or not, eg. a file pi newly needs to write;
@@ -757,19 +766,18 @@ Reviews how the claws learn and files a task for each gap. Profile:
 - Gap types, the `<type>` in each task's link `baker:<type>/<slug>`:
   `tool-gap`, `false-learning`, `no-actuator`, `operator-feedback`,
   `self-policy`, `memory-health`, `knowledge-silo`, `plumbing`, and `other`.
-  A restriction becomes a `tool-gap` when it causes repeated failures (3+
-  units of work) or a wrong conclusion. Bash that stays out of protected
+  A sandbox refusal becomes a `tool-gap` when it causes repeated failures
+  (3+ units of work) or a wrong conclusion. Bash that stays out of protected
   paths and other unix sockets is fine.
-- Baker verifies with the same read-only tools the claws have and says how.
-  Each task records its evidence, impact, root cause, fix, and an
-  acceptance check baker re-runs while the task is open.
-- Policy:
-  - `allow_read` covers the whole state root (every claw's memory and
-    transcripts, `runs.db`, `gateway.log`); unix sockets stay blocked.
-  - `task_tag = "bakery/human"`: fixes change the claws themselves, so they
-    never go straight to build.
-  - No `task_set`: changes to other claws' memory or to tasks are steps in
-    a task's **Fix**, for the operator.
+- Baker verifies with the same tools the claws have, without changing
+  anything, and says how. Each task records its evidence, impact, root
+  cause, fix, and an acceptance check baker re-runs while the task is open.
+- Its policy's `read_paths` cover the whole state root (every claw's memory
+  and transcripts, `runs.db`, `gateway.log`); unix sockets stay blocked.
+- `[tasks] tag = "bakery/human"`: fixes change the claws themselves, so they
+  never go straight to build.
+- Never `task_set`, by its `AGENTS.md`: changes to other claws' memory or to
+  tasks are steps in a task's **Fix**, for the operator.
 - It keeps its own memory (the slugs it filed). It never files a link
   already on an open task or a rejection.
 - Ask policy `assume`; `silent_ok`, replying `NO_REPLY` when it filed

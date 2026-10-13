@@ -154,18 +154,11 @@ def test_digest_covers_activity_since_the_last_review(
                 'text': 'curl: (7) CONNECT tunnel failed, response 403',
             },
             {
-                'at': SINCE + 80,
-                'tool': 'read',
-                'args': {'path': '/x/secret'},
-                'error': True,
-                'text': "read is not allowed by this claw's policy",
-            },
-            {
                 'at': SINCE + 90,
-                'tool': 'github',
-                'args': {'endpoint': 'repos/a/b/actions/jobs/1/logs'},
+                'tool': 'web_fetch',
+                'args': {'url': 'https://example.com/a'},
                 'error': True,
-                'text': 'gh api failed (1): terminal escape sequences',
+                'text': 'fetch failed: 404 Not Found\nmore detail',
             },
             {
                 'at': SINCE + 100,
@@ -208,20 +201,22 @@ def test_digest_covers_activity_since_the_last_review(
     assert '- scout daily: 1 parked · $0.50 · 3.0 turns/run' in text
     assert 'scout/daily-x parked: cost limit' in text
     assert 'too old' not in text
-    assert '- scout (1 sessions): bash 3 (3 failed), read 1 (1 failed)' in text
+    assert (
+        '- scout (1 sessions): bash 3 (3 failed), web_fetch 1 (1 failed)'
+        in text
+    )
     assert (
         'scout · sandbox · gh: open ~/.config/gh/config.yml: operation not'
         ' permitted — 2 calls in 1 units; latest scout-daily-x' in text
     )
     assert f'bash `{gh}`' in text
     assert 'scout · sandbox · curl: CONNECT tunnel failed' in text
-    assert "scout · policy · read is not allowed by this claw's" in text
     assert (
         '- scout · curl deny file-read-data /x/y — 2×; latest in'
         ' scout-daily-x' in text
     )
     assert '/old' not in text
-    assert 'scout · github · gh api failed (1)' in text
+    assert 'scout · web_fetch · fetch failed: 404 Not Found' in text
     assert 'echo before' not in text
     assert (
         'scout: MEMORY.md 29 chars (1 file changed, 2 insertions(+) in this'
