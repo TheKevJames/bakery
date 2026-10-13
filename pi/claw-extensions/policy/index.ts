@@ -31,9 +31,9 @@ import { type Policy, parsePolicy, toolAllowed } from "./rules.ts";
 type Verdict = { block: true; reason: string } | undefined;
 
 // What sandbox refusals look like: seatbelt's EPERM, and the network proxy's
-// 403 (its body, or curl's report of it).
+// 403 (its body, or curl's, Node's fetch's, or Go's report of it).
 const SANDBOX_REFUSAL =
-  /Operation not permitted|\bEPERM\b|Connection blocked by network allowlist|blocked-by-allowlist|Connection to \S+ blocked: resolved to|CONNECT tunnel failed, response 403/;
+  /Operation not permitted|\bEPERM\b|Connection blocked by network allowlist|blocked-by-allowlist|Connection to \S+ blocked: resolved to|CONNECT tunnel failed, response 403|Proxy response \(403\)|Get "[^"]*": Forbidden/;
 const SANDBOX_NOTE =
   "If the output above shows an operation refused (Operation not permitted, EPERM, or a proxy 403), " +
   "this claw's sandbox policy blocked it: it restricts which paths the claw may use, and refuses unix sockets and names other than localhost resolving to this machine. " +

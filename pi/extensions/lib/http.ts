@@ -9,9 +9,20 @@ import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, truncateHead } from "@earendil-wo
 
 const TIMEOUT_MS = 30_000;
 
+/**
+ * fetch, but a failure names its root cause: fetch's own message is only
+ * "fetch failed", eg. for a DNS failure or the sandbox proxy's refusal.
+ */
 export async function get(url: string, headers: Record<string, string>, signal?: AbortSignal): Promise<Response> {
   const timeout = AbortSignal.timeout(TIMEOUT_MS);
-  return fetch(url, { headers, signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
+  try {
+    return await fetch(url, { headers, signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
+  } catch (e) {
+    let cause: unknown = e;
+    while (cause instanceof Error && cause.cause instanceof Error) cause = cause.cause;
+    if (cause === e || !(cause instanceof Error)) throw e;
+    throw new Error(`${(e as Error).message}: ${cause.message}`, { cause: e });
+  }
 }
 
 export function text(body: string, details: Record<string, unknown> = {}) {

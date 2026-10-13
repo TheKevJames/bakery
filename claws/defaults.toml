@@ -23,7 +23,6 @@ enabled = true
 # sandbox, so it could read the others from pi's environment.
 secrets = [
     "ANTHROPIC_API_KEY",
-    "JINA_API_KEY",                # web_search, web_fetch
     "GH_TOKEN=BAKERY_GITHUB",      # github, gh, git: the claws' GitHub user
 ]
 # For git and gh in the claw's own clones; GitHub's rulesets keep it off my
