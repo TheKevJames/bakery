@@ -1,8 +1,9 @@
 """
 A claw's `[policy]`: the paths its pi child may read and write, enforced by
-the OS sandbox the child runs in (see sandbox.py). Which tools it uses, and how
-it uses the task list, are rules in its instructions, not policy: bash shares
-pi's sandbox, so nothing pi's process could refuse would bind bash.
+the OS sandbox the child runs in (see sandbox.py); eg. it writes only the
+claws' namespace of the task list. Which tools it uses, and how it uses that
+namespace, are rules in its instructions, not policy: bash shares pi's
+sandbox, so nothing pi's process could refuse would bind bash.
 """
 
 import dataclasses

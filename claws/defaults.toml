@@ -57,12 +57,13 @@ deny_read = [
 ]
 # Writable, besides the claw's own state, pi's files in its profile, and its
 # $TMPDIR; the rest of the repo is read-only. The memory tools are the
-# intended writers of memory, but bash could write it.
-write_paths = ["${TASK_FOLDER}"]
+# intended writers of memory, but bash could write it. Of the task list, only
+# the claws' namespace: the rest is the operator's.
+write_paths = ["${TASK_FOLDER}/bakery"]
 
 [claw.tasks]
-# The task list section task_add files into.
-tag = "bakery/triage"
+# The tag task_add files into, in the claws' namespace of the task list.
+tag = "triage"
 
 # The identity of the claw's commits (the claws' GitHub user), in the git
 # config the gateway writes into the claw's home at every start.

@@ -254,7 +254,7 @@ def _memory(
 
 def _tasks() -> Section:
     lines = [
-        f'- #{t["id"]} [{t["tag"]}]'
+        f'- #{tasks.ref(t)} [{t["tag"]}]'
         f' {t["priority"]}/{t["size"]} {t["summary"]} ({t["link"]})'
         for t in tasks.listed('-f', f'link~{TASK_LINK_PREFIX}')
     ] + [

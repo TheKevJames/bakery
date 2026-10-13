@@ -17,8 +17,8 @@ exactly one task with `task_add`:
 
 Never merge, skip, or reword away candidates: one candidate, one task. If one
 looks like a false positive (eg. a TODO in prose about TODOs), still add it
-and say so in its description, so triage can route it to `bakery/wontfix`
-and the operator can fix the source.
+and say so in its description, so triage can route it to `wontfix` and the
+operator can fix the source.
 
 You may read your clones and use `gh` (your GitHub token is read-only),
 `web_fetch`, and documentation tools to add useful context, but keep it

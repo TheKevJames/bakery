@@ -8,6 +8,7 @@ import pytest
 
 from bakery import state
 from bakery.collectors import wontfix
+from testing import tasks as testing_tasks
 
 
 def run(*args: str) -> subprocess.CompletedProcess[str]:
@@ -24,25 +25,32 @@ def fixture_tasks(
 ) -> None:
     monkeypatch.setenv('XDG_STATE_HOME', str(tmp_path / 'state'))
     monkeypatch.setenv('TASK_FOLDER', str(tmp_path / 'tasks'))
-    (tmp_path / 'tasks').mkdir()
+    testing_tasks.create(tmp_path / 'tasks')
     for args in (
-        ('--tag', 'bakery/wontfix', '--link', 'https://x/a?todo=f#L3', 'a'),
-        ('--tag', 'bakery/wontfix', 'no link'),
+        ('-n', 'bakery', '--tag', 'wontfix', '--link', 'https://x/a?todo=f#L3',
+         'a'),
+        ('-n', 'bakery', '--tag', 'wontfix', 'no link'),
         ('--link', 'https://x/b', 'mine'),
-    ):
+    ):  # fmt: skip
         run('task', 'add', *args).check_returncode()
 
 
 def test_rejections_are_recorded_by_lineage_and_committed(tasks: None) -> None:
     del tasks
-    added = bakery('add', '1', '--reason', 'prose, not a todo')
+    added = bakery('add', 'bakery:1', '--reason', 'prose, not a todo')
     assert added.stdout == 'rejected https://x/a?todo=f\n'
-    assert bakery('add', '3', '--reason', 'mine').returncode == 0
+    assert bakery('add', '1', '--reason', 'mine').returncode == 0
     for args, error in (
-        (('1', '--reason', 'again'), 'https://x/a?todo=f is already rejected'),
-        (('2', '--reason', 'x'), 'task 2 has no link'),
-        (('3', '--reason', ' '), 'the reason is empty'),
-        (('99', '--reason', 'x'), 'cannot reject #99: '),
+        (
+            ('bakery:1', '--reason', 'again'),
+            'https://x/a?todo=f is already rejected',
+        ),
+        (('bakery:2', '--reason', 'x'), 'task bakery:2 has no link'),
+        (('1', '--reason', ' '), 'the reason is empty'),
+        (
+            ('99', '--reason', 'x'),
+            'cannot reject 99: error: task 99 not found',
+        ),
     ):
         refused = bakery('add', *args)
         assert refused.returncode and error in refused.stderr, args

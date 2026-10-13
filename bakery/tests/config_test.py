@@ -93,9 +93,8 @@ def test_default_jobs_apply_to_every_claw(tmp_path: pathlib.Path) -> None:
         ('[policy]\nnetwork = []', 'unknown keys network'),
         ('[policy]\ntools = []', 'unknown keys tools'),
         ('[policy]\nallow_read = ["~/.ssh"]', 'unknown keys allow_read'),
-        ('[tasks]\ntag = "Bakery/Human"', 'not a lowercase tag path'),
-        ('[tasks]\ntag = "triage"', 'is not under bakery/'),
-        ('[tasks]\ntag = "bakery"', 'is not under bakery/'),
+        ('[tasks]\ntag = "Human"', 'not a lowercase tag'),
+        ('[tasks]\ntag = "bakery/human"', 'not a lowercase tag'),
         ('[memory]\nmax_chars = 0', 'max_chars: must be >= 1'),
         (
             '[[job]]\nname = "x"\ncron = "* * * * *"\nprompt = "p"\n'

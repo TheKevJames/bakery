@@ -32,10 +32,10 @@ The claw that finds work in the operator's repositories and files it as tasks
 for triage.
 
 **Triage**:
-The claw that researches each task in `bakery/triage` and routes it.
+The claw that researches each task in `bakery > triage` and routes it.
 
 **Build**:
-The claw that implements tasks in `bakery/build` and opens pull requests for
+The claw that implements tasks in `bakery > build` and opens pull requests for
 them.
 
 **Baker**:
@@ -177,10 +177,17 @@ An entry in the task list, whether filed by the operator or a claw.
 _Avoid_: ticket, issue, item
 
 **Tag**:
-A `/`-separated path that places a task in a section of the task list.
+A flat name that places a task in a section of its namespace, eg. `build`.
 
 **Namespace**:
-The `bakery/` tags. Claws may change only the tasks under them.
+A part of the task list in its own directory, so access is granted per
+namespace. `default` is the operator's; `bakery` is the claws', the only one
+their sandbox lets them change. Written `bakery > build` for a tag within
+one.
+
+**Task id**:
+A task's address, `<namespace>:<id>`, eg. `bakery:12`; ids are unique only
+within a namespace, and a bare id means `default`.
 
 **Claim**:
 To become a task's owner, so that no one else works on it.
@@ -194,25 +201,25 @@ The identity of a task's source, such as an issue URL or a fingerprinted
 code location, used to recognise that source again.
 
 **Route**:
-The `bakery/` tag a task is moved to, which decides who handles it next.
+The `bakery` tag a task is moved to, which decides who handles it next.
 
-**`bakery/triage`**:
+**`bakery > triage`**:
 The route for tasks awaiting triage.
 
-**`bakery/build`**:
+**`bakery > build`**:
 The route for tasks build can implement and verify on its own.
 
-**`bakery/human`**:
+**`bakery > human`**:
 The route for tasks that need the operator.
 
-**`bakery/blocked`**:
+**`bakery > blocked`**:
 The route for valid, scoped tasks waiting on their blockers.
 
-**`bakery/wontfix`**:
+**`bakery > wontfix`**:
 The route for tasks that should not be worked on: false positives, done, or
 obsolete.
 
-**`bakery/review`**:
+**`bakery > review`**:
 The route for tasks whose pull request awaits the operator's review.
 
 **Rejection**:
@@ -227,8 +234,8 @@ external condition.
 Of a blocker: no longer holding.
 
 **Decided**:
-Of a task: done, or no longer in `bakery/triage`, `bakery/human`, or
-`bakery/blocked`.
+Of a task: done, or no longer in `bakery > triage`, `bakery > human`, or
+`bakery > blocked`.
 
 **Canonical**:
 The task a duplicate waits on: the lowest-numbered open task for the same

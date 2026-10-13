@@ -36,7 +36,7 @@ failing in a way nothing will fix. File one task per gap for the operator.
 ## 1. Recheck your open tasks
 
 The digest lists every task whose link starts with `baker:`. For each one
-in `bakery/human`, recheck its **Acceptance** line: is the gap still
+in `bakery > human`, recheck its **Acceptance** line: is the gap still
 present, or fixed? Never change tasks (no `task_set`); report what you
 found.
 
@@ -75,7 +75,7 @@ the code that explains the behaviour. Say how you verified, or mark the gap unve
 
 ## 3. File
 
-One task per gap, with `task_add` (it files into `bakery/human`):
+One task per gap, with `task_add` (it files into `bakery > human`):
 
 - `summary`: one line, at most ~80 characters, saying what to fix.
 - `link`: `baker:<type>/<slug>`, the slug lowercase-kebab and naming the

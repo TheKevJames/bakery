@@ -2,11 +2,11 @@
 The triage collectors: tasks waiting for triage, and blocked tasks.
 
 `collect` (the `queue` job) hands over the next task waiting for triage: the
-lowest-numbered unowned task in `bakery/triage`, ignoring scheduled
-(recurring) ones. Each task is its own unit of work, `triage/task-<id>`, so
-its thread and session last as long as the task.
+lowest-numbered unowned task tagged `triage` in the claws' namespace, ignoring
+scheduled (recurring) ones. Each task is its own unit of work,
+`triage/task-<id>`, so its thread and session last as long as the task.
 
-`unblock` and `recheck` hand over unowned `bakery/blocked` tasks (see
+`unblock` and `recheck` hand over the namespace's unowned `blocked` tasks (see
 `blocked`), all in one run: `unblock` those whose blockers are all tasks and
 have all cleared, `recheck` those whose task blockers have cleared but which
 also wait on something external, grouped by URL so each is checked once.
@@ -31,7 +31,9 @@ UNTRUSTED = (
 
 
 def waiting() -> list[dict[str, object]]:
-    listed = tasks.listed('-f', 'tag=bakery/triage,owner=')
+    listed = tasks.listed(
+        '-f', f'namespace={tasks.NAMESPACE},tag=triage,owner='
+    )
     scheduled = ('next', 'interval')
     return [t for t in listed if all(t[k] is None for k in scheduled)]
 
@@ -61,7 +63,7 @@ class Blocked:
     external: tuple[blocked.ExternalBlocker, ...]
 
     def label(self) -> str:
-        return f'#{self.ident} {json.dumps(self.summary)}'
+        return f'#{tasks.NAMESPACE}:{self.ident} {json.dumps(self.summary)}'
 
 
 def _blocked() -> tuple[list[Blocked], list[str]]:
@@ -69,7 +71,9 @@ def _blocked() -> tuple[list[Blocked], list[str]]:
     board = blocked.Board.load()
     ready: list[Blocked] = []
     errors: list[str] = []
-    for task in tasks.listed('-f', f'tag={blocked.TAG},owner='):
+    for task in tasks.listed(
+        '-f', f'namespace={tasks.NAMESPACE},tag={blocked.TAG},owner='
+    ):
         ident = int(str(task['id']))
         try:
             blockers = blocked.parse(str(task['description'] or ''))
@@ -79,7 +83,7 @@ def _blocked() -> tuple[list[Blocked], list[str]]:
             if not all(board.cleared(b) for b in on_tasks):
                 continue
         except blocked.BlockerError as e:
-            errors.append(f'{blocked.TAG} #{ident}: {e}')
+            errors.append(f'{blocked.TAG} #{tasks.ref(task)}: {e}')
             continue
         external = tuple(
             b for b in blockers if isinstance(b, blocked.ExternalBlocker)

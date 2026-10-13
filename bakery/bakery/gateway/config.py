@@ -104,7 +104,7 @@ class Memory:
 
 @dataclasses.dataclass(frozen=True)
 class Tasks:
-    # The task list section `task_add` files into, under tasks.NAMESPACE.
+    # The tag `task_add` files into, in tasks.NAMESPACE.
     tag: str
 
 
@@ -288,13 +288,7 @@ def _git(table: toml.Table) -> Git:
 def _tasks(table: toml.Table) -> Tasks:
     tag = table.string('tag')
     if not tasks.TAG_RE.fullmatch(tag):
-        raise ConfigError(
-            f'{table.where}.tag: {tag!r} is not a lowercase tag path'
-        )
-    if not tasks.in_namespace(tag):
-        raise ConfigError(
-            f'{table.where}.tag: {tag!r} is not under {tasks.NAMESPACE}/'
-        )
+        raise ConfigError(f'{table.where}.tag: {tag!r} is not a lowercase tag')
     table.done()
     return Tasks(tag=tag)
 

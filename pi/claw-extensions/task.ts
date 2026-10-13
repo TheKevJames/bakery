@@ -3,15 +3,14 @@
  *
  * Tools that change the shared `task` list (`task` CLI, $TASK_FOLDER), which
  * the operator uses too; claws read it with `task list` and `task show` in
- * bash. Claims are always made as the claw itself (BAKERY_CLAW), and
- * `task_add` files into the claw's `[tasks] tag` (BAKERY_TASK_TAG); `task`
- * serializes concurrent writers. Claws read every task but only change those
- * tagged under their namespace (BAKERY_TASK_NAMESPACE): the rest are the
- * operator's. Releasing a claim is the exception, so a task the operator takes
- * over never keeps a claw as its owner.
+ * bash. Claws read every namespace but the sandbox lets them write only their
+ * own (BAKERY_TASK_NAMESPACE), so these tools address tasks there by id alone.
+ * Claims are always made as the claw itself (BAKERY_CLAW), and `task_add`
+ * files into the claw's `[tasks] tag` (BAKERY_TASK_TAG); `task` serializes
+ * concurrent writers.
  *
- * These checks are guard rails on the easy path, not a boundary: bash shares
- * pi's sandbox, which can write $TASK_FOLDER, so the rules hold because the
+ * Within the namespace, the remaining checks are guard rails on the easy path,
+ * not a boundary: bash shares pi's sandbox, so those rules hold because the
  * claws follow them.
  */
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -35,8 +34,8 @@ function namespace(): string {
   return ns;
 }
 
-function inNamespace(tag: string): boolean {
-  return tag.startsWith(`${namespace()}/`);
+function ref(id: number): string {
+  return `${namespace()}:${id}`;
 }
 
 function text(message: string, details: Record<string, unknown> = {}) {
@@ -55,27 +54,17 @@ async function task(pi: ExtensionAPI, args: string[], signal?: AbortSignal): Pro
 
 // Blocked tasks must say what they wait on, in a form triage's collectors can
 // check (bakery/bakery/collectors/blocked.py).
-const BLOCKED = "bakery/blocked";
+const BLOCKED = "blocked";
 
-type Shown = { tag: string; owner: string | null };
+type Shown = { owner: string | null };
 
-async function show(pi: ExtensionAPI, id: string, signal?: AbortSignal): Promise<Shown> {
-  return JSON.parse(await task(pi, ["show", id, "--json"], signal)) as Shown;
+async function show(pi: ExtensionAPI, id: number, signal?: AbortSignal): Promise<Shown> {
+  return JSON.parse(await task(pi, ["show", ref(id), "--json"], signal)) as Shown;
 }
 
-// The check and the write are separate `task` calls (it has no conditional
-// set), so a task the operator moves out in between can still take this one write.
-function assertWritable(id: string, current: Shown): void {
-  if (!inNamespace(current.tag)) {
-    throw new Error(`task ${id} is the operator's (tagged ${current.tag}): only tasks under ${namespace()}/ may change`);
-  }
-}
+const NS = process.env.BAKERY_TASK_NAMESPACE ? `\`${process.env.BAKERY_TASK_NAMESPACE}\`` : "your namespace";
 
-const NS_HINT = process.env.BAKERY_TASK_NAMESPACE
-  ? ` Only tasks tagged under \`${process.env.BAKERY_TASK_NAMESPACE}/\` may change; the rest are the operator's.`
-  : "";
-
-const Id = Type.Integer({ minimum: 1, description: "Task id" });
+const Id = Type.Integer({ minimum: 1, description: `Id of a task in ${NS}: the number in \`<namespace>:<id>\`` });
 const Priority = Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high")]);
 const Size = Type.Union([Type.Literal("small"), Type.Literal("medium"), Type.Literal("large")]);
 
@@ -85,7 +74,7 @@ export default function tasks(pi: ExtensionAPI) {
       name: "task_add",
       label: "Add Task",
       description:
-        `Add a task${process.env.BAKERY_TASK_TAG ? ` in \`${process.env.BAKERY_TASK_TAG}\`` : ""}. ` +
+        `Add a task to ${NS}${process.env.BAKERY_TASK_TAG ? `, tagged \`${process.env.BAKERY_TASK_TAG}\`` : ""}. ` +
         "`link` is its lineage: the exact source URL, which is also how duplicates are recognized, so copy it " +
         "verbatim.",
       parameters: Type.Object({
@@ -96,12 +85,14 @@ export default function tasks(pi: ExtensionAPI) {
         size: Type.Optional(Size),
       }),
       async execute(_id, params, signal) {
-        const args = ["add", "--tag", taskTag(), "--description", params.description, "--link", params.link];
+        const args = ["add", "-n", namespace(), "--tag", taskTag(), "--description", params.description];
+        args.push("--link", params.link);
         if (params.priority) args.push("--priority", params.priority);
         if (params.size) args.push("--size", params.size);
         args.push("--", params.summary);
         await task(pi, args, signal);
-        const added = JSON.parse(await task(pi, ["list", "--json", "-s", "id", "-f", `link=${params.link}`], signal));
+        const filter = `namespace=${namespace()},link=${params.link}`;
+        const added = JSON.parse(await task(pi, ["list", "--json", "-s", "id", "-f", filter], signal));
         return text(`Added: ${JSON.stringify(added.at(-1) ?? {})}`);
       },
     }),
@@ -112,15 +103,13 @@ export default function tasks(pi: ExtensionAPI) {
       name: "task_set",
       label: "Update Task",
       description:
-        "Update a task: move it to a section (`tag`, eg. `bakery/build`), set its priority or size, " +
+        `Update a task in ${NS}: move it to a section (\`tag\`, eg. \`build\`), set its priority or size, ` +
         "claim it for yourself (fails if someone else owns it), release your claim, or append notes " +
         `to its description. Moving it to \`${BLOCKED}\` fails unless its notes, with any appended now, ` +
-        "hold a valid `**Blocked on:**` list (the last one counts) of blockers which have not cleared." +
-        NS_HINT +
-        " Releasing your own claim works on any task.",
+        "hold a valid `**Blocked on:**` list (the last one counts) of blockers which have not cleared.",
       parameters: Type.Object({
         id: Id,
-        tag: Type.Optional(Type.String({ description: "Section path, eg. bakery/human" })),
+        tag: Type.Optional(Type.String({ description: "Section, eg. human" })),
         claim: Type.Optional(Type.Boolean()),
         release: Type.Optional(Type.Boolean()),
         priority: Type.Optional(Priority),
@@ -129,14 +118,12 @@ export default function tasks(pi: ExtensionAPI) {
       }),
       async execute(_id, params, signal) {
         if (params.claim && params.release) throw new Error("claim and release are exclusive");
-        const id = String(params.id);
-        const current = await show(pi, id, signal);
-        if (params.release && current.owner !== claw()) throw new Error(`task ${id} is not claimed by ${claw()}`);
-        const changes = [params.tag, params.claim, params.priority, params.size, params.description_append];
-        if (changes.some(Boolean)) assertWritable(id, current);
-        if (params.tag && !inNamespace(params.tag)) throw new Error(`${params.tag} is not under ${namespace()}/`);
+        const id = ref(params.id);
+        if (params.release && (await show(pi, params.id, signal)).owner !== claw()) {
+          throw new Error(`task ${id} is not claimed by ${claw()}`);
+        }
         if (params.tag === BLOCKED) {
-          const check = ["blocked", "check", id];
+          const check = ["blocked", "check", String(params.id)];
           if (params.description_append) check.push("--append", params.description_append);
           await run(pi, "bakery", check, signal);
         }
