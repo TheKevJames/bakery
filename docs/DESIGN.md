@@ -822,6 +822,8 @@ memory flush runs on its unit's model. The gateway runs whatever `pi` is on
   Tests observe the gateway from outside (control `status`, channel events,
   the ledger, logs), not its in-memory state.
 - Hermetic: no real network, credentials, or Keychain items.
+- The suite runs in parallel (pytest-xdist; `-n0` for serial) with a 30s
+  per-test timeout, so tests share no state beyond their own temp dirs.
 - One manual end-to-end smoke test against real pi on a cheap model.
 
 ## Delivery plan
