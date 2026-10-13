@@ -2,8 +2,8 @@
  * Policy Extension (claws only)
  *
  * The claw's whole pi runs in an OS sandbox (pi/claw-sandbox/launch.mts),
- * which enforces its paths (and refuses local network addresses and unix
- * sockets). This enforces the rest of its policy (BAKERY_POLICY, set by the
+ * which enforces its paths (and refuses unix sockets but its own, and names
+ * other than localhost resolving to this machine). This enforces the rest of its policy (BAKERY_POLICY, set by the
  * gateway):
  *
  * - only allowlisted tools are declared to the model, and any other call is
@@ -36,7 +36,7 @@ const SANDBOX_REFUSAL =
   /Operation not permitted|\bEPERM\b|Connection blocked by network allowlist|blocked-by-allowlist|Connection to \S+ blocked: resolved to|CONNECT tunnel failed, response 403/;
 const SANDBOX_NOTE =
   "If the output above shows an operation refused (Operation not permitted, EPERM, or a proxy 403), " +
-  "this claw's sandbox policy blocked it: it restricts which paths the claw may use, and refuses local network addresses and unix sockets. " +
+  "this claw's sandbox policy blocked it: it restricts which paths the claw may use, and refuses unix sockets and names other than localhost resolving to this machine. " +
   "This is not a missing credential, permission, or file; use a tool instead, or report the gap.";
 
 function block(reason: string): Verdict {

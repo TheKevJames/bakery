@@ -204,7 +204,15 @@ def settings(claw: config.Claw, path_env: str) -> dict[str, object]:
             'allowedDomains': [],
             'deniedDomains': [],
             'allowUnixSockets': _real([sockets(claw)]),
+            # Loopback directly, not only through the proxy: Go never
+            # proxies localhost.
+            'allowLocalBinding': True,
         },
+        # Only lets Go programs (gh, ketch) verify TLS certificates through
+        # the system's trust service; the Keychain, where my own gh token
+        # lives, stays unreachable. Its documented risk, exfiltration through
+        # trustd, adds nothing to a sandbox that reaches any public host.
+        'enableWeakerNetworkIsolation': True,
         'filesystem': {
             'denyRead': [*_real(denies), *policy.deny_read],
             'allowRead': _real(reads),

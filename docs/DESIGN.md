@@ -460,17 +460,23 @@ Enforcement:
      `models-store.json`, `settings.json`, and their locks); the rest of
      the repo is read-only. sandbox-runtime also always blocks writes to
      `.git/hooks`, `.git/config`, and shell rc files.
-   - Network: only through the sandbox's proxy, which allows every host to
-     pi and bash alike (its allowlist is empty; a callback in `launch.mts`
-     decides every host) but refuses `localhost` and `*.localhost`, and
-     hostnames resolving to loopback, link-local, this Mac's own addresses,
-     or cloud metadata endpoints. IP literals are dialed as given, so other
-     LAN hosts (and this Mac, by IP) are reachable. Node's `fetch` uses the proxy
-     (`NODE_USE_ENV_PROXY=1`); loopback and private addresses go through it
-     too rather than around it. The sandbox needs a network config to keep
-     the proxy at all: without one, sandbox-runtime allows all network,
-     unix sockets included. Unix sockets are blocked except the claw's own
-     socket dir (so no ssh-agent or gateway control socket).
+   - Network: through the sandbox's proxy, which allows every host to pi
+     and bash alike (its allowlist is empty; a callback in `launch.mts`
+     approves every host) but refuses hostnames other than `localhost` and
+     `*.localhost` resolving to loopback, link-local, this Mac's own
+     addresses, or cloud metadata endpoints. IP literals are dialed as
+     given, so LAN hosts (and this Mac, by IP) are reachable. Loopback is
+     also reachable directly (`allowLocalBinding`; Go never proxies
+     localhost), and processes may listen on local ports. Node's `fetch`
+     uses the proxy (`NODE_USE_ENV_PROXY=1`); private addresses go through
+     it too rather than around it. The sandbox needs a network config to
+     keep the proxy at all: without one, sandbox-runtime allows all
+     network, unix sockets included. Unix sockets are blocked except the
+     claw's own socket dir (so no ssh-agent or gateway control socket).
+   - Go programs (`gh`, `ketch`) verify TLS through macOS's trust service,
+     `com.apple.trustd.agent`, which `enableWeakerNetworkIsolation` makes
+     reachable. That opens no Keychain access: `gh` sees only the claw's
+     `GH_TOKEN`, never my own token.
    - Other processes: `ps` sees only the sandbox's own processes, and the
      Keychain is unreachable.
    - What it blocks (denied reads, writes, and network) is appended to
@@ -747,7 +753,7 @@ Reviews how the claws learn and files a task for each gap. Profile:
   `self-policy`, `memory-health`, `knowledge-silo`, `plumbing`, and `other`.
   A restriction becomes a `tool-gap` when it causes repeated failures (3+
   units of work) or a wrong conclusion. Bash that stays out of protected
-  paths, local network addresses, and other unix sockets is fine.
+  paths and other unix sockets is fine.
 - Baker verifies with the same read-only tools the claws have and says how.
   Each task records its evidence, impact, root cause, fix, and an
   acceptance check baker re-runs while the task is open.
