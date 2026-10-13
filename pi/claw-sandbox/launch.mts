@@ -58,6 +58,19 @@ function recordViolations(file: string): () => void {
   });
 }
 
+/**
+ * Every host the (empty) allowlist does not match, ie. every host; the
+ * allowlist cannot express that itself (sandbox-runtime rejects `*`). The
+ * proxy then refuses names resolving to loopback, link-local, this Mac's own
+ * addresses, or cloud metadata, except the RFC 6761 loopback names: it takes
+ * approving those as asking for loopback, so they are refused here. IP
+ * literals are dialed as given.
+ */
+async function allowHost({ host }: { host: string }): Promise<boolean> {
+  const name = host.toLowerCase().replace(/\.$/, "");
+  return name !== "localhost" && !name.endsWith(".localhost");
+}
+
 async function main(argv: string[]): Promise<number> {
   if (argv.length === 0) throw new Error("usage: launch.ts COMMAND [ARG...]");
   const config = JSON.parse(required("BAKERY_SANDBOX")) as SandboxRuntimeConfig;
@@ -71,12 +84,12 @@ async function main(argv: string[]): Promise<number> {
   const env = { ...process.env };
   for (const name of LAUNCHER_ENV) delete env[name];
 
-  await SandboxManager.initialize(config, undefined, /* enableLogMonitor */ true);
+  await SandboxManager.initialize(config, allowHost, /* enableLogMonitor */ true);
   const unsubscribe = recordViolations(violations);
   try {
     // sandbox-runtime sends loopback and private addresses around its proxy
     // (NO_PROXY), straight into the sandbox's refusal; through the proxy they
-    // are allowed or refused by the domain allowlist like any other host.
+    // get the same treatment as any other host.
     const command = `unset NO_PROXY no_proxy; exec ${argv.map(quote).join(" ")}`;
     const wrapped = await SandboxManager.wrapWithSandbox(command);
     const child = spawn("bash", ["-c", wrapped], { stdio: "inherit", env });

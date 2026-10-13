@@ -408,7 +408,7 @@ gateway's `Channel`), `transport` (the interface), `discord_transport`
 Prompt-level rules are not enforcement. Each claw's `[policy]` (defaults in
 `claws/defaults.toml`, overridable per claw; there are no named tiers; a
 claw's value for a key replaces the default list) is enforced in two places:
-paths and network by the OS sandbox the claw's whole pi runs in, and tools,
+paths by the OS sandbox the claw's whole pi runs in, and tools,
 confirmations, and `task_tag` by `pi/claw-extensions/policy/`, which the
 gateway always loads with `--extension` so no profile can omit it. The
 gateway passes the latter as `BAKERY_POLICY`; without a valid one, every tool
@@ -430,10 +430,6 @@ call is blocked.
 - `write_paths`: writable besides the claw's own state dir, pi's files in its
   profile, and its `$TMPDIR`. Default `$TASK_FOLDER`. The memory tools are
   the intended writers of memory, but bash could write it too.
-- `network`: domains the claw (pi and bash alike) may reach through the
-  sandbox's proxy. Default: `api.anthropic.com` (the model), `s.jina.ai`,
-  `r.jina.ai`, `html.duckduckgo.com` (web tools), `api.github.com`
-  (`github`, `gh`), `github.com` (git), and `context7.com` (`context7`).
 - `confirm`: regexes on tool names or bash commands; a match asks me in
   Discord (Approve/Deny) before running.
 - `task_tag`: the task list section `task_add` files into (default
@@ -462,11 +458,17 @@ Enforcement:
      `models-store.json`, `settings.json`, and their locks); the rest of
      the repo is read-only. sandbox-runtime also always blocks writes to
      `.git/hooks`, `.git/config`, and shell rc files.
-   - Network: only through the sandbox's filtering proxy, to `network`
-     domains. Node's `fetch` uses it (`NODE_USE_ENV_PROXY=1`); loopback and
-     private addresses go through it too rather than around it, so they are
-     allowlisted like any host. Unix sockets are blocked except the claw's
-     own socket dir (so no ssh-agent).
+   - Network: only through the sandbox's proxy, which allows every host to
+     pi and bash alike (its allowlist is empty; a callback in `launch.mts`
+     decides every host) but refuses `localhost` and `*.localhost`, and
+     hostnames resolving to loopback, link-local, this Mac's own addresses,
+     or cloud metadata endpoints. IP literals are dialed as given, so other
+     LAN hosts (and this Mac, by IP) are reachable. Node's `fetch` uses the proxy
+     (`NODE_USE_ENV_PROXY=1`); loopback and private addresses go through it
+     too rather than around it. The sandbox needs a network config to keep
+     the proxy at all: without one, sandbox-runtime allows all network,
+     unix sockets included. Unix sockets are blocked except the claw's own
+     socket dir (so no ssh-agent or gateway control socket).
    - Other processes: `ps` sees only the sandbox's own processes, and the
      Keychain is unreachable.
    - What it blocks (denied reads, writes, and network) is appended to
@@ -695,7 +697,7 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
   `bakery/triage` likewise. The collector also reports blocked tickets it
   cannot read (eg. moved by hand without a valid list) in `#bakery`; weekly,
   rather than hourly in `unblock`, so they do not flood it.
-- Tools: read-only defaults (bash without network or writes), web, `github`,
+- Tools: read-only defaults (bash without writes), web, `github`,
   `context7`, memory, `ask_user`, and `task_list`, `task_show`, `task_set`.
 - Ask policy `ask`, falling back to `assume`; every question's assumption is
   "route this ticket to bakery/human", so an unanswered question routes it
@@ -708,7 +710,7 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
 - Picks `bakery/build` tasks by `priority` (`high`, then `medium`, then
   `low`), then lowest id.
 - Works in its own clones (see [Safety](#safety)), a worktree per task;
-  removed after merge/close. Full network (package registries).
+  removed after merge/close.
 - Pushes `kjames/bakery-*` branches and opens PRs; never merges.
 - Polls its PRs every 10 minutes; new review comments or failing CI resume
   that ticket's session in the same thread.
@@ -742,15 +744,14 @@ Reviews how the claws learn and files a task for each gap. Profile:
   `tool-gap`, `false-learning`, `no-actuator`, `owner-feedback`,
   `self-policy`, `memory-health`, `knowledge-silo`, `plumbing`, and `other`.
   A restriction becomes a `tool-gap` when it causes repeated failures (3+
-  units of work) or a wrong conclusion. Bash without general network access,
-  or bash that stays out of protected paths, is fine.
+  units of work) or a wrong conclusion. Bash that stays out of protected
+  paths, local network addresses, and other unix sockets is fine.
 - Baker verifies with the same read-only tools the claws have and says how.
   Each task records its evidence, impact, root cause, fix, and an
   acceptance check baker re-runs while the task is open.
 - Policy:
   - `allow_read` covers the whole state root (every claw's memory and
-    transcripts, `runs.db`, `gateway.log`); bash still has no network, and
-    unix sockets stay blocked.
+    transcripts, `runs.db`, `gateway.log`); unix sockets stay blocked.
   - `task_tag = "bakery/human"`: fixes change the claws themselves, so they
     never go straight to build.
   - No `task_set`: changes to other claws' memory or to tickets are steps

@@ -95,7 +95,7 @@ def test_default_jobs_apply_to_every_claw(tmp_path: pathlib.Path) -> None:
         ('secrets = "X"', 'must be a list of strings'),
         ('bash_secrets = ["GH_TOKEN"]', 'GH_TOKEN is not in its secrets'),
         ('[policy]\nconfirm = ["("]', 'bad regex'),
-        ('[policy]\nnetwork = ["https://x.com"]', 'is not a domain'),
+        ('[policy]\nnetwork = []', 'unknown keys network'),
         ('[policy]\ntool = []', 'unknown keys tool'),
         ('[policy]\nallow_read = ["~/.ssh"]', 'unknown keys allow_read'),
         ('[policy]\ntask_tag = "Bakery/Human"', 'not a lowercase tag path'),

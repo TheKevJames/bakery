@@ -22,6 +22,7 @@ POLICY_BLOCKS = re.compile(
 SANDBOX_REFUSAL = re.compile(
     r'Operation not permitted|\bEPERM\b'
     r'|Connection blocked by network allowlist|blocked-by-allowlist'
+    r'|Connection to \S+ blocked: resolved to'
     r'|CONNECT tunnel failed, response 403',
     re.IGNORECASE,
 )

@@ -1,8 +1,8 @@
 """
-A claw's `[policy]`: what its pi child may do. Paths and network are enforced
-by the OS sandbox the child runs in (see sandbox.py); tools and confirmations
-by pi/claw-extensions/policy in the child, to which the gateway passes them
-as BAKERY_POLICY.
+A claw's `[policy]`: what its pi child may do. Paths are enforced by the OS
+sandbox the child runs in (see sandbox.py); tools and confirmations by
+pi/claw-extensions/policy in the child, to which the gateway passes them as
+BAKERY_POLICY.
 """
 
 import dataclasses
@@ -13,7 +13,6 @@ from collections.abc import Iterable
 
 from . import toml
 
-DOMAIN_RE = re.compile(r'(\*\.)?[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*(:\d+)?')
 TAG_RE = re.compile(r'[a-z0-9][a-z0-9_.-]*(/[a-z0-9][a-z0-9_.-]*)*')
 # Claws only change tasks tagged under this section; the rest are Kevin's.
 NAMESPACE = 'bakery'
@@ -34,8 +33,6 @@ class Policy:
     deny_read: tuple[str, ...]
     # Absolute paths the claw may write, besides its own state and profile.
     write_paths: tuple[pathlib.Path, ...]
-    # Domains the claw (pi and bash alike) may reach.
-    network: tuple[str, ...]
     # Regexes; a matching tool name or bash command needs my approval.
     confirm: tuple[str, ...]
     # The task list section `task_add` files into, under NAMESPACE.
@@ -63,12 +60,6 @@ def parse(table: toml.Table, profile: pathlib.Path) -> Policy:
             raise toml.ConfigError(
                 f'{table.where}.confirm: bad regex {pattern!r}: {e}'
             ) from None
-    network = table.strings('network')
-    for domain in network:
-        if not DOMAIN_RE.fullmatch(domain):
-            raise toml.ConfigError(
-                f'{table.where}.network: {domain!r} is not a domain'
-            )
     task_tag = table.string('task_tag')
     if not TAG_RE.fullmatch(task_tag):
         raise toml.ConfigError(
@@ -89,7 +80,6 @@ def parse(table: toml.Table, profile: pathlib.Path) -> Policy:
         write_paths=tuple(
             toml.expand(p, profile) for p in table.strings('write_paths')
         ),
-        network=network,
         confirm=confirm,
         task_tag=task_tag,
     )

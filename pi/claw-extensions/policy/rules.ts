@@ -1,7 +1,7 @@
 /**
  * A claw's policy, as passed by the gateway in BAKERY_POLICY (JSON): the
- * parts the OS sandbox cannot enforce. Paths and network are the sandbox's
- * (see pi/claw-sandbox/launch.mts).
+ * parts the OS sandbox cannot enforce. Paths are the sandbox's (see
+ * pi/claw-sandbox/launch.mts).
  */
 
 export interface Policy {
