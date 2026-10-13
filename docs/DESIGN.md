@@ -13,6 +13,8 @@ gateway daemon and controlled over Discord.
 | `claws/<name>/` | One profile per claw: `claw.toml`, `context.toml`, `settings.json`, `SOUL.md`, `IDENTITY.md`, `AGENTS.md`. |
 | `bakery/` | Python project: the `bakery` CLI, the gateway, and collectors. |
 | `bin/` | Helper scripts (eg. `bin/vendor`). |
+| `AGENTS.md` | Repo-level agent instructions, loaded by pi for sessions in this repo; its `## Agent skills` block points vendored skills at `docs/agents/`. |
+| `docs/agents/` | Per-repo config read by the vendored engineering skills: `issue-tracker.md` (GitHub Issues), `domain.md` (glossary/ADR consumer rules). |
 
 Every profile directory is a pi agent dir. Its `settings.json` loads shared
 resources from `../pi/...` (or `../../pi/...` for claws). Pi writes some
