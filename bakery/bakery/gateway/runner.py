@@ -21,9 +21,9 @@ from . import rpc
 
 ABORT_EVENT = 'bakery_abort'
 STEER_EVENT = 'bakery_steer'
-# A claw-only tool (pi/claw-extensions/ask-user.ts) that parks the run when
+# A claw-only tool (pi/claw-extensions/ask-operator.ts) that parks the run when
 # its question cannot be answered now.
-ASK_TOOL = 'ask_user'
+ASK_TOOL = 'ask_operator'
 # How long an aborted run may take to settle before it is given up on.
 ABORT_SETTLE_TIMEOUT = 30.0
 SILENT_REPLY = 'NO_REPLY'

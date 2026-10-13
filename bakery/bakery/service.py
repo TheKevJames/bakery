@@ -11,7 +11,8 @@ from . import state
 
 LABEL = 'in.thekev.bakery'
 # Recorded at install time so the agent finds pi, node, gh, and the task
-# folder as my shell does; launchd otherwise starts with a bare environment.
+# folder as the operator's shell does; launchd otherwise starts with a bare
+# environment.
 RECORDED_ENV = ('PATH', 'HOME', 'LANG', 'TASK_FOLDER')
 RECORDED_ENV_PREFIXES = ('XDG_',)
 

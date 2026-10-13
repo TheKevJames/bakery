@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 
 CATEGORY = 'bakery'
 CONTROL_CHANNEL = 'bakery'
-# 7 days: units of work (eg. a build ticket's PR review) can idle for days.
+# 7 days: units of work (eg. a build task's PR review) can idle for days.
 ARCHIVE_MINUTES = 10080
 STYLES = {
     'primary': discord.ButtonStyle.primary,
@@ -108,12 +108,12 @@ class DiscordTransport:
         self,
         token: str,
         guild_id: int,
-        owner_id: int,
+        operator_id: int,
         avatars: dict[str, pathlib.Path],
     ) -> None:
         self.token = token
         self.guild_id = guild_id
-        self.owner_id = owner_id
+        self.operator_id = operator_id
         self.avatars = avatars
         intents = discord.Intents.default()
         intents.message_content = True
@@ -134,7 +134,7 @@ class DiscordTransport:
         return discord.AllowedMentions(
             everyone=False,
             roles=False,
-            users=[discord.Object(self.owner_id)],
+            users=[discord.Object(self.operator_id)],
             replied_user=False,
         )
 

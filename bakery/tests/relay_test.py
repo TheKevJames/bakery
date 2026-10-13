@@ -13,7 +13,7 @@ from testing import gateway as testing_gateway
 from testing import harness
 
 Reply = harness.Reply
-ASK = 'pi/claw-extensions/ask-user.ts'
+ASK = 'pi/claw-extensions/ask-operator.ts'
 
 
 def run(
@@ -24,7 +24,7 @@ def run(
     latency: float = 0.0,
 ) -> None:
     fake = chat.FakeTransport(latency)
-    bot = relay.Relay(fake, chat.OWNER)
+    bot = relay.Relay(fake, chat.OPERATOR)
 
     async def wrapped(gateway: core.Gateway) -> None:
         await scenario(gateway, bot, fake)
@@ -74,7 +74,7 @@ def test_gateway_runs_get_a_thread_with_status_and_reply(
     run(claws, scenario)
 
 
-def test_owner_messages_start_and_continue_threads(
+def test_operator_messages_start_and_continue_threads(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     claws = testing_gateway.make_claws(root, {'triage': ''})
@@ -86,13 +86,15 @@ def test_owner_messages_start_and_continue_threads(
         await bot.on_message(chat.STRANGER, 'triage', None, 500, 'hi')
         assert not fake.threads
 
-        await bot.on_message(chat.OWNER, 'triage', None, 501, 'look at #151')
+        await bot.on_message(
+            chat.OPERATOR, 'triage', None, 501, 'look at #151'
+        )
         [(thread, info)] = fake.threads.items()
         assert (info.name, info.from_message) == ('look at #151', 501)
         await fake.message(thread, 'first answer')
         assert 'look at #151' in fake_llm.transcript()
 
-        await bot.on_message(chat.OWNER, 'triage', thread, 502, 'and #152?')
+        await bot.on_message(chat.OPERATOR, 'triage', thread, 502, 'and #152?')
         await fake.message(thread, 'second answer')
         assert 'and #152?' in fake_llm.transcript()
         assert fake.messages[502].reactions == ['👀']
@@ -100,7 +102,7 @@ def test_owner_messages_start_and_continue_threads(
             f'triage/thread-{thread}'
         )
 
-        await bot.on_message(chat.OWNER, 'triage', 9999, 503, 'not ours')
+        await bot.on_message(chat.OPERATOR, 'triage', 9999, 503, 'not ours')
         assert 503 not in fake.messages
 
     run(claws, scenario)
@@ -117,10 +119,10 @@ def test_messages_steer_in_flight_runs(
     async def scenario(
         gateway: core.Gateway, bot: relay.Relay, fake: chat.FakeTransport
     ) -> None:
-        await bot.on_message(chat.OWNER, 'build', None, 600, 'start')
+        await bot.on_message(chat.OPERATOR, 'build', None, 600, 'start')
         [thread] = fake.threads
         await until(lambda: len(fake_llm.requests) == 1)
-        await bot.on_message(chat.OWNER, 'build', thread, 601, 'use tabs')
+        await bot.on_message(chat.OPERATOR, 'build', thread, 601, 'use tabs')
         await fake.message(thread, '✅')
         assert 'use tabs' in fake_llm.transcript()
         # One run: the message joined it rather than queueing another.
@@ -144,23 +146,23 @@ def test_confirm_dialogs_are_buttons(
         key = gateway.trigger('build', None, 'go')
         await fake.until(lambda: fake.threads)
         thread = fake.thread_named(key)
-        ask = await fake.message(thread, f'<@{chat.OWNER}> **Run bash?**')
+        ask = await fake.message(thread, f'<@{chat.OPERATOR}> **Run bash?**')
         approve = ask.button('Approve').custom_id
 
         refused = await bot.on_component(chat.STRANGER, approve, None)
-        assert refused == relay.NOT_OWNER
-        assert await bot.on_component(chat.OWNER, approve, None) == 'Done.'
+        assert refused == relay.NOT_OPERATOR
+        assert await bot.on_component(chat.OPERATOR, approve, None) == 'Done.'
         await fake.message(thread, '✅')
         assert 'approved' in fake_llm.transcript()
         assert ask.text.endswith('→ approved')
         assert ask.components == ()
-        expired = await bot.on_component(chat.OWNER, approve, None)
+        expired = await bot.on_component(chat.OPERATOR, approve, None)
         assert expired == relay.EXPIRED
 
     run(claws, scenario)
 
 
-def test_ask_user_is_answered_by_a_thread_reply(
+def test_ask_operator_is_answered_by_a_thread_reply(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     claws = testing_gateway.make_claws(
@@ -168,7 +170,7 @@ def test_ask_user_is_answered_by_a_thread_reply(
     )
     fake_llm.queue(
         Reply(
-            tool='ask_user',
+            tool='ask_operator',
             args={'question': 'Which repo?', 'assumption': 'all'},
         ),
         Reply(text='thanks'),
@@ -180,11 +182,11 @@ def test_ask_user_is_answered_by_a_thread_reply(
         key = gateway.trigger('triage', None, 'go')
         await fake.until(lambda: fake.threads)
         thread = fake.thread_named(key)
-        ask = await fake.message(thread, f'<@{chat.OWNER}> **Which repo?**')
+        ask = await fake.message(thread, f'<@{chat.OPERATOR}> **Which repo?**')
         assert 'if unanswered: all' in ask.text
-        await bot.on_message(chat.OWNER, 'triage', thread, 700, 'tools')
+        await bot.on_message(chat.OPERATOR, 'triage', thread, 700, 'tools')
         await fake.message(thread, '✅')
-        assert 'The user answered: tools' in fake_llm.transcript()
+        assert 'The operator answered: tools' in fake_llm.transcript()
         assert fake.messages[700].reactions == ['✅']
 
     run(claws, scenario)
@@ -203,7 +205,8 @@ def test_unanswered_questions_park_until_resumed(
     )
     fake_llm.queue(
         Reply(
-            tool='ask_user', args={'question': 'Merge?', 'assumption': 'no'}
+            tool='ask_operator',
+            args={'question': 'Merge?', 'assumption': 'no'},
         ),
         Reply(text='resumed fine'),
     )
@@ -214,15 +217,15 @@ def test_unanswered_questions_park_until_resumed(
         key = gateway.trigger('build', None, 'go')
         await fake.until(lambda: fake.threads)
         thread = fake.thread_named(key)
-        parked = await fake.message(thread, f'<@{chat.OWNER}> {key} parked')
+        parked = await fake.message(thread, f'<@{chat.OPERATOR}> {key} parked')
         assert 'waiting for an answer: Merge?' in parked.text
-        ask = await fake.message(thread, f'<@{chat.OWNER}> **Merge?**')
+        ask = await fake.message(thread, f'<@{chat.OPERATOR}> **Merge?**')
         await fake.until(lambda: ask.text.endswith('→ timed out'))
         # Parking ends the run: no model call after the question.
         assert len(fake_llm.requests) == 1
 
         resume = parked.button('Resume').custom_id
-        assert await bot.on_component(chat.OWNER, resume, None) == (
+        assert await bot.on_component(chat.OPERATOR, resume, None) == (
             f'Resuming {key}.'
         )
         await fake.message(thread, 'resumed fine')
@@ -266,19 +269,21 @@ def test_commands(root: pathlib.Path, fake_llm: harness.FakeLLM) -> None:
         gateway: core.Gateway, bot: relay.Relay, fake: chat.FakeTransport
     ) -> None:
         refused = await bot.on_command(chat.STRANGER, 'status', {})
-        assert refused == transport.Response(relay.NOT_OWNER, private=True)
-        error = await bot.on_command(chat.OWNER, 'trigger', {'claw': 'nope'})
+        assert refused == transport.Response(relay.NOT_OPERATOR, private=True)
+        error = await bot.on_command(
+            chat.OPERATOR, 'trigger', {'claw': 'nope'}
+        )
         assert error == transport.Response(
             '⚠️ unknown claw: nope', private=True
         )
 
-        await bot.on_command(chat.OWNER, 'pause', {'target': 'scout'})
-        status = await bot.on_command(chat.OWNER, 'status', {})
+        await bot.on_command(chat.OPERATOR, 'pause', {'target': 'scout'})
+        status = await bot.on_command(chat.OPERATOR, 'status', {})
         assert 'scout: paused' in status.text
-        await bot.on_command(chat.OWNER, 'resume', {'target': 'scout'})
+        await bot.on_command(chat.OPERATOR, 'resume', {'target': 'scout'})
 
         first = await bot.on_command(
-            chat.OWNER, 'trigger', {'claw': 'scout', 'prompt': 'one'}
+            chat.OPERATOR, 'trigger', {'claw': 'scout', 'prompt': 'one'}
         )
         key = first.text.removeprefix('queued ')
         await until(lambda: gateway.runs.last_claw(key) and not gateway.active)
@@ -286,7 +291,7 @@ def test_commands(root: pathlib.Path, fake_llm: harness.FakeLLM) -> None:
         await fake.until(
             lambda: 'scout has exhausted its daily budget' in fake.notices()
         )
-        budget = await bot.on_command(chat.OWNER, 'budget', {})
+        budget = await bot.on_command(chat.OPERATOR, 'budget', {})
         assert '$2.00 / $1.00 today' in budget.text
 
     run(claws, scenario)
@@ -299,16 +304,16 @@ def test_stopping_cancels_pending_questions(
         root, {'triage': ''}, extensions={'triage': [ASK]}
     )
     fake_llm.queue(
-        Reply(tool='ask_user', args={'question': 'Hm?', 'assumption': 'x'})
+        Reply(tool='ask_operator', args={'question': 'Hm?', 'assumption': 'x'})
     )
     fake = chat.FakeTransport()
-    bot = relay.Relay(fake, chat.OWNER)
+    bot = relay.Relay(fake, chat.OPERATOR)
 
     async def scenario(gateway: core.Gateway) -> None:
         key = gateway.trigger('triage', None, 'go')
         await fake.until(lambda: fake.threads)
         thread = fake.thread_named(key)
-        await fake.message(thread, f'<@{chat.OWNER}> **Hm?**')
+        await fake.message(thread, f'<@{chat.OPERATOR}> **Hm?**')
 
     testing_gateway.run_gateway(claws, bot, scenario)
     thread = next(iter(fake.threads))

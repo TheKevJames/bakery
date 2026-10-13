@@ -1,9 +1,9 @@
 """
-The Discord side of the gateway: turns runs into threads and my Discord
+The Discord side of the gateway: turns runs into threads and the operator's
 activity into gateway requests.
 
 Each unit of work lives in one thread of its claw's channel; the mapping is
-kept in the ledger so it survives restarts. Only the owner's messages,
+kept in the ledger so it survives restarts. Only the operator's messages,
 clicks, and commands are acted on.
 """
 
@@ -28,7 +28,7 @@ PREFIX = 'bakery'
 SELECT_BUTTON_LIMIT = 5
 SELECT_OPTION_LIMIT = 25
 THREAD_NAME_LIMIT = 90
-NOT_OWNER = 'Only the owner can do that.'
+NOT_OPERATOR = 'Only the operator can do that.'
 TIMEOUT_GRACE = 2.0
 EXPIRED = 'This request has expired.'
 
@@ -55,9 +55,9 @@ def _request_text(request: dict[str, object], key: str) -> str:
 
 class Relay:
     # pylint: disable=too-many-instance-attributes
-    def __init__(self, link: transport.Transport, owner_id: int) -> None:
+    def __init__(self, link: transport.Transport, operator_id: int) -> None:
         self.link = link
-        self.owner_id = owner_id
+        self.operator_id = operator_id
         self._gateway: core.Gateway | None = None
         self._status: dict[int, _Status] = {}
         self._dialogs: dict[str, _Dialog] = {}
@@ -73,7 +73,7 @@ class Relay:
 
     @property
     def mention(self) -> str:
-        return f'<@{self.owner_id}>'
+        return f'<@{self.operator_id}>'
 
     # Threads
 
@@ -307,7 +307,7 @@ class Relay:
         message_id: int,
         text: str,
     ) -> None:
-        if author_id != self.owner_id or not text.strip():
+        if author_id != self.operator_id or not text.strip():
             return
         if thread_id is None:
             name = render.clip(text.strip().splitlines()[0], THREAD_NAME_LIMIT)
@@ -340,8 +340,8 @@ class Relay:
     async def on_component(
         self, author_id: int, custom_id: str, value: str | None
     ) -> str:
-        if author_id != self.owner_id:
-            return NOT_OWNER
+        if author_id != self.operator_id:
+            return NOT_OPERATOR
         parts = custom_id.split(':')
         if parts[:2] == [PREFIX, 'dlg'] and len(parts) == 4:
             return self._click_dialog(parts[2], parts[3], value)
@@ -375,8 +375,8 @@ class Relay:
     async def on_command(
         self, author_id: int, name: str, options: dict[str, object]
     ) -> transport.Response:
-        if author_id != self.owner_id:
-            return transport.Response(NOT_OWNER, private=True)
+        if author_id != self.operator_id:
+            return transport.Response(NOT_OPERATOR, private=True)
 
         command = self._commands().get(name)
         if command is None:

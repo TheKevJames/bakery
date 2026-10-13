@@ -3,8 +3,8 @@ Secrets for the gateway and its claws.
 
 Each secret's value comes only from the macOS Keychain: a generic password
 with account `bakery` and the secret's name as its service. Never from the
-gateway's environment, which holds all of my shell's secrets when the gateway
-is started from a shell.
+gateway's environment, which holds all of the operator's shell's secrets when
+the gateway is started from a shell.
 """
 
 import shutil

@@ -1,13 +1,13 @@
 /**
  * A claw's memory files, under its state dir (BAKERY_MEMORY_DIR):
  * `MEMORY.md` (curated) and `memory/YYYY-MM-DD.md` (daily notes), plus the
- * shared `USER.md` (BAKERY_SHARED_DIR). Every path is resolved here so tools
+ * shared `OPERATOR.md` (BAKERY_SHARED_DIR). Every path is resolved here so tools
  * cannot be pointed elsewhere.
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-export const SOURCES = ["owner", "self", "external"] as const;
+export const SOURCES = ["operator", "self", "external"] as const;
 export type Source = (typeof SOURCES)[number];
 
 export interface Edit {
@@ -25,8 +25,8 @@ export function memoryDir(): string {
   return required("BAKERY_MEMORY_DIR");
 }
 
-export function userFile(): string {
-  return path.join(required("BAKERY_SHARED_DIR"), "USER.md");
+export function operatorFile(): string {
+  return path.join(required("BAKERY_SHARED_DIR"), "OPERATOR.md");
 }
 
 export function curatedFile(): string {

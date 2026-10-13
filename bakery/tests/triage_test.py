@@ -19,7 +19,7 @@ tools = ["task_list", "task_show", "task_set"]
 [[job]]
 name = "queue"
 cron = "0 * * * *"
-prompt = "Triage this ticket."
+prompt = "Triage this task."
 collector = "triage"
 repeat = true
 """
@@ -29,17 +29,17 @@ tools = ["task_list", "task_show", "task_set"]
 [[job]]
 name = "queue"
 cron = "0 * * * *"
-prompt = "Triage this ticket."
+prompt = "Triage this task."
 collector = "triage"
 [[job]]
 name = "unblock"
 cron = "0 * * * *"
-prompt = "Unblock these tickets."
+prompt = "Unblock these tasks."
 collector = "triage-unblock"
 [[job]]
 name = "recheck"
 cron = "0 6 * * 1"
-prompt = "Recheck these blocked tickets."
+prompt = "Recheck these blocked tasks."
 collector = "triage-recheck"
 """
 
@@ -68,7 +68,7 @@ def fixture_tasks(
     monkeypatch.setenv('TASK_FOLDER', str(folder))
     task('add', 'from scout', '--tag', 'bakery/triage')
     task('add', 'recurring', '--tag', 'bakery/triage', '--next', '2030-01-01')
-    task('add', 'from kevin')
+    task('add', 'from the operator', '--tag', 'dev')
     task('add', 'already routed', '--tag', 'bakery/build')
     return folder
 
@@ -89,11 +89,11 @@ def triage_claws(root: pathlib.Path, claw_toml: str = QUEUE) -> pathlib.Path:
     )
 
 
-def test_works_through_the_queue_one_ticket_per_unit(
+def test_works_through_the_queue_one_task_per_unit(
     root: pathlib.Path, tasks: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     del tasks
-    task('add', 'handed over by kevin', '--tag', 'bakery/triage')
+    task('add', 'handed over by the operator', '--tag', 'bakery/triage')
     fake_llm.queue(
         call(id=1, claim=True),
         call(id=1, priority='high', size='small', description_append='notes'),
@@ -116,12 +116,12 @@ def test_works_through_the_queue_one_ticket_per_unit(
             '5 to wontfix',
         )
         # The repeat after it finds nothing left: #2 is scheduled, and #3
-        # is in Kevin's own inbox.
+        # is the operator's own.
         await asyncio.sleep(0.5)
         assert not gateway.active and not gateway.queue
 
     testing_gateway.run_gateway(triage_claws(root), fake, scenario)
-    assert json.dumps('<ticket id="1" waiting="1">')[1:-1] in (
+    assert json.dumps('<task id="1" waiting="1">')[1:-1] in (
         fake_llm.transcript(0)
     )
     first, second = show(1), show(5)
@@ -138,11 +138,11 @@ def test_works_through_the_queue_one_ticket_per_unit(
         None,
     )
     assert show(2)['tag'] == 'bakery/triage'  # scheduled: not triaged
-    assert (show(3)['tag'], show(3)['owner']) == ('triage', None)
+    assert (show(3)['tag'], show(3)['owner']) == ('dev', None)
     assert len(fake_llm.requests) == 8
 
 
-def test_a_ticket_left_waiting_is_not_repeated(
+def test_a_task_left_waiting_is_not_repeated(
     root: pathlib.Path, tasks: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     del tasks
@@ -160,11 +160,11 @@ def test_a_ticket_left_waiting_is_not_repeated(
     assert len(fake_llm.requests) == 1
 
 
-def test_blocking_a_ticket_needs_blockers_which_have_not_cleared(
+def test_blocking_a_task_needs_blockers_which_have_not_cleared(
     root: pathlib.Path, tasks: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     del tasks
-    task('add', 'needs kevin', '--tag', 'bakery/human')
+    task('add', 'needs the operator', '--tag', 'bakery/human')
     valid = (
         '**Blocked on:**\n- #5 decided\n- #3 done\n'
         '- https://example.com/1: released'
@@ -200,17 +200,19 @@ def test_blocking_a_ticket_needs_blockers_which_have_not_cleared(
         '#99 done: already cleared (#99 is done or does not exist)' in cleared
     )
     assert '#1 done: a task cannot block itself' in cleared
-    assert "#3 decided: #3 is Kevin's (triage), so use `#3 done`" in cleared
-    ticket = show(1)
-    assert (ticket['tag'], ticket['owner']) == ('bakery/blocked', None)
-    assert ticket['description'] == valid  # refused notes were not appended
+    assert "#3 decided: #3 is the operator's (dev), so use `#3 done`" in (
+        cleared
+    )
+    blocked = show(1)
+    assert (blocked['tag'], blocked['owner']) == ('bakery/blocked', None)
+    assert blocked['description'] == valid  # refused notes were not appended
 
 
-def test_blocked_tickets_go_back_once_their_blockers_clear(
+def test_blocked_tasks_go_back_once_their_blockers_clear(
     root: pathlib.Path, tasks: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     del tasks
-    # #1 (bakery/triage) is undecided, #3 (Kevin's) is not done,
+    # #1 (bakery/triage) is undecided, #3 (the operator's) is not done,
     # #4 (bakery/build) is decided, and #5 is done.
     task('add', 't5', '--tag', 'bakery/build')
     task('5', 'done')
@@ -260,11 +262,11 @@ def test_blocked_tickets_go_back_once_their_blockers_clear(
 
     testing_gateway.run_gateway(triage_claws(root, BLOCKED), fake, scenario)
     assert prompt(fake_llm, 0).endswith(
-        f'<unblocked tickets="1">\n{triage.UNTRUSTED}\n'
+        f'<unblocked tasks="1">\n{triage.UNTRUSTED}\n'
         '- #6 "t6": cleared #4 decided\n</unblocked>'
     )
     assert prompt(fake_llm, 3).endswith(
-        f'<blocked tickets="2" urls="2">\n{triage.UNTRUSTED}\n'
+        f'<blocked tasks="2" urls="2">\n{triage.UNTRUSTED}\n'
         '## https://example.com/a\n'
         '- #8 "t8": released\n'
         '- #10 "t10": released\n'
@@ -284,7 +286,7 @@ def test_claws_only_change_bakery_tasks(
     root: pathlib.Path, tasks: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     del tasks
-    # #4 is claimed, then Kevin takes it over into his own section.
+    # #4 is claimed, then the operator takes it over into their own section.
     task('set', '4', '--owner', 'triage', '--tag', 'dev')
     fake_llm.queue(
         call(id=3, claim=True),
@@ -307,16 +309,16 @@ def test_claws_only_change_bakery_tasks(
     testing_gateway.run_gateway(triage_claws(root, claw_toml), fake, scenario)
     *refused, moved, released = fake_llm.tool_results()
     assert len(refused) == 4
-    assert all("task 3 is Kevin's (tagged triage)" in r for r in refused)
+    assert all("task 3 is the operator's (tagged dev)" in r for r in refused)
     assert 'dev is not under bakery/' in moved
     assert '"owner": null' in released
-    kevins = show(3)
-    assert (kevins['owner'], kevins['description'], kevins['link']) == (
-        None,
-        None,
-        None,
-    )
-    assert kevins['tag'] == 'triage'
+    operators = show(3)
+    assert (
+        operators['owner'],
+        operators['description'],
+        operators['link'],
+    ) == (None, None, None)
+    assert operators['tag'] == 'dev'
     assert 3 in [t['id'] for t in json.loads(task('list', '--json'))]
     assert (show(1)['tag'], show(4)['owner']) == ('bakery/triage', None)
 

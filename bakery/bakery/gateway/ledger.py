@@ -1,7 +1,7 @@
 """
 The run ledger: one row per run (one prompt until pi settles).
 
-A unit of work (eg. one build ticket) spans many runs, linked by work key.
+A unit of work (eg. one build task) spans many runs, linked by work key.
 Spend is summed from here to enforce daily budgets, which reset at local
 midnight in the gateway's timezone.
 """

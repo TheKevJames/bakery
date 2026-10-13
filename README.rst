@@ -2,7 +2,8 @@ bakery
 ======
 
 My agentic harness: the shared `pi`_ configuration I use interactively, plus a
-gateway that runs autonomous agents ("claws"). See `docs/DESIGN.md`_.
+gateway that runs autonomous agents ("claws"). See `docs/DESIGN.md`_, and
+`GLOSSARY.md`_ for its terms.
 
 Layout
 ------
@@ -66,4 +67,5 @@ Then check the Discord connection and start the gateway as a launchd agent
     $ bakery service install
 
 .. _docs/DESIGN.md: docs/DESIGN.md
+.. _GLOSSARY.md: GLOSSARY.md
 .. _pi: https://github.com/earendil-works/pi

@@ -22,7 +22,7 @@ def make_profile(root: pathlib.Path, context_toml: str) -> pathlib.Path:
     return profile
 
 
-def test_interactive_profile_injects_every_rule_and_user(
+def test_interactive_profile_injects_every_rule_and_operator(
     run_pi: Callable[[pathlib.Path], harness.Pi],
     fake_llm: harness.FakeLLM,
     monkeypatch: pytest.MonkeyPatch,
@@ -30,7 +30,9 @@ def test_interactive_profile_injects_every_rule_and_user(
     pi = run_pi(INTERACTIVE)
     monkeypatch.setenv('XDG_STATE_HOME', pi.env['XDG_STATE_HOME'])
     state.init()
-    state.user_file().write_text('# About the user\nprefers tabs? never\n')
+    state.operator_file().write_text(
+        '# About the operator\nprefers tabs? never\n'
+    )
 
     assert pi.prompt('hi').strip() == 'OK'
 

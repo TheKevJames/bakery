@@ -8,7 +8,7 @@
  *
  * - only allowlisted tools are declared to the model, and any other call is
  *   blocked;
- * - calls matching a `confirm` pattern need my approval (a pi dialog, which
+ * - calls matching a `confirm` pattern need the operator's approval (a pi dialog, which
  *   the gateway turns into Discord buttons);
  * - results showing a sandbox refusal get a note saying so, so neither the
  *   model nor a later reader mistakes it for eg. missing auth or files.
@@ -99,7 +99,7 @@ export default function policyExtension(pi: ExtensionAPI) {
     if (policy.confirm.some((re) => re.test(event.toolName) || (command && re.test(command)))) {
       const summary = command || JSON.stringify(input).slice(0, 500);
       const approved = await ctx.ui.confirm(`Allow ${event.toolName}?`, summary);
-      if (!approved) return block("denied by the user");
+      if (!approved) return block("denied by the operator");
     }
     return undefined;
   });

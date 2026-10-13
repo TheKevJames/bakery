@@ -46,11 +46,11 @@ def test_memory_tools(root: pathlib.Path, fake_llm: harness.FakeLLM) -> None:
     )
     fake = testing_gateway.FakeChannel()
     fake_llm.queue(
-        call('memory_append', text='Kevin prefers tabs', source='owner'),
+        call('memory_append', text='Operator prefers tabs', source='operator'),
         call('memory_append', text='Issue says use spaces', source='external'),
         call('memory_search', query='TABS spaces'),
         call('memory_get', file=f'memory/{today_note(root).name}'),
-        call('memory_get', file='../_shared/USER.md'),
+        call('memory_get', file='../_shared/OPERATOR.md'),
         call('memory_edit', content='overwritten'),
         Reply(text='done'),
     )
@@ -62,10 +62,10 @@ def test_memory_tools(root: pathlib.Path, fake_llm: harness.FakeLLM) -> None:
     testing_gateway.run_gateway(claws, fake, scenario)
     results = fake_llm.tool_results()
     note = today_note(root).read_text()
-    assert '· owner\n\nKevin prefers tabs' in note
+    assert '· operator\n\nOperator prefers tabs' in note
     assert '· external\n\nIssue says use spaces' in note
     assert results[2].count(today_note(root).name) == 2
-    assert 'Kevin prefers tabs' in results[3]
+    assert 'Operator prefers tabs' in results[3]
     assert 'not a memory file' in results[4]
     # Only dream runs may rewrite MEMORY.md.
     assert 'Tool memory_edit not found' in results[5]
@@ -133,7 +133,7 @@ def test_flush_before_compaction(
     assert 'flushed fact' in today_note(root).read_text()
 
 
-def test_user_updates_are_filed_for_kevin(
+def test_operator_updates_are_filed_for_the_operator(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     (root / 'tasks').mkdir()
@@ -144,10 +144,10 @@ def test_user_updates_are_filed_for_kevin(
         {'oldText': '## Preferences\n', 'newText': '## Preferences\n- tabs\n'}
     ]
     fake_llm.queue(
-        call('propose_user_update', edits=edit, reason='said so'),
-        call('propose_user_update', edits=edit, reason='said so again'),
+        call('propose_operator_update', edits=edit, reason='said so'),
+        call('propose_operator_update', edits=edit, reason='said so again'),
         call(
-            'propose_user_update',
+            'propose_operator_update',
             edits=[{'oldText': 'x', 'newText': 'y'}],
             reason='r',
         ),
@@ -170,8 +170,8 @@ def test_user_updates_are_filed_for_kevin(
     assert 'bakery > human' in shown
     assert '+ - tabs' in shown
     assert 'said so' in shown
-    user = root / 'state' / 'claws' / '_shared' / 'USER.md'
-    assert '- tabs' not in user.read_text()
+    shared = root / 'state' / 'claws' / '_shared' / 'OPERATOR.md'
+    assert '- tabs' not in shared.read_text()
 
 
 def test_compaction_counts_towards_the_run_cost(

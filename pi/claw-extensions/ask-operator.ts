@@ -1,8 +1,8 @@
 /**
- * Ask User Extension (claws only)
+ * Ask Operator Extension (claws only)
  *
- * An `ask_user` tool whose behaviour follows the claw's ask policy, passed by
- * the gateway as BAKERY_ASK_POLICY (ask | assume | park),
+ * An `ask_operator` tool whose behaviour follows the claw's ask policy, passed
+ * by the gateway as BAKERY_ASK_POLICY (ask | assume | park),
  * BAKERY_ASK_TIMEOUT_HOURS, and BAKERY_ASK_ON_TIMEOUT (assume | park).
  *
  * "Parking" ends the run (`terminate`) with `details.park` on the result; the
@@ -34,7 +34,7 @@ function park(question: string) {
   // terminate ends the run without another model call (unless sibling tool
   // calls in the same batch continue it; the gateway then aborts the run).
   return {
-    ...text("Stopping until the user answers. Do not continue working on this task.", {
+    ...text("Stopping until the operator answers. Do not continue working on this task.", {
       park: true,
       question,
     }),
@@ -42,11 +42,11 @@ function park(question: string) {
   };
 }
 
-const askUser = defineTool({
-  name: "ask_user",
-  label: "Ask User",
+const askOperator = defineTool({
+  name: "ask_operator",
+  label: "Ask Operator",
   description:
-    "Ask the user a question when you cannot proceed responsibly without their input. " +
+    "Ask the operator a question when you cannot proceed responsibly without their input. " +
     "Always state the assumption you would otherwise make.",
   parameters: Type.Object({
     question: Type.String({ description: "The question, with enough context to answer it cold" }),
@@ -66,7 +66,7 @@ const askUser = defineTool({
       timeout: hours * 3_600_000,
     });
     if (answer !== undefined && answer.trim()) {
-      return text(`The user answered: ${answer.trim()}`, { answered: true });
+      return text(`The operator answered: ${answer.trim()}`, { answered: true });
     }
     if (onTimeout === "assume") return assume(`No answer within ${hours}h.`, params.assumption);
     return park(params.question);
@@ -74,5 +74,5 @@ const askUser = defineTool({
 });
 
 export default function (pi: ExtensionAPI) {
-  pi.registerTool(askUser);
+  pi.registerTool(askOperator);
 }

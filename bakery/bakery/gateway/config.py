@@ -148,7 +148,7 @@ class Claw:
 @dataclasses.dataclass(frozen=True)
 class Discord:
     guild_id: int
-    owner_id: int
+    operator_id: int
 
 
 @dataclasses.dataclass(frozen=True)
@@ -345,7 +345,8 @@ def _gateway(data: Mapping[str, Any]) -> Gateway:
     if table.optional('discord'):
         sub = table.table('discord')
         discord = Discord(
-            guild_id=sub.count('guild_id'), owner_id=sub.count('owner_id')
+            guild_id=sub.count('guild_id'),
+            operator_id=sub.count('operator_id'),
         )
         sub.done()
     gateway = Gateway(

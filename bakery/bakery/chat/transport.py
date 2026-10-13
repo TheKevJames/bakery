@@ -1,7 +1,8 @@
 """
 The seam between the relay (what to say, and when) and Discord (how).
 
-A Transport delivers messages; a Handler receives what I do in Discord.
+A Transport delivers messages; a Handler receives what the operator does
+in Discord.
 discord_transport.py is the real Transport; tests use a fake one.
 """
 
@@ -92,7 +93,7 @@ class Transport(Protocol):
         components: Sequence[Component] = (),
         attachment: Attachment | None = None,
     ) -> int:
-        """Returns the message id. Only the owner can be mentioned."""
+        """Returns the message id. Only the operator can be mentioned."""
         ...
 
     async def edit(
@@ -106,4 +107,4 @@ class Transport(Protocol):
         """`components=None` keeps the message's components."""
 
     async def react(self, where: Where, message_id: int, emoji: str) -> None:
-        """Acknowledge one of my messages."""
+        """Acknowledge one of the operator's messages."""

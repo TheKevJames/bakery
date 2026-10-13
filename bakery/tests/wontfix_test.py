@@ -56,7 +56,7 @@ def test_rejections_are_recorded_by_lineage_and_committed(tasks: None) -> None:
         },
         'https://x/b': {'date': today, 'reason': 'mine', 'summary': 'mine'},
     }
-    # Rejecting keeps the task: Kevin closes it himself.
+    # Rejecting keeps the task: the operator closes it themself.
     assert len(json.loads(run('task', 'list', '--json').stdout)) == 3
     assert 'https://x/b\n    mine\n    mine\n' in bakery('list').stdout
 

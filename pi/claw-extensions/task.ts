@@ -1,13 +1,14 @@
 /**
  * Task Extension (claws only)
  *
- * Tools over the shared `task` list (`task` CLI, $TASK_FOLDER), which I use
- * too. A claw's `policy.tools` decides which tools it gets. Claims are always
+ * Tools over the shared `task` list (`task` CLI, $TASK_FOLDER), which the
+ * operator uses too. A claw's `policy.tools` decides which tools it gets. Claims are always
  * made as the claw itself (BAKERY_CLAW), and `task_add` files into the claw's
  * policy `task_tag` (BAKERY_TASK_TAG); `task` serializes concurrent writers.
  * Claws read every task but only change those tagged under their namespace
- * (BAKERY_TASK_NAMESPACE): the rest are mine. Releasing a claim is the
- * exception, so a task I take over never keeps a claw as its owner.
+ * (BAKERY_TASK_NAMESPACE): the rest are the operator's. Releasing a claim is
+ * the exception, so a task the operator takes over never keeps a claw as its
+ * owner.
  */
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -59,15 +60,15 @@ async function show(pi: ExtensionAPI, id: string, signal?: AbortSignal): Promise
 }
 
 // The check and the write are separate `task` calls (it has no conditional
-// set), so a task Kevin moves out in between can still take this one write.
+// set), so a task the operator moves out in between can still take this one write.
 function assertWritable(id: string, current: Shown): void {
   if (!inNamespace(current.tag)) {
-    throw new Error(`task ${id} is Kevin's (tagged ${current.tag}): only tasks under ${namespace()}/ may change`);
+    throw new Error(`task ${id} is the operator's (tagged ${current.tag}): only tasks under ${namespace()}/ may change`);
   }
 }
 
 const NS_HINT = process.env.BAKERY_TASK_NAMESPACE
-  ? ` Only tasks tagged under \`${process.env.BAKERY_TASK_NAMESPACE}/\` may change; the rest are Kevin's.`
+  ? ` Only tasks tagged under \`${process.env.BAKERY_TASK_NAMESPACE}/\` may change; the rest are the operator's.`
   : "";
 
 const Id = Type.Integer({ minimum: 1, description: "Task id" });

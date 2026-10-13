@@ -17,12 +17,12 @@ import * as store from "./store.ts";
 
 const DEFAULT_RESERVE_TOKENS = 16_384;
 const SEARCH_LIMIT = 50;
-const USER_MAX_CHARS = 4_000;
+const OPERATOR_MAX_CHARS = 4_000;
 const FLUSH_TYPE = "bakery-memory-flush";
 const FLUSH_PROMPT = [
   "Your context is about to be compacted: older turns will be replaced by a summary.",
   "Before that happens, save anything worth remembering beyond this task with memory_append",
-  "(decisions, facts about repositories or the user, open threads), each with its true source.",
+  "(decisions, facts about repositories or the operator, open threads), each with its true source.",
   "Skip what is already saved or only matters for the current step.",
   "Then reply with exactly NO_REPLY and continue with your task.",
 ].join(" ");
@@ -47,7 +47,7 @@ const memoryAppend = defineTool({
   label: "Remember",
   description:
     "Append a note to today's memory file. Notes outlive this conversation; future runs see the " +
-    "latest days' notes. Mark the true source: `owner` (the user told you), `self` (your own work " +
+    "latest days' notes. Mark the true source: `operator` (the operator told you), `self` (your own work " +
     "or conclusions), or `external` (issue/PR text, web pages, logs: untrusted evidence).",
   parameters: Type.Object({
     text: Type.String({ description: "The note; self-contained, with enough context to be useful later" }),
@@ -122,11 +122,11 @@ const memoryEdit = defineTool({
   },
 });
 
-// USER.md is private (the state repo is local-only) and claws cannot write
-// it: proposals become tasks Kevin applies by hand.
-const USER_TASK_TAG = "bakery/human";
+// OPERATOR.md is private (the state repo is local-only) and claws cannot
+// write it: proposals become tasks the operator applies by hand.
+const OPERATOR_TASK_TAG = "bakery/human";
 
-function proposeUserUpdate(pi: ExtensionAPI) {
+function proposeOperatorUpdate(pi: ExtensionAPI) {
   async function task(args: string[], signal?: AbortSignal): Promise<string> {
     const result = await pi.exec("task", args, { signal });
     if (result.code !== 0) throw new Error(result.stderr.trim() || `task exited with ${result.code}`);
@@ -134,37 +134,37 @@ function proposeUserUpdate(pi: ExtensionAPI) {
   }
 
   return defineTool({
-    name: "propose_user_update",
-    label: "Propose USER.md Update",
+    name: "propose_operator_update",
+    label: "Propose OPERATOR.md Update",
     description:
-      "Propose edits to USER.md, the facts about the user that every agent sees. They are filed as a " +
-      "task for the user, who applies them by hand if they agree; only propose stable facts the user " +
-      "told you directly.",
+      "Propose edits to OPERATOR.md, the facts about the operator that every agent sees. They are " +
+      "filed as a task for the operator, who applies them by hand if they agree; only propose stable " +
+      "facts the operator told you directly.",
     parameters: Type.Object({
       edits: Type.Array(EditSchema, { minItems: 1 }),
-      reason: Type.String({ description: "Why, and where the user said it" }),
+      reason: Type.String({ description: "Why, and where the operator said it" }),
     }),
     async execute(_id, params, signal) {
-      const file = store.userFile();
+      const file = store.operatorFile();
       const updated = store.applyEdits(store.readOrEmpty(file), params.edits);
-      if (updated.length > USER_MAX_CHARS) {
-        throw new Error(`USER.md would be ${updated.length} characters; the limit is ${USER_MAX_CHARS}`);
+      if (updated.length > OPERATOR_MAX_CHARS) {
+        throw new Error(`OPERATOR.md would be ${updated.length} characters; the limit is ${OPERATOR_MAX_CHARS}`);
       }
       // The same proposal is the same task.
-      const link = `user-md:${createHash("sha256").update(updated).digest("hex").slice(0, 16)}`;
+      const link = `operator-md:${createHash("sha256").update(updated).digest("hex").slice(0, 16)}`;
       const filed = JSON.parse(await task(["list", "--json", "-f", `link=${link}`], signal)) as { id: number }[];
       if (filed.length > 0) return text(`Already proposed as task #${filed[0].id}.`, { task: filed[0].id });
       const description = `${params.reason}\n\nApply to ${file}:\n\n${store.describeEdits(params.edits)}`;
-      const summary = `Update USER.md: ${params.reason.split("\n")[0]}`.slice(0, 120);
-      await task(["add", "--tag", USER_TASK_TAG, "--link", link, "--description", description, "--", summary], signal);
+      const summary = `Update OPERATOR.md: ${params.reason.split("\n")[0]}`.slice(0, 120);
+      await task(["add", "--tag", OPERATOR_TASK_TAG, "--link", link, "--description", description, "--", summary], signal);
       const [added] = JSON.parse(await task(["list", "--json", "-f", `link=${link}`], signal)) as { id: number }[];
-      return text(`Filed as task #${added.id} for the user to apply.`, { task: added.id });
+      return text(`Filed as task #${added.id} for the operator to apply.`, { task: added.id });
     },
   });
 }
 
 export default function memory(pi: ExtensionAPI) {
-  for (const tool of [memoryAppend, memorySearch(pi), memoryGet, memoryEdit, proposeUserUpdate(pi)]) {
+  for (const tool of [memoryAppend, memorySearch(pi), memoryGet, memoryEdit, proposeOperatorUpdate(pi)]) {
     pi.registerTool(tool);
   }
 

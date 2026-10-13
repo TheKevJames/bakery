@@ -1,11 +1,12 @@
 """
-The scout collector: things in my repos that should be on my task list.
+The scout collector: things in the operator's repos that should be on the
+task list.
 
 Repos are every one the claws' GitHub user can reach (see scout_repos). For
 each: CI failures and warnings on the default branch (warnings only from runs
 whose workflow file is still current), open issues and non-bot pull
 requests, and TODO/FIXME comments on the default branch (fetched into a
-private ref, leaving my checkout alone).
+private ref, leaving the operator's checkout alone).
 A candidate is new unless a task already has its link, which is
 deterministic: the link is the task's lineage.
 """

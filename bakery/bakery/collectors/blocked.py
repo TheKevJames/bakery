@@ -27,7 +27,8 @@ from . import tasks
 TAG = 'bakery/blocked'
 DONE = 'done'
 # A task still here has not been decided, so `#B decided` waits on it.
-# Kevin's own tasks record no decisions, so only `#B done` may wait on them.
+# The operator's own tasks record no decisions, so only `#B done` may wait on
+# them.
 UNDECIDED = frozenset({'bakery/triage', 'bakery/human', TAG})
 
 HEADING = '**Blocked on:**'
@@ -130,7 +131,7 @@ def problems(ident: int, description: str | None, board: Board) -> list[str]:
         state = board.state(blocker)
         if not (DONE in (blocker.until, state) or policy.in_namespace(state)):
             found.append(
-                f"{blocker}: #{blocker.ident} is Kevin's ({state}),"
+                f"{blocker}: #{blocker.ident} is the operator's ({state}),"
                 f' so use `#{blocker.ident} done`'
             )
         elif board.cleared(blocker):

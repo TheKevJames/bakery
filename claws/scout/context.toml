@@ -8,7 +8,7 @@ path = "SOUL.md"
 path = "IDENTITY.md"
 
 [[file]]
-path = "${XDG_STATE_HOME}/claws/_shared/USER.md"
+path = "${XDG_STATE_HOME}/claws/_shared/OPERATOR.md"
 max_chars = 4000
 
 [[file]]
