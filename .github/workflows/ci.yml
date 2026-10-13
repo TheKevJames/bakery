@@ -38,7 +38,7 @@ jobs:
           pi_version: 1.1.0
       - uses: oven-sh/setup-bun@v2.2.0
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.3
       - run: bun install --frozen-lockfile
         working-directory: pi
       - uses: astral-sh/setup-uv@v10.3.0
