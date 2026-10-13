@@ -27,6 +27,8 @@ FOLDERS["pi/skills/vendor/grill-with-docs"]="skills/engineering/grill-with-docs"
 FOLDERS["pi/skills/vendor/grilling"]="skills/productivity/grilling"
 FOLDERS["pi/skills/vendor/improve-codebase-architecture"]=\
 "skills/engineering/improve-codebase-architecture"
+FOLDERS["pi/skills/vendor/setup-matt-pocock-skills"]=\
+"skills/engineering/setup-matt-pocock-skills"
 FOLDERS["pi/skills/vendor/wizard"]="skills/engineering/wizard"
 
 # renovate: datasource=github-releases depName=mattpocock/skills
@@ -52,6 +54,7 @@ for repo_ref in "${!REPO_SOURCES[@]}"; do
             remote_dir="${FOLDERS[${local_dir}]%/}"
             while IFS= read -r rpath; do
                 [ -z "${rpath}" ] && continue
+                [[ "${rpath}" == */openai.yaml ]] && continue
                 vendor_file "${local_dir}/${rpath#"${remote_dir}"/}" \
                     "${rpath}" "${repo}" "${SHA}"
             done < <(grep "^${remote_dir}/" <<< "${TREE}" || true)
