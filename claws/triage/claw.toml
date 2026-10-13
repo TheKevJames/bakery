@@ -14,14 +14,6 @@ cost_usd = 3.0  # per task, or per unblock or recheck
 policy = "ask"
 on_timeout = "assume"  # AGENTS.md: the assumption is always "route to human"
 
-[policy]
-tools = [
-    "read", "grep", "find", "ls", "bash",
-    "ask_operator", "web_search", "web_fetch", "github", "context7",
-    "memory_append", "memory_search", "memory_get", "propose_operator_update",
-    "task_list", "task_show", "task_set",
-]
-
 # One task per run, working through the queue. Also runs within two minutes
 # of the task list changing (eg. scout or the operator adds tasks).
 [[job]]

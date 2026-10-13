@@ -39,6 +39,7 @@ existing item:
     $ security add-generic-password -U -a bakery -s DISCORD_BOT_TOKEN -w
     $ security add-generic-password -U -a bakery -s ANTHROPIC_API_KEY -w
     $ security add-generic-password -U -a bakery -s BAKERY_GITHUB -w
+    $ security add-generic-password -U -a bakery -s BAKERY_GITHUB_READONLY -w
 
 - ``DISCORD_BOT_TOKEN``: the ``bakery`` application's bot token (Discord
   developer portal → Bot → Reset Token).
@@ -48,12 +49,16 @@ existing item:
   → Tokens (classic)), with only the ``repo`` scope and a one-year expiry. That
   user is a collaborator on the public ``TheKevJames`` repositories the claws
   work on.
+- ``BAKERY_GITHUB_READONLY``: another classic token of the same user, with no
+  scopes, so it only reads public data. Scout, which reads untrusted issue and
+  PR text, uses it instead of ``BAKERY_GITHUB``.
 
 Check which are stored, without printing their values:
 
 .. code-block:: console
 
-    $ for name in DISCORD_BOT_TOKEN ANTHROPIC_API_KEY BAKERY_GITHUB; do
+    $ for name in DISCORD_BOT_TOKEN ANTHROPIC_API_KEY BAKERY_GITHUB \
+    >         BAKERY_GITHUB_READONLY; do
     >     security find-generic-password -a bakery -s "$name" >/dev/null 2>&1 \
     >         && echo "$name: ok" || echo "$name: missing"
     > done

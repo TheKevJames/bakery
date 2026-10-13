@@ -1,5 +1,4 @@
 import argparse
-import asyncio
 import functools
 import http.server
 import json
@@ -8,7 +7,6 @@ import pathlib
 import socket
 import threading
 import urllib.parse
-from collections.abc import Iterator
 
 import pytest
 
@@ -99,7 +97,6 @@ def test_file_access_follows_the_policy(
         {
             'a': f"""
                 [policy]
-                tools = ["read", "write", "bash"]
                 read_paths = {toml_list(['~/src/personal/repo', state / 'b'])}
                 write_paths = {toml_list([out])}
             """,
@@ -151,9 +148,7 @@ def test_network_refuses_only_other_unix_sockets(
 ) -> None:
     port = urllib.parse.urlsplit(fake_llm.url).port
     unix_path = root / 'u.sock'
-    claws = testing_gateway.make_claws(
-        root, {'a': '[policy]\ntools = ["bash"]\n'}
-    )
+    claws = testing_gateway.make_claws(root, {'a': ''})
     status = 'curl -sS -m 5 -o /dev/null -w "%{http_code}"'
     connect = (
         f"import socket; socket.socket(socket.AF_UNIX).connect('{unix_path}')"
@@ -231,9 +226,7 @@ def test_web_fetch_makes_pages_readable_in_the_sandbox(
         _pdf(['Hello', 'from', 'the', 'fixture', 'PDF'])
     )
     claws = testing_gateway.make_claws(
-        root,
-        {'a': '[policy]\ntools = ["web_fetch"]\n'},
-        extensions={'a': ['pi/extensions/ketch.ts']},
+        root, {'a': ''}, extensions={'a': ['pi/extensions/ketch.ts']}
     )
     handler = functools.partial(
         http.server.SimpleHTTPRequestHandler, directory=str(site)
@@ -255,40 +248,21 @@ def test_web_fetch_makes_pages_readable_in_the_sandbox(
     assert 'Hello from the fixture PDF' in results[1]
 
 
-def test_confirm_patterns_ask_first(
+def test_claws_get_pi_default_tools_and_their_extensions_tools(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     claws = testing_gateway.make_claws(
-        root, {'a': '[policy]\ntools = ["bash"]\nconfirm = ["^rm "]\n'}
-    )
-    answers: Iterator[dict[str, object]] = iter(
-        [{'confirmed': False}, {'confirmed': True}]
+        root, {'a': ''}, extensions={'a': ['pi/extensions/context7.ts']}
     )
 
-    async def answer(
-        info: channel.RunInfo, request: dict[str, object]
-    ) -> dict[str, object]:
-        del info, request
-        await asyncio.sleep(0)
-        return next(answers)
-
-    fake = testing_gateway.FakeChannel(dialogs=answer)
-    calls = [
-        call('bash', command='rm -f /tmp/bakery-nonexistent'),
-        call('bash', command='rm -f /tmp/bakery-nonexistent && echo removed'),
-        call('bash', command='echo unasked'),
-    ]
-
-    run, results = run_calls(claws, fake_llm, 'a', calls, fake)
+    run, _ = run_calls(claws, fake_llm, 'a', [])
 
     assert run.status == 'settled', run.reason
-    assert [r['message'] for r in fake.asked] == [
-        'rm -f /tmp/bakery-nonexistent',
-        'rm -f /tmp/bakery-nonexistent && echo removed',
-    ]
-    assert 'denied by the operator' in results[0]
-    assert 'removed' in results[1]
-    assert 'unasked' in results[2]
+    tools = fake_llm.requests[0]['tools']
+    assert isinstance(tools, list)
+    assert {tool['function']['name'] for tool in tools} == {
+        'read', 'bash', 'edit', 'write', 'context7',
+    }  # fmt: skip
 
 
 def test_startup_failures_fail_the_run(

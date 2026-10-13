@@ -61,16 +61,12 @@ def test_default_jobs_apply_to_every_claw(tmp_path: pathlib.Path) -> None:
     loaded = config.load(claws)
 
     dream = loaded.claw('plain').job('dream')
-    assert (dream.shared, dream.tools, dream.prompt) == (
-        True,
-        ('memory_edit',),
-        '/dream',
-    )
+    assert (dream.shared, dream.prompt) == (True, '/dream')
     own = loaded.claw('own')
     assert [j.name for j in own.jobs] == ['dream', 'daily']
     assert (own.job('daily').model, own.job('daily').shared) == ('m', False)
     replaced = loaded.claw('replaced').job('dream')
-    assert (replaced.shared, replaced.tools) == (False, ())
+    assert not replaced.shared
 
 
 @pytest.mark.parametrize(
@@ -94,18 +90,17 @@ def test_default_jobs_apply_to_every_claw(tmp_path: pathlib.Path) -> None:
         ('secrets = ["A=b-c"]', 'is not NAME or NAME=ITEM'),
         ('secrets = "X"', 'must be a list of strings'),
         ('bash_secrets = ["GH_TOKEN"]', 'GH_TOKEN is not in its secrets'),
-        ('[policy]\nconfirm = ["("]', 'bad regex'),
         ('[policy]\nnetwork = []', 'unknown keys network'),
-        ('[policy]\ntool = []', 'unknown keys tool'),
+        ('[policy]\ntools = []', 'unknown keys tools'),
         ('[policy]\nallow_read = ["~/.ssh"]', 'unknown keys allow_read'),
-        ('[policy]\ntask_tag = "Bakery/Human"', 'not a lowercase tag path'),
-        ('[policy]\ntask_tag = "triage"', 'is not under bakery/'),
-        ('[policy]\ntask_tag = "bakery"', 'is not under bakery/'),
+        ('[tasks]\ntag = "Bakery/Human"', 'not a lowercase tag path'),
+        ('[tasks]\ntag = "triage"', 'is not under bakery/'),
+        ('[tasks]\ntag = "bakery"', 'is not under bakery/'),
         ('[memory]\nmax_chars = 0', 'max_chars: must be >= 1'),
         (
             '[[job]]\nname = "x"\ncron = "* * * * *"\nprompt = "p"\n'
-            'tools = "t"',
-            'list of strings',
+            'tools = []',
+            'unknown keys tools',
         ),
         (
             '[[job]]\nname = "x"\ncron = "* * * * *"\nprompt = "p"\n'
@@ -139,7 +134,6 @@ def job(cron: str, hours: str | None = None) -> config.Job:
         silent_ok=False,
         model=None,
         thinking=None,
-        tools=(),
         collector=None,
         repeat=False,
         watch=None,

@@ -23,15 +23,15 @@ exactly NO_REPLY.
   note) is new information and supersedes the earlier route. If it was
   blocked on another task, read that task's notes for its decision.
 - Check the source still exists: open the `link` (a GitHub issue or PR, a
-  CI run, or a file at a line) with `github`, or read the file in your
-  clone of the repository. A fixed or removed source makes the task
+  CI run, or a file at a line) with `gh` (eg. `gh issue view`, `gh api`),
+  or read the file in your clone of the repository. A fixed or removed source makes the task
   obsolete.
 - Find the relevant code, history (`git log`, `git blame` in your clone),
   and related issues. Use `web_search`, `web_fetch`, and `context7` for
   library behavior and documentation.
 - Look for duplicates: open tasks for the same work, eg. the same
-  boilerplate TODO in another repository (`task_list` with `summary~` or
-  `link~` filters).
+  boilerplate TODO in another repository (`task list --json` with
+  `summary~` or `link~` filters).
 - You may not reproduce problems, run tests, or change anything but your
   own clones. If a task needs reproduction to understand, route it to the
   operator.
@@ -83,7 +83,8 @@ Always set `priority` (`low`, `medium`, `high`) and `size` (`small`,
 Move it with `task_set(id, tag=...)`, then `task_set(id, release=true)`:
 
 - `bakery/build` when all hold: the change is in a TheKevJames repository
-  the claws can push to (`github` shows `permissions.push` on the repo);
+  the claws can push to (`gh api repos/OWNER/REPO` shows
+  `permissions.push`);
   the scope is clear and needs no decision from the operator; and success
   can be checked by tests, lint, or CI.
 - `bakery/human` when it needs a decision on this task, a preference,
@@ -117,7 +118,8 @@ open task for that work, never another duplicate.
 
 You may read any task, but only change tasks under `bakery/`: the
 operator's own tasks are theirs, and `task_set` refuses to change them or to
-move a task out of `bakery/`.
+move a task out of `bakery/`. Never add tasks: `task_add` would file them
+into your own queue.
 
 ## Unblocked tasks
 
@@ -137,7 +139,7 @@ re-triage it here: the `queue` job does that next.
 
 `<blocked>` groups blocked tasks by the URL they wait on, with each task's
 condition; their blocking tasks, if any, have cleared. Check each URL once
-(`github` for issues, PRs, and releases; `web_fetch` otherwise). A task
+(`gh` for issues, PRs, and releases; `web_fetch` otherwise). A task
 clears only if every one of its conditions holds. For each task that
 clears, do as for an unblocked task, saying in its note what you found.
 Leave the rest alone, without notes. If you cannot tell whether a condition

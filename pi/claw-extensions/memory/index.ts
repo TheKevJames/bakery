@@ -1,14 +1,16 @@
 /**
  * Memory Extension (claws only)
  *
- * Tools over the claw's memory files (see store.ts), and the pre-compaction
- * flush: once the context is within BAKERY_FLUSH_MARGIN_TOKENS of pi's
- * compaction threshold, a hidden message asks the model to save anything
- * durable before older turns are summarized away. It fires once per
- * compaction cycle, as an ordinary model turn so its cost is accounted.
+ * Tools that write the claw's memory files (see store.ts; the claw reads them
+ * like any other file), and the pre-compaction flush: once the context is
+ * within BAKERY_FLUSH_MARGIN_TOKENS of pi's compaction threshold, a hidden
+ * message asks the model to save anything durable before older turns are
+ * summarized away. It fires once per compaction cycle, as an ordinary model
+ * turn so its cost is accounted.
  *
- * These are the intended writers of memory, but not the only possible ones:
- * bash shares pi's sandbox, which can write the claw's state dir.
+ * These are the intended writers of memory, and memory_edit is meant only
+ * for dream runs, but neither is enforced: bash shares pi's sandbox, which can
+ * write the claw's state dir.
  */
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { createHash } from "node:crypto";
@@ -16,7 +18,6 @@ import { Type } from "typebox";
 import * as store from "./store.ts";
 
 const DEFAULT_RESERVE_TOKENS = 16_384;
-const SEARCH_LIMIT = 50;
 const OPERATOR_MAX_CHARS = 4_000;
 const FLUSH_TYPE = "bakery-memory-flush";
 const FLUSH_PROMPT = [
@@ -59,54 +60,12 @@ const memoryAppend = defineTool({
   },
 });
 
-function memorySearch(pi: ExtensionAPI) {
-  return defineTool({
-    name: "memory_search",
-    label: "Search Memory",
-    description: "Keyword search (case-insensitive) over MEMORY.md and the daily notes, newest first.",
-    parameters: Type.Object({
-      query: Type.String({ description: "Words to look for; lines matching any of them are returned" }),
-    }),
-    async execute(_id, params, signal) {
-      const words = params.query.split(/\s+/).filter(Boolean);
-      if (words.length === 0) throw new Error("query is empty");
-      const args = ["--ignore-case", "--fixed-strings", "--line-number", "--no-heading", "--sortr", "path"];
-      args.push(...words.flatMap((w) => ["-e", w]), "--glob", "*.md", ".");
-      const result = await pi.exec("rg", args, { cwd: store.memoryDir(), signal });
-      if (result.code === 1) return text("No matches.", { matches: 0 });
-      if (result.code !== 0) throw new Error(`search failed: ${result.stderr.trim()}`);
-      const lines = result.stdout.trim().split("\n");
-      const shown = lines.slice(0, SEARCH_LIMIT).map((l) => l.replace(/^\.\//, ""));
-      const more = lines.length > SEARCH_LIMIT ? `\n\n[${lines.length - SEARCH_LIMIT} more; refine the query]` : "";
-      return text(shown.join("\n") + more, { matches: lines.length });
-    },
-  });
-}
-
-const memoryGet = defineTool({
-  name: "memory_get",
-  label: "Read Memory",
-  description: "Read a memory file: MEMORY.md or memory/YYYY-MM-DD.md, optionally a line range.",
-  parameters: Type.Object({
-    file: Type.String({ description: "MEMORY.md or memory/<date>.md" }),
-    offset: Type.Optional(Type.Integer({ minimum: 1, description: "First line (1-based)" })),
-    limit: Type.Optional(Type.Integer({ minimum: 1, description: "Number of lines" })),
-  }),
-  async execute(_id, params) {
-    const lines = store.readOrEmpty(store.resolve(params.file)).split("\n");
-    const start = (params.offset ?? 1) - 1;
-    const end = params.limit === undefined ? lines.length : start + params.limit;
-    const body = lines.slice(start, end).join("\n");
-    return text(body || "(empty)", { lines: lines.length });
-  },
-});
-
 const memoryEdit = defineTool({
   name: "memory_edit",
   label: "Edit Memory",
   description:
     "Edit MEMORY.md, the curated long-term memory: exact replacements, or a complete rewrite. " +
-    "Never promote `external` notes into it.",
+    "Only during your dream (/dream); never promote `external` notes into it.",
   parameters: Type.Object({
     edits: Type.Optional(Type.Array(EditSchema, { description: "Replacements, applied in order" })),
     content: Type.Optional(Type.String({ description: "The complete new MEMORY.md" })),
@@ -164,7 +123,7 @@ function proposeOperatorUpdate(pi: ExtensionAPI) {
 }
 
 export default function memory(pi: ExtensionAPI) {
-  for (const tool of [memoryAppend, memorySearch(pi), memoryGet, memoryEdit, proposeOperatorUpdate(pi)]) {
+  for (const tool of [memoryAppend, memoryEdit, proposeOperatorUpdate(pi)]) {
     pi.registerTool(tool);
   }
 

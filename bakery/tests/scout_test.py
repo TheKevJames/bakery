@@ -1,5 +1,4 @@
 import asyncio
-import datetime
 import json
 import os
 import pathlib
@@ -8,7 +7,6 @@ from collections.abc import Iterator
 
 import pytest
 
-from bakery import github as github_
 from bakery import state
 from bakery.chat import render
 from bakery.collectors import scout
@@ -193,8 +191,6 @@ def scout_claws(
                 secrets = ["BAKERY_FAKE_LLM_URL", "GH_TOKEN=BAKERY_TEST_GH"]
                 [ask]
                 policy = "assume"
-                [policy]
-                tools = ["task_list", "task_add"]
                 [[job]]
                 name = "daily"
                 cron = "0 7 * * *"
@@ -232,9 +228,6 @@ def test_collects_new_candidates_in_priority_order(
     wontfix.add(2, 'not ours')
     task('2', 'done')
     task('3', 'done')
-    soon = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=9)
-    github.headers[github_.EXPIRATION_HEADER] = f'{soon:%Y-%m-%d %H:%M:%S} UTC'
-
     collection = scout.collect(claw)
 
     warning = scout.fingerprint('DeprecationWarning: old api')
@@ -256,11 +249,8 @@ def test_collects_new_candidates_in_priority_order(
         f'From https://github.com/{REPO}/actions/runs/8 (commit '
     )
     assert 'def main():' in found[-1]['detail']
-    gone, expiring = collection.errors
+    [gone] = collection.errors
     assert f'{OWNER}/gone: reading the repo failed' in gone
-    assert f'BAKERY_GITHUB) expires on {soon:%Y-%m-%d}' in expiring
-    # Once per token.
-    assert not any('expires' in e for e in scout.collect(claw).errors)
     assert scout_repos.check(claw) == [
         f'scout: scout.toml overrides {OWNER}/elsewhere, which the claws'
         " cannot reach; it's ignored"
@@ -268,9 +258,13 @@ def test_collects_new_candidates_in_priority_order(
     # Log downloads follow a redirect without leaking the token to it.
     assert ('/blob/logs.zip', None) in github.requests
     assert (f'/repos/{REPO}', f'Bearer {TOKEN}') in github.requests
-    # Scout's own clone, in its state.
+    # Scout's own clone, in its state, is the one pi/claw-rules/repos.md has
+    # the model use; the collector keeps working once the model has used it.
     clone = claw.state_dir / 'clones' / REPO
-    assert git(clone, 'rev-parse', '--verify', 'refs/remotes/origin/main')
+    git(clone, 'fetch', '-q')
+    git(clone, 'checkout', '-q', '--detach', 'origin/HEAD')
+    assert 'TODO: handle errors' in (clone / 'app.py').read_text()
+    assert candidates(scout.collect(claw).text) == found
 
 
 def test_caps_candidates_per_run(
@@ -361,9 +355,8 @@ def test_task_claims_and_adds(
         root,
         {
             'triage': """
-                [policy]
-                tools = ["task_set", "task_show", "task_add"]
-                task_tag = "bakery/human"
+                [tasks]
+                tag = "bakery/human"
             """
         },
         extensions={'triage': ['pi/claw-extensions/task.ts']},
@@ -437,5 +430,5 @@ def test_repo_claws_load(
     assert (queue.collector, queue.repeat) == ('triage', True)
     baker = loaded.claw('baker')
     assert baker.job('review').collector == 'baker'
-    assert baker.policy.task_tag == 'bakery/human'
+    assert baker.tasks.tag == 'bakery/human'
     assert state.root() in baker.policy.read_paths

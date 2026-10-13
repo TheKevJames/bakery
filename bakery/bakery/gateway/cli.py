@@ -129,7 +129,7 @@ def do_sandbox_exec(args: argparse.Namespace) -> int:
         sys.exit('nothing to run; usage: bakery sandbox exec CLAW -- COMMAND')
     stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
     try:
-        env = pool.child_env(claw, None, f'sandbox-exec-{stamp}')
+        env = pool.child_env(claw, f'sandbox-exec-{stamp}')
     except secrets.SecretError as e:
         sys.exit(str(e))
     sandbox.prepare(claw)

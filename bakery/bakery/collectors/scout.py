@@ -35,7 +35,6 @@ from .. import secrets
 from . import base
 from . import scout_repos
 from . import tasks
-from . import token_expiry
 from . import wontfix
 
 if TYPE_CHECKING:
@@ -223,13 +222,12 @@ def _git(
 
 
 def _fetch(repo: scout_repos.Repo, branch: str, token: str) -> str:
-    """Fetch the default branch into scout's clone; returns its ref."""
-    subprocess.run(
-        ('git', 'init', '--quiet', '--bare', str(repo.clone)),
-        capture_output=True,
-        check=True,
-    )
-    ref = f'refs/remotes/origin/{branch}'
+    """
+    Fetch the default branch into scout's clone; returns its ref. The clone is
+    the one pi/claw-rules/repos.md has scout's model use, so it is an ordinary
+    clone with `origin` and `origin/HEAD`, and only refs are read from it: the
+    model may have its own checkout and worktrees there.
+    """
     basic = base64.b64encode(f'x-access-token:{token}'.encode()).decode()
     # Configured through the environment so the token never shows in `ps`.
     env = os.environ | {
@@ -238,15 +236,26 @@ def _fetch(repo: scout_repos.Repo, branch: str, token: str) -> str:
         'GIT_CONFIG_VALUE_0': f'Authorization: Basic {basic}',
         'GIT_TERMINAL_PROMPT': '0',
     }
+    if not (repo.clone / '.git').exists():
+        subprocess.run(
+            ('git', 'clone', '--quiet', '--no-checkout', repo.remote,
+             str(repo.clone)),
+            capture_output=True,
+            text=True,
+            check=True,
+            env=env,
+        )  # fmt: skip
+    ref = f'refs/remotes/origin/{branch}'
     _git(
         repo,
         'fetch',
         '--quiet',
         '--no-tags',
-        repo.remote,
+        'origin',
         f'+refs/heads/{branch}:{ref}',
         env=env,
     )
+    _git(repo, 'remote', 'set-head', 'origin', branch)
     return ref
 
 
@@ -403,7 +412,6 @@ def collect(claw: 'config.Claw') -> base.Collection:
     token = secrets.get(item)
     gh = github.GitHub(settings.api, token)
     found, errors = _gather(gh, settings, token, claw.state_dir / 'clones')
-    errors += token_expiry.reminder(gh.token_expires)
     tracked = tracked_links()
     new = [c for c in found if tasks.lineage(c.link) not in tracked]
     new.sort(key=lambda c: KINDS.index(c.kind))

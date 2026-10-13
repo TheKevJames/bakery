@@ -120,8 +120,8 @@ A way the claws are failing, which baker files as a task.
 ### Safety
 
 **Policy**:
-The limits on what a claw may read, write, call, and file, enforced outside
-the model.
+The limits on what a claw may read, write, and reach, enforced outside the
+model.
 _Avoid_: permissions, tier
 
 **Sandbox**:

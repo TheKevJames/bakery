@@ -1,7 +1,17 @@
-"""The shared task list, as collectors read it."""
+"""The shared task list: the claws' namespace in it, and reading it."""
 
 import json
+import re
 import subprocess
+
+TAG_RE = re.compile(r'[a-z0-9][a-z0-9_.-]*(/[a-z0-9][a-z0-9_.-]*)*')
+# Claws only change tasks tagged under this section; the rest are the
+# operator's.
+NAMESPACE = 'bakery'
+
+
+def in_namespace(tag: str) -> bool:
+    return tag.startswith(f'{NAMESPACE}/')
 
 
 class TaskError(Exception):

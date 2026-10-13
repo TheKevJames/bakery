@@ -37,13 +37,14 @@ failing in a way nothing will fix. File one task per gap for the operator.
 
 The digest lists every task whose link starts with `baker:`. For each one
 in `bakery/human`, recheck its **Acceptance** line: is the gap still
-present, or fixed? You cannot change tasks; report what you found.
+present, or fixed? Never change tasks (no `task_set`); report what you
+found.
 
 ## 2. Look for gaps
 
 Each gap has a type, used in its link:
 
-- `tool-gap`: a claw lacks a tool, a tool is too weak, or a restriction
+- `tool-gap`: a claw lacks a tool, a tool is too weak, or its sandbox
   makes it fail. Evidence: refused or failed calls of the same kind in 3 or
   more units of work, or a single one that led to a wrong conclusion in
   memory or on a task. Bash that stays out of protected paths and other
@@ -68,9 +69,9 @@ Each gap has a type, used in its link:
   assembly, and docs that no longer match the code.
 - `other`: anything else; explain it in your reply.
 
-Verify before you file: reproduce with the same tool and token the claw had
-(you have its read-only tools), and read the code that explains the
-behaviour. Say how you verified, or mark the gap unverified.
+Verify before you file: reproduce with the same tool the claw had, without
+changing anything (your GitHub token can write; scout's cannot), and read
+the code that explains the behaviour. Say how you verified, or mark the gap unverified.
 
 ## 3. File
 
@@ -80,7 +81,7 @@ One task per gap, with `task_add` (it files into `bakery/human`):
 - `link`: `baker:<type>/<slug>`, the slug lowercase-kebab and naming the
   gap rather than one instance of it. Never file a link that is already on
   an open task, in any section, or on a rejection; check the digest's
-  tasks (or `task_list` with `link~baker:`) and your memory for the same
+  tasks (or `task list --json -f 'link~baker:'`) and your memory for the same
   gap under another slug first. Rejections are permanent. Other tasks
   disappear once the operator marks them done; file again only if the gap is
   still there.

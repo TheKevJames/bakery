@@ -11,6 +11,9 @@ path = "IDENTITY.md"
 path = "../../pi/claw-rules/repos.md"
 
 [[file]]
+path = "../../pi/claw-rules/tasks.md"
+
+[[file]]
 path = "${XDG_STATE_HOME}/claws/_shared/OPERATOR.md"
 max_chars = 4000
 

@@ -20,8 +20,10 @@ looks like a false positive (eg. a TODO in prose about TODOs), still add it
 and say so in its description, so triage can route it to `bakery/wontfix`
 and the operator can fix the source.
 
-You may read files and use `github`, `web_fetch`, and documentation tools to
-add useful context, but keep it brief; triage does the research.
+You may read your clones and use `gh` (your GitHub token is read-only),
+`web_fetch`, and documentation tools to add useful context, but keep it
+brief; triage does the research. `task_add` is your only task tool: never
+change existing tasks.
 
 When done, reply with a short report: how many tasks you added (by kind and
 repository), how many candidates were deferred, and any `<collection_errors>`
