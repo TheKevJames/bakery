@@ -116,7 +116,7 @@ def test_file_access_follows_the_policy(
     assert f'file-read-data {home.resolve()}/.ssh/key' in violations(root, 'a')
 
 
-def test_network_refuses_only_local_names_and_sockets(
+def test_network_refuses_only_other_unix_sockets(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     port = urllib.parse.urlsplit(fake_llm.url).port
@@ -124,20 +124,21 @@ def test_network_refuses_only_local_names_and_sockets(
     claws = testing_gateway.make_claws(
         root, {'a': '[policy]\ntools = ["bash"]\n'}
     )
-    curl = 'curl -sS -m 5'
+    status = 'curl -sS -m 5 -o /dev/null -w "%{http_code}"'
     connect = (
         f"import socket; socket.socket(socket.AF_UNIX).connect('{unix_path}')"
     )
     calls = [
-        call('bash', command=f'{curl} http://localhost:{port}/'),
-        call('bash', command=f'python3 -c "{connect}"'),
+        call('bash', command=f'{status} http://localhost:{port}/'),
         call(
-            'bash',
-            command=f'{curl} -o /dev/null -w "%{{http_code}}" '
-            f'http://127.0.0.1:{port}/',
+            'bash', command=f'{status} --noproxy "*" http://127.0.0.1:{port}/'
         ),
+        call('bash', command=f'python3 -c "{connect}"'),
+        # A claw's only GitHub token is its GH_TOKEN (test claws have none);
+        # mine, in the Keychain, stays unreachable.
+        call('bash', command='gh auth token'),
         # Offline, this fails upstream rather than at the sandbox.
-        call('bash', command=f'{curl} -o /dev/null https://example.com'),
+        call('bash', command=f'{status} https://example.com'),
     ]
 
     with socket.socket(socket.AF_UNIX) as unix_server:
@@ -146,12 +147,14 @@ def test_network_refuses_only_local_names_and_sockets(
         run, results = run_calls(claws, fake_llm, 'a', calls)
 
     assert run.status == 'settled', run.reason
-    for refused in (0, 1):
-        assert 'sandbox policy blocked it' in results[refused], refused
-    assert results[2].strip() == '501'
-    assert 'sandbox policy blocked it' not in results[3]
+    # Through the proxy, then directly: FakeLLM answers GETs with 501.
+    assert results[0].strip() == '501'
+    assert results[1].strip() == '501'
+    assert 'sandbox policy blocked it' in results[2]
+    assert 'no oauth token' in results[3]
+    assert 'sandbox policy blocked it' not in results[4]
     logged = violations(root, 'a')
-    assert f'deny network-outbound localhost:{port}' in logged
+    assert 'localhost' not in logged
     assert 'example.com' not in logged
 
 

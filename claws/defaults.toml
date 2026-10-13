@@ -35,8 +35,9 @@ bash_secrets = ["GH_TOKEN"]
 # Paths are enforced by the OS sandbox the claw's whole pi runs in (see
 # bakery/bakery/gateway/sandbox.py), so they bind pi, bash, and every tool
 # alike; tools and confirm by pi/claw-extensions/policy. The sandbox also lets
-# every claw reach any host except by a name resolving to this machine
-# (loopback, link-local, its own addresses), and no unix socket but its own.
+# every claw reach any host, except by a name other than localhost resolving
+# to this machine (loopback, link-local, its own addresses), and no unix
+# socket but its own.
 # Relative paths are relative to the claw's profile (claws/<name>/); ~ and
 # ${VAR} expand.
 # A claw's value for a key replaces the default list; repeat what it keeps.

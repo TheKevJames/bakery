@@ -46,9 +46,9 @@ Each gap has a type, used in its link:
 - `tool-gap`: a claw lacks a tool, a tool is too weak, or a restriction
   makes it fail. Evidence: refused or failed calls of the same kind in 3 or
   more units of work, or a single one that led to a wrong conclusion in
-  memory or on a ticket. Bash that stays out of protected paths, local
-  network addresses, and other unix sockets is fine; the gap is what a
-  restriction stopped the claw from doing. Name the tool to add or fix, and the access it needs.
+  memory or on a ticket. Bash that stays out of protected paths and other
+  unix sockets is fine; the gap is what a restriction stopped the claw from
+  doing. Name the tool to add or fix, and the access it needs.
 - `false-learning`: memory or a note that the evidence contradicts,
   including a failure recorded as a fact about the world.
 - `no-actuator`: a learning no claw can act on, eg. a change to
