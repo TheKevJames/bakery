@@ -20,7 +20,7 @@ def _marker() -> pathlib.Path:
 def reminder(
     expires: datetime.datetime | None, now: datetime.datetime | None = None
 ) -> list[str]:
-    """A problem to tell me about, the first time expiry is near."""
+    """A problem to tell the operator about, the first time expiry is near."""
     if expires is None:
         return []
     now = now or datetime.datetime.now(datetime.UTC)

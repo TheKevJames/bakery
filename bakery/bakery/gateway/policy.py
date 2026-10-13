@@ -14,7 +14,8 @@ from collections.abc import Iterable
 from . import toml
 
 TAG_RE = re.compile(r'[a-z0-9][a-z0-9_.-]*(/[a-z0-9][a-z0-9_.-]*)*')
-# Claws only change tasks tagged under this section; the rest are Kevin's.
+# Claws only change tasks tagged under this section; the rest are the
+# operator's.
 NAMESPACE = 'bakery'
 
 
@@ -33,7 +34,8 @@ class Policy:
     deny_read: tuple[str, ...]
     # Absolute paths the claw may write, besides its own state and profile.
     write_paths: tuple[pathlib.Path, ...]
-    # Regexes; a matching tool name or bash command needs my approval.
+    # Regexes; a matching tool name or bash command needs the operator's
+    # approval.
     confirm: tuple[str, ...]
     # The task list section `task_add` files into, under NAMESPACE.
     task_tag: str

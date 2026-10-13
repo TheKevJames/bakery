@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from bakery.chat import transport
 
 WAIT_TIMEOUT = 60.0
-OWNER = 1001
+OPERATOR = 1001
 STRANGER = 2002
 
 

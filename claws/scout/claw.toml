@@ -1,5 +1,6 @@
-# scout: finds things in my repos that belong on my task list (CI failures
-# and warnings, issues and PRs, TODO comments) and adds them for triage.
+# scout: finds things in the operator's repos that belong on the task list
+# (CI failures and warnings, issues and PRs, TODO comments) and adds them for
+# triage.
 # Candidates are gathered deterministically by bakery/bakery/collectors/
 # scout.py from scout.toml; the model only writes them up.
 
@@ -10,7 +11,7 @@ thinking = "high"
 cost_usd = 2.0
 
 [ask]
-policy = "assume"  # never interrupt me; note assumptions in the report
+policy = "assume"  # never interrupt the operator; note assumptions in the report
 
 [policy]
 # Read-only, and no bash: the collector gathers everything scout needs.

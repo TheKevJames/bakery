@@ -350,7 +350,7 @@ class Gateway:
 
     def message(self, claw: str, work_key: str, text: str) -> str:
         """
-        Deliver a message from me to a unit of work.
+        Deliver a message from the operator to a unit of work.
 
         Steers the unit's run if one is in flight, else queues a run with the
         message as its prompt. Returns 'steered' or 'queued'.

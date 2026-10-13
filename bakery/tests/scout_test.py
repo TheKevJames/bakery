@@ -371,7 +371,7 @@ def test_task_claims_and_adds(
     monkeypatch.setenv('TASK_FOLDER', str(root / 'tasks'))
     (root / 'tasks').mkdir()
     task('add', 'mine', '--tag', 'bakery/triage')
-    task('add', 'theirs', '--tag', 'bakery/triage', '--owner', 'kevin')
+    task('add', 'theirs', '--tag', 'bakery/triage', '--owner', 'operator')
     claws = testing_gateway.make_claws(
         root,
         {
@@ -415,7 +415,7 @@ def test_task_claims_and_adds(
     testing_gateway.run_gateway(claws, fake, scenario)
     results = fake_llm.tool_results()
     assert '"owner": "triage"' in results[0]
-    assert 'owned by kevin' in results[1]
+    assert 'owned by operator' in results[1]
     assert 'not claimed by triage' in results[2]
     final = json.loads(task('show', '1', '--json'))
     assert (final['owner'], final['tag'], final['description']) == (

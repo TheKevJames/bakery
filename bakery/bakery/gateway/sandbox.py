@@ -209,18 +209,19 @@ def settings(claw: config.Claw, path_env: str) -> dict[str, object]:
             'allowLocalBinding': True,
         },
         # Only lets Go programs (gh, ketch) verify TLS certificates through
-        # the system's trust service; the Keychain, where my own gh token
-        # lives, stays unreachable. Its documented risk, exfiltration through
-        # trustd, adds nothing to a sandbox that reaches any public host.
+        # the system's trust service; the Keychain, where the operator's own
+        # gh token lives, stays unreachable. Its documented risk, exfiltration
+        # through trustd, adds nothing to a sandbox that reaches any public
+        # host.
         'enableWeakerNetworkIsolation': True,
         'filesystem': {
             'denyRead': [*_real(denies), *policy.deny_read],
             'allowRead': _real(reads),
             'allowWrite': _real(writes),
             'denyWrite': [],
-            # Claws clone into their own (writable) state; nothing of mine is
-            # writable, so this only lets them make and configure clones.
-            # .git/hooks stays unwritable.
+            # Claws clone into their own (writable) state; nothing of the
+            # operator's is writable, so this only lets them make and
+            # configure clones. .git/hooks stays unwritable.
             'allowGitConfig': True,
         },
     }

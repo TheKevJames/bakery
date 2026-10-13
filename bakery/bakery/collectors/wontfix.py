@@ -1,9 +1,9 @@
 """
 Rejections: lineages scout and baker never file again.
 
-Kevin records one from a task with `bakery wontfix add`, then closes the task
-as usual. Done tasks are deleted, so this store is all that remains of them.
-It lives in the claw state repo, which commits every change.
+The operator records one from a task with `bakery wontfix add`, then closes
+the task as usual. Done tasks are deleted, so this store is all that remains
+of them. It lives in the claw state repo, which commits every change.
 """
 
 import argparse

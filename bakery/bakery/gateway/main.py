@@ -54,7 +54,7 @@ def transport(
         if (claws_dir / name / 'avatar.png').exists()
     }
     return discord_transport.DiscordTransport(
-        secrets.get(TOKEN), settings.guild_id, settings.owner_id, avatars
+        secrets.get(TOKEN), settings.guild_id, settings.operator_id, avatars
     )
 
 
@@ -66,7 +66,7 @@ async def run(claws_dir: pathlib.Path) -> None:
     loaded = config.load(claws_dir)
     chat = transport(claws_dir, loaded)
     assert loaded.gateway.discord is not None
-    bot = relay.Relay(chat, loaded.gateway.discord.owner_id)
+    bot = relay.Relay(chat, loaded.gateway.discord.operator_id)
     gateway = core.Gateway(claws_dir, bot)
     bot.bind(gateway)
 
@@ -121,7 +121,7 @@ async def check(claws_dir: pathlib.Path) -> list[str]:
     problems = collector_problems(loaded)
     chat = transport(claws_dir, loaded)
     assert loaded.gateway.discord is not None
-    bot = relay.Relay(chat, loaded.gateway.discord.owner_id)
+    bot = relay.Relay(chat, loaded.gateway.discord.operator_id)
     claws = _enabled(loaded)
     await chat.start(bot, claws)
     try:

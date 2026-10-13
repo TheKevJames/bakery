@@ -7,7 +7,7 @@
 export interface Policy {
   /** Tool names, or patterns where `*` matches any characters. */
   tools: string[];
-  /** Regexes; a matching tool name or bash command needs my approval. */
+  /** Regexes; a matching tool name or bash command needs the operator's approval. */
   confirm: RegExp[];
   /** Environment variables (secrets) bash is not handed. */
   secretNames: string[];

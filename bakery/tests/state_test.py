@@ -29,7 +29,7 @@ def fixture_root(
 
 def test_init_is_idempotent_and_tracks_only_memory(root: pathlib.Path) -> None:
     state.init()
-    state.user_file().write_text('# edited\n')
+    state.operator_file().write_text('# edited\n')
     for ignored in ('_gateway/runs.db', 'scout/sessions/a.jsonl'):
         (root / ignored).parent.mkdir(parents=True)
         (root / ignored).write_text('x')
@@ -37,11 +37,11 @@ def test_init_is_idempotent_and_tracks_only_memory(root: pathlib.Path) -> None:
 
     state.init()
 
-    assert state.user_file().read_text() == '# edited\n'
+    assert state.operator_file().read_text() == '# edited\n'
     tracked = git(root, 'ls-files').split()
     assert sorted(tracked) == [
         '.gitignore',
-        '_shared/USER.md',
+        '_shared/OPERATOR.md',
         'scout/MEMORY.md',
     ]
     assert not git(root, 'status', '--porcelain').strip()

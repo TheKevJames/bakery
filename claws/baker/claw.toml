@@ -1,7 +1,7 @@
 # baker: reviews how the other claws learn (memory, dreams, transcripts,
 # refused and failed tool calls) and files a task for each gap it finds.
 # Evidence is gathered by bakery/bakery/collectors/baker.py; baker reads every
-# claw's state but writes only its own memory and new tasks for Kevin.
+# claw's state but writes only its own memory and new tasks for the operator.
 
 model = "anthropic/claude-opus-5-5"
 thinking = "high"
@@ -12,7 +12,7 @@ minutes = 45
 turns = 100
 
 [ask]
-policy = "assume"  # its tasks are its questions for Kevin
+policy = "assume"  # its tasks are its questions for the operator
 
 [policy]
 tools = [
@@ -23,7 +23,8 @@ tools = [
 ]
 # Every claw's state, and the gateway's runs, logs, and sandbox violations.
 read_paths = ["~/src/personal", "${TASK_FOLDER}", "${XDG_STATE_HOME}/claws"]
-# Never bakery/build: fixes change the claws themselves, so Kevin approves.
+# Never bakery/build: fixes change the claws themselves, so the operator
+# approves.
 task_tag = "bakery/human"
 
 # After the 03:00 dreams, so it sees what they promoted.

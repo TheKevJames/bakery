@@ -15,7 +15,7 @@ from collections.abc import Iterator
 
 # The reasons pi/claw-extensions/policy blocks a call with.
 POLICY_BLOCKS = re.compile(
-    r"is not allowed by this claw's policy$|denied by the user$"
+    r"is not allowed by this claw's policy$|denied by the operator$"
 )
 # The sandbox's refusals as tools report them (as in the policy extension's
 # SANDBOX_REFUSAL): seatbelt's EPERM, and the network proxy's 403.

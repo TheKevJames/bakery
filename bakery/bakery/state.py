@@ -28,8 +28,8 @@ def root() -> pathlib.Path:
     )
 
 
-def user_file() -> pathlib.Path:
-    return root() / SHARED / 'USER.md'
+def operator_file() -> pathlib.Path:
+    return root() / SHARED / 'OPERATOR.md'
 
 
 def git(*args: str) -> subprocess.CompletedProcess[str]:
@@ -67,7 +67,7 @@ def init() -> None:
     missing = [line for line in GITIGNORE.splitlines() if line not in lines]
     if missing:
         gitignore.write_text(''.join(f'{line}\n' for line in lines + missing))
-    if not user_file().exists():
+    if not operator_file().exists():
         template = importlib.resources.files('bakery') / 'templates'
-        user_file().write_text((template / 'USER.md').read_text())
+        operator_file().write_text((template / 'OPERATOR.md').read_text())
     commit('chore: initialize claw state')

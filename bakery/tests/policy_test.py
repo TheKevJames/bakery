@@ -138,7 +138,7 @@ def test_network_refuses_only_other_unix_sockets(
         ),
         call('bash', command=f'python3 -c "{connect}"'),
         # A claw's only GitHub token is its GH_TOKEN (test claws have none);
-        # mine, in the Keychain, stays unreachable.
+        # the operator's, in the Keychain, stays unreachable.
         call('bash', command='gh auth token'),
         # Offline, this fails upstream rather than at the sandbox.
         call('bash', command=f'{status} https://example.com'),
@@ -259,7 +259,7 @@ def test_confirm_patterns_ask_first(
         'rm -f /tmp/bakery-nonexistent',
         'rm -f /tmp/bakery-nonexistent && echo removed',
     ]
-    assert 'denied by the user' in results[0]
+    assert 'denied by the operator' in results[0]
     assert 'removed' in results[1]
     assert 'unasked' in results[2]
 

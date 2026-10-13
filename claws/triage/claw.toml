@@ -1,14 +1,14 @@
-# triage: researches each ticket in `bakery/triage` (scout's, and those I hand
-# over), records its priority, size, and notes, and routes it to bakery/build,
-# bakery/human, bakery/blocked, or bakery/wontfix; then sends blocked tickets
-# back to bakery/triage once what they wait on clears.
+# triage: researches each task in `bakery/triage` (scout's, and those the
+# operator hands over), records its priority, size, and notes, and routes it to
+# bakery/build, bakery/human, bakery/blocked, or bakery/wontfix; then sends
+# blocked tasks back to bakery/triage once what they wait on clears.
 # Research only: no reproduction, no edits.
 
 model = "anthropic/claude-sonnet-5-5"
 thinking = "high"
 
 [limits]
-cost_usd = 3.0  # per ticket, or per unblock or recheck
+cost_usd = 3.0  # per task, or per unblock or recheck
 
 [ask]
 policy = "ask"
@@ -17,41 +17,41 @@ on_timeout = "assume"  # AGENTS.md: the assumption is always "route to human"
 [policy]
 tools = [
     "read", "grep", "find", "ls", "bash",
-    "ask_user", "web_search", "web_fetch", "github", "context7",
-    "memory_append", "memory_search", "memory_get", "propose_user_update",
+    "ask_operator", "web_search", "web_fetch", "github", "context7",
+    "memory_append", "memory_search", "memory_get", "propose_operator_update",
     "task_list", "task_show", "task_set",
 ]
 
-# One ticket per run, working through the queue. Also runs within two
-# minutes of the task list changing (eg. scout or I add tickets).
+# One task per run, working through the queue. Also runs within two minutes
+# of the task list changing (eg. scout or the operator adds tasks).
 [[job]]
 name = "queue"
 cron = "0 * * * *"
-prompt = "Triage this ticket."
+prompt = "Triage this task."
 collector = "triage"
 repeat = true
 watch = "${TASK_FOLDER}"
 debounce_seconds = 120
 
-# Blocked tickets whose blocking tasks have all cleared (eg. I answered one in
-# bakery/human and it was re-triaged), back to bakery/triage. Runs only when
+# Blocked tasks whose blocking tasks have all cleared (eg. the operator
+# answered one in bakery/human and it was re-triaged), back to bakery/triage. Runs only when
 # there are some, so it watches the task list too.
 [[job]]
 name = "unblock"
 cron = "0 * * * *"
-prompt = "Unblock these tickets."
+prompt = "Unblock these tasks."
 collector = "triage-unblock"
 model = "anthropic/claude-haiku-5-5"
 thinking = "low"
 watch = "${TASK_FOLDER}"
 debounce_seconds = 120
 
-# Blocked tickets waiting on something external (an upstream issue, PR, or
+# Blocked tasks waiting on something external (an upstream issue, PR, or
 # release), checked once a week before scout's daily run. Its collector also
-# reports blocked tickets it cannot read.
+# reports blocked tasks it cannot read.
 [[job]]
 name = "recheck"
 cron = "0 6 * * 1"
-prompt = "Recheck these blocked tickets."
+prompt = "Recheck these blocked tasks."
 collector = "triage-recheck"
 silent_ok = true

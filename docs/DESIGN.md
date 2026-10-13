@@ -1,18 +1,20 @@
 # Bakery design
 
-Bakery is the single home for my agentic harness: the shared pi configuration
-used interactively, and a set of autonomous agents ("claws") run by a local
-gateway daemon and controlled over Discord.
+Bakery is the single home for the operator's agentic harness: the shared pi
+configuration used interactively, and a set of claws run by a local gateway
+daemon and controlled over Discord. Its terms are defined in
+[GLOSSARY.md](../GLOSSARY.md); this document describes how they are built.
 
 ## Repository layout
 
 | Path | Contents |
 | --- | --- |
-| `pi/` | Shared pi resources: `extensions/`, `claw-extensions/` (claws only: `policy/`, `memory/`, `task.ts`, `ask-user.ts`, `github.ts`), `claw-sandbox/` (the claws' sandbox launcher), `claw-prompts/` (claws only, eg. `/dream`), `skills/` (incl. vendored), `prompts/`, `agents/`, `rules/` (instruction fragments). |
+| `pi/` | Shared pi resources: `extensions/`, `claw-extensions/` (claws only: `policy/`, `memory/`, `task.ts`, `ask-operator.ts`, `github.ts`), `claw-sandbox/` (the claws' sandbox launcher), `claw-prompts/` (claws only, eg. `/dream`), `skills/` (incl. vendored), `prompts/`, `agents/`, `rules/` (instruction fragments). |
 | `interactive/` | The interactive profile; used directly as `PI_CODING_AGENT_DIR`. |
 | `claws/<name>/` | One profile per claw: `claw.toml`, `context.toml`, `settings.json`, `SOUL.md`, `IDENTITY.md`, `AGENTS.md`. |
 | `bakery/` | Python project: the `bakery` CLI, the gateway, and collectors. |
 | `bin/` | Helper scripts (eg. `bin/vendor`). |
+| `GLOSSARY.md` | The project's language: every domain term, defined once. |
 | `AGENTS.md` | Repo-level agent instructions, loaded by pi for sessions in this repo; its `## Agent skills` block points vendored skills at `docs/agents/`. |
 | `docs/agents/` | Per-repo config read by the vendored engineering skills: `issue-tracker.md` (GitHub Issues), `domain.md` (glossary/ADR consumer rules). |
 
@@ -44,13 +46,13 @@ every run so memory changes can be reviewed and rolled back.
 
 ```
 $XDG_STATE_HOME/claws/
-├── _shared/USER.md          # facts about me, injected into every claw
+├── _shared/OPERATOR.md      # facts about the operator, injected into every profile
 ├── _gateway/                # gitignored: run ledger (runs.db), control socket, bakery sockets, sandbox violations
 └── <name>/
     ├── MEMORY.md            # curated long-term memory
     ├── memory/YYYY-MM-DD.md # daily notes (kept forever)
     ├── sessions/            # gitignored: pi session transcripts
-    ├── worktrees/           # gitignored: the claw's clones of my repos
+    ├── worktrees/           # gitignored: the claw's clones of the operator's repos
     ├── home/                # gitignored: the claw's XDG config, cache, and data
     └── tmp/                 # gitignored: its pi children's $TMPDIRs
 ```
@@ -76,7 +78,7 @@ total_max_chars = 60000  # default budget across all files, in order
 path = "../../pi/rules/workflow.md"  # relative to the profile; ~ and ${VAR} expand
 
 [[file]]
-path = "${XDG_STATE_HOME}/claws/_shared/USER.md"
+path = "${XDG_STATE_HOME}/claws/_shared/OPERATOR.md"
 max_chars = 4000
 optional = true          # missing is fine; otherwise a missing file is an error
 
@@ -104,7 +106,7 @@ instructions live in `claws/<name>/AGENTS.md` and are not listed in its
 `context.toml`; the interactive profile has no `AGENTS.md`.
 
 Typical claw order: shared rule fragments from `pi/rules/` → `SOUL.md` →
-`IDENTITY.md` → `_shared/USER.md` → the claw's `AGENTS.md` (every turn),
+`IDENTITY.md` → `_shared/OPERATOR.md` → the claw's `AGENTS.md` (every turn),
 then `MEMORY.md` and the two most recent daily notes (session start only).
 
 Every profile uses the same rule fragments, including the "ask me" rules in
@@ -123,9 +125,8 @@ write the claw's state dir, so this is convention rather than enforcement;
 the state repo's commits keep every change reviewable.
 
 - `memory_append(text, source)` — a timestamped entry in today's
-  `memory/YYYY-MM-DD.md`, tagged with its source: `owner` (I said it),
-  `self` (the claw's own work or conclusions), or `external` (issue/PR text,
-  web pages, logs).
+  `memory/YYYY-MM-DD.md`, tagged with its memory source: `operator`, `self`,
+  or `external`.
 - `memory_search(query)` — case-insensitive keyword search (ripgrep) over
   `MEMORY.md` and the daily notes, newest first, capped at 50 lines.
 - `memory_get(file, offset?, limit?)` — read `MEMORY.md` or a daily note.
@@ -135,7 +136,7 @@ the state repo's commits keep every change reviewable.
 
 Curation:
 
-- **Pre-compaction flush**: once the context is within
+- **Flush**: once the context is within
   `[memory] flush_margin_tokens` (8k) of pi's compaction threshold, the
   memory extension injects a hidden message at `turn_end` asking the model to
   save anything durable with `memory_append` and reply `NO_REPLY`. It fires
@@ -146,22 +147,22 @@ Curation:
   thinking, `silent_ok`, `tools = ["memory_edit"]`). It distills recent
   daily notes into `MEMORY.md` and never promotes `external` notes, which
   stay in the daily notes as evidence; its report lists what it held back.
-  It also leaves out volatile references (ticket ids, line numbers, counts),
-  promotes a rule only from the owner or two separate occasions (routing and
-  scope rules only from the owner), dates facts about the outside world, and
-  keeps `MEMORY.md` under about 10k characters, half its cap. These rules are
-  in the prompt: a tool cannot judge text.
+  It also leaves out volatile references (task ids, line numbers, counts),
+  promotes a rule only from the operator or two separate occasions (routing
+  and scope rules only from the operator), dates facts about the outside
+  world, and keeps `MEMORY.md` under about 10k characters, half its cap.
+  These rules are in the prompt: a tool cannot judge text.
 - **Commits**: after every run the gateway commits the state repo
   (`<work_key>: <status>`), so every memory change can be reviewed and
   reverted.
 
-Identity changes need my approval:
+Identity changes need the operator's approval:
 
-- `_shared/USER.md` is private (the state repo is local-only) and claws
-  cannot write it. `propose_user_update(edits, reason)` files a
+- `_shared/OPERATOR.md` is private (the state repo is local-only) and claws
+  cannot write it. `propose_operator_update(edits, reason)` files a
   `bakery/human` task with the diff (checked to apply, and to stay within
-  4000 characters), which I apply by hand; the same proposal is the same
-  task (its link is `user-md:<hash of the result>`).
+  4000 characters), which the operator applies by hand; the same proposal is
+  the same task (its link is `operator-md:<hash of the result>`).
 - `SOUL.md` / `AGENTS.md` (and other claw configuration) edits are proposed
   as PRs on this repo from the claw's own clone (see
   [Safety](#safety)), merging being the approval.
@@ -205,20 +206,21 @@ they started with.
 
 ### Units of work
 
-One unit of work = one pi session = one Discord thread in the claw's channel.
+A unit of work is stored as one pi session and shown as one Discord thread
+in the claw's channel.
 
-Each unit has a work key, eg. `scout/daily-20261002-0700`,
-`triage/task-151`, or `discord/<thread-id>`; its pi session id is the key with
-`/` replaced by `-`, which is also the session's name (so `bakery read
+Work keys look like `scout/daily-20261002-0700`, `triage/task-151`, or
+`discord/<thread-id>`; a unit's pi session id is its work key with `/`
+replaced by `-`, which is also the session's name (so `bakery read
 triage-task-151` works). Resuming a unit starts pi again with the same
-`--session-id`, which restores it from the claw's `sessions/` dir. A unit's
-first run is new work; later runs are resumes. Runs of one unit never overlap.
+`--session-id`, which restores it from the claw's `sessions/` dir. Runs of
+one unit never overlap.
 
 - A cron, heartbeat, queue, or manual trigger starts a fresh session and opens
   a thread; replies in that thread continue the same session.
 - A top-level message in a claw's channel starts a new thread and session.
-- For `triage` and `build`, one ticket is one session and one thread for its
-  whole life (including PR feedback). For `scout`, one run is one session.
+- For `triage` and `build`, one task is one unit of work for its whole life
+  (including PR feedback). For `scout`, one run is one unit of work.
 
 Continuity between units of work comes from memory files, not long-lived
 transcripts.
@@ -233,7 +235,7 @@ transcripts.
   under way is refused). `bakery status` shows collections in progress, and
   a manual trigger says when it is collecting. Problems are posted to
   `#bakery`. A collector may also name the run's unit of work (eg. one per
-  ticket, `triage/task-151`), so a ticket keeps one thread and session.
+  task, `triage/task-151`), so a task keeps one unit of work.
   Job starting lives in `bakery/bakery/gateway/jobs.py`.
 - **repeat**: a job with `repeat = true` starts again after each settled run
   (not after replies or resumes), until its collector finds nothing, the
@@ -247,15 +249,17 @@ transcripts.
   `tools` for its units of work, which keep them on later runs (eg. replies).
   `bakery trigger <claw>` runs the claw's only own job; shared jobs (eg.
   `dream`) must be named.
-- **heartbeat**: a cron job flagged `silent_ok`; a run whose only reply is
-  `NO_REPLY` posts nothing and creates no thread. (Built, unused by the v1
-  claws.) A `NO_REPLY` message never becomes any run's reply.
+- **heartbeat**: a cron job flagged `silent_ok` (eg. every claw's dream,
+  triage's `recheck`, and baker's `review`); a run whose only reply is
+  `NO_REPLY` posts nothing and creates no thread. A `NO_REPLY` message never
+  becomes any run's reply.
 - **file watch**: `watch = "<path>"` starts the job once files under the
   path have changed and then been quiet for `debounce_seconds` (default
   120). The gateway polls names, sizes, and modification times every 10s
   (`bakery/bakery/gateway/watcher.py`); nothing fires at startup.
 - **manual**: `bakery trigger <claw>` or the Discord equivalent.
-- **Discord messages**: top-level messages and thread replies.
+- **Discord messages**: the operator's top-level messages and thread
+  replies.
 
 ### Concurrency
 
@@ -270,7 +274,7 @@ Configurable in `claw.toml`; defaults:
 ### Limits and accounting
 
 A SQLite run ledger at `$XDG_STATE_HOME/claws/_gateway/runs.db`, one row
-per run (one prompt until pi settles). Defaults, all configurable per claw:
+per run. Defaults, all configurable per claw:
 $5, 30 minutes, and 50 turns per run; $20 per claw per day; $50 per day
 globally. Daily budgets reset at midnight in the gateway timezone.
 
@@ -279,33 +283,28 @@ the claw's and the global daily budgets. Cost is the change in pi's session
 stats (`get_session_stats`) over the run, reconciled after every turn and
 compaction, so compaction summaries count too; each assistant message is also
 charged provisionally so a costly reply stops the run before its tool calls
-execute. The time limit excludes time spent waiting on me in a dialog.
+execute. The time limit excludes time spent waiting on the operator in a
+dialog.
 
-Run outcomes:
-
-- `settled` — finished normally.
-- `parked` — a limit was hit, the daily budget was exhausted, or the claw was
-  paused with `--abort`. `bakery resume <work-key>` continues it.
-- `failed` — an extension error, a model error after retries, or pi exiting.
-- `interrupted` — the gateway stopped mid-run. Not restarted automatically.
+A run ends `settled`, `parked`, `failed`, or `interrupted`. `bakery resume
+<work-key>` continues a parked run. A model error fails a run only after
+pi's own retries.
 
 ### Ask policy
 
-Configurable per claw:
+Each claw sets its ask policy: `ask`, `assume`, or `park`. With `ask`, the
+question is posted to the thread (the `ask_operator` tool); its timeout
+(default 4h) and its fallback, `assume` or `park`, are also set per claw.
 
-- `ask` — post the question to the thread (an `ask_user` tool) and wait; on
-  timeout (default 4h) fall back to either `assume` or `park`, per claw.
-- `assume` — record the assumption and continue.
-- `park` — stop and wait for me.
-
-`ask_user` (`pi/claw-extensions/ask-user.ts`) reads the policy from
+`ask_operator` (`pi/claw-extensions/ask-operator.ts`) reads the policy from
 `BAKERY_ASK_*` variables the gateway sets per child. It asks through a pi
 `input` dialog with the timeout attached; cancelling counts as no answer.
 Parking ends the run without another model call (`terminate`) and returns
 `details.park`, which the runner turns into a parked run (`waiting for an
-answer: …`); replying in the thread then resumes the unit with my reply as
-the prompt. A question that times out is labelled `timed out` in Discord even
-when pi's own dialog timeout, which starts earlier, ends the run first.
+answer: …`); replying in the thread then resumes the unit with the
+operator's reply as the prompt. A question that times out is labelled `timed
+out` in Discord even when pi's own dialog timeout, which starts earlier, ends
+the run first.
 
 ### Claw environment
 
@@ -315,9 +314,9 @@ plus its `secrets`: entries `NAME` or `NAME=ITEM`, setting variable NAME
 from secret ITEM (default: NAME). The default is `ANTHROPIC_API_KEY` and
 `GH_TOKEN=BAKERY_GITHUB`. Secret values come only from the Keychain (generic
 password, account `bakery`, service = ITEM), never the gateway's environment,
-which holds all of my shell's secrets when the gateway is started from a
-shell. A missing secret fails the run. Secrets are handed to pi and its
-extension tools, not to bash (see [Safety](#safety)).
+which holds all of the operator's shell's secrets when the gateway is
+started from a shell. A missing secret fails the run. Secrets are handed to
+pi and its extension tools, not to bash (see [Safety](#safety)).
 
 `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, and `XDG_DATA_HOME` point into the
 claw's own `home/` (in its state dir), so tools find an empty config and
@@ -347,20 +346,20 @@ on connect:
   `claws/<name>/avatar.png`, if present). Claws added later need a gateway
   restart for their channel.
 
-Only my user ID is acted on (others' messages are ignored and their clicks
-and commands refused); bots, webhooks, and DMs are ignored. Settings live in
-`claws/defaults.toml` as `[gateway.discord]` (`guild_id`, `owner_id`); the
-bot token is the `DISCORD_BOT_TOKEN` secret.
+Only the operator's user ID is acted on (others' messages are ignored and
+their clicks and commands refused); bots, webhooks, and DMs are ignored.
+Settings live in `claws/defaults.toml` as `[gateway.discord]` (`guild_id`,
+`operator_id`); the bot token is the `DISCORD_BOT_TOKEN` secret.
 
 Routing:
 
-- My top-level message in `#bakery-<claw>` starts a thread on it; the work key
-  is `<claw>/thread-<thread-id>` and my message is the prompt.
+- The operator's top-level message in `#bakery-<claw>` starts a thread on it;
+  the work key is `<claw>/thread-<thread-id>` and the message is the prompt.
 - Gateway-started work (cron, manual, queues) gets a thread named after its
   work key. Work-key ↔ thread mappings are kept in `runs.db`.
-- My reply in a thread answers a pending `input` dialog if there is one,
-  else steers the in-flight run, else queues a run with the reply as its
-  prompt. Replies are acknowledged with a reaction.
+- The operator's reply in a thread answers a pending `input` dialog if there
+  is one, else steers the in-flight run, else queues a run with the reply as
+  its prompt. Replies are acknowledged with a reaction.
 - `silent_ok` runs create no thread unless they produce something other than
   `NO_REPLY` or need attention.
 
@@ -372,9 +371,9 @@ In each thread:
   would take more than 4 messages;
 - for parked, failed, or interrupted runs, an @mention with the reason and a
   **Resume** button;
-- dialogs, @mentioning me: `confirm` as Approve/Deny; `select` as buttons (up
-  to 5 options) or a select menu; `input`/`editor` as "reply in this thread",
-  each with Cancel. Answered, timed-out, and cancelled dialogs are edited to
+- dialogs, @mentioning the operator: `confirm` as Approve/Deny; `select` as
+  buttons (up to 5 options) or a select menu; `input`/`editor` as "reply in
+  this thread", each with Cancel. Answered, timed-out, and cancelled dialogs are edited to
   say so and lose their buttons. Buttons survive restarts (discord.py
   `DynamicItem`s); clicking one whose request is gone says it expired.
 
@@ -389,11 +388,11 @@ gateway's `Channel`), `transport` (the interface), `discord_transport`
 
 1. One-time Discord setup (done by hand): a `bakery` application whose bot
    has Public Bot off and the Message Content intent on; the bot invited to
-   my server with the `bot` and `applications.commands` scopes and
+   the operator's server with the `bot` and `applications.commands` scopes and
    permissions to view, manage, and post in channels and public threads,
    manage webhooks, read history, attach files, and add reactions; its token
-   stored as the `DISCORD_BOT_TOKEN` Keychain secret; and the server and my
-   user IDs in `[gateway.discord]`. `bakery gateway check` verifies it
+   stored as the `DISCORD_BOT_TOKEN` Keychain secret; and the server's and the
+   operator's IDs in `[gateway.discord]`. `bakery gateway check` verifies it
    (connects, creates the layout, posts to `#bakery`), and reports
    collector settings only the outside world can show to be wrong (eg. a
    `scout.toml` override for a repo the claws cannot reach).
@@ -418,7 +417,7 @@ call is blocked.
 
 - `tools`: names or `*` patterns (eg. `task_*`). Only these are
   declared to the model, and any other call is blocked. The default allows
-  `read`, `grep`, `find`, `ls`, `bash`, `ask_user`, `web_search`,
+  `read`, `grep`, `find`, `ls`, `bash`, `ask_operator`, `web_search`,
   `web_fetch`, `github`, and `context7`; no `edit` or `write`.
 - `read_paths`: the only readable paths under `$HOME`, besides what pi needs
   to run (below). Default `~/src/personal` and `$TASK_FOLDER`; baker adds
@@ -432,8 +431,8 @@ call is blocked.
 - `write_paths`: writable besides the claw's own state dir, pi's files in its
   profile, and its `$TMPDIR`. Default `$TASK_FOLDER`. The memory tools are
   the intended writers of memory, but bash could write it too.
-- `confirm`: regexes on tool names or bash commands; a match asks me in
-  Discord (Approve/Deny) before running.
+- `confirm`: regexes on tool names or bash commands; a match asks the
+  operator in Discord (Approve/Deny) before running.
 - `task_tag`: the task list section `task_add` files into (default
   `bakery/triage`); the model cannot choose another. It must be under
   `bakery/` (`policy.NAMESPACE`).
@@ -476,7 +475,7 @@ Enforcement:
    - Go programs (`gh`, `ketch`) verify TLS through macOS's trust service,
      `com.apple.trustd.agent`, which `enableWeakerNetworkIsolation` makes
      reachable. That opens no Keychain access: `gh` sees only the claw's
-     `GH_TOKEN`, never my own token.
+     `GH_TOKEN`, never the operator's own token.
    - Other processes: `ps` sees only the sandbox's own processes, and the
      Keychain is unreachable.
    - What it blocks (denied reads, writes, and network) is appended to
@@ -495,17 +494,17 @@ Enforcement:
 4. **Repositories and pushing.** `~/src` is read-only to claws. A claw that
    changes a repo works in its own clone under `<state>/worktrees/`, made
    with `git clone --reference ~/src/personal/<repo>` (objects borrowed
-   read-only from my checkout) and adding `git worktree`s of it as it needs
-   (`pi/claw-rules/repos.md`, in the context of the claws with bash). It
-   commits on `kjames/bakery-*` branches, pushes over HTTPS, and opens PRs
-   with `gh`; I review and merge. The gateway writes the claw's git config
-   (`<state>/home/config/git/config`, its `GIT_CONFIG_GLOBAL`, so git never
+   read-only from the operator's checkout) and adding `git worktree`s of it
+   as it needs (`pi/claw-rules/repos.md`, in the context of the claws with
+   bash). It commits on `kjames/bakery-*` branches, pushes over HTTPS, and
+   opens PRs with `gh`; the operator reviews and merges. The gateway writes
+   the claw's git config (`<state>/home/config/git/config`, its `GIT_CONFIG_GLOBAL`, so git never
    trips on an unreadable `~/.gitconfig`) at every start: the claws' GitHub
    user's identity (`[claw.git]`), no signing, no hook templates (the
    sandbox refuses writes to any `.git/hooks`, but allows `.git/config` in
    the claw's own clones), and `gh` as the only credential helper, answering
-   with `GH_TOKEN`. GitHub's rulesets, not the claw, keep pushes off my
-   default branches.
+   with `GH_TOKEN`. GitHub's rulesets, not the claw, keep pushes off the
+   operator's default branches.
 
 An extension that fails while pi starts (eg. a bad policy or `context.toml`)
 fails the run before the model is called.
@@ -518,9 +517,9 @@ Credentials (macOS Keychain, least privilege, selected per claw by `secrets`):
   repositories they work on. Collaborators on a personal account's
   repositories always have write access, and fine-grained PATs can't reach
   another user's repositories, so GitHub enforces the limits instead: the
-  rulesets every repository gets from my repo template (dotsystem's
-  `repo-template`) require a PR approved after its last push for the default
-  branch. Tags are not protected yet, so the user can create and move them
+  rulesets every repository gets from the operator's repo template
+  (dotsystem's `repo-template`) require a PR approved after its last push for
+  the default branch. Tags are not protected yet, so the user can create and move them
   (and so trigger tag-driven releases). The user has no admin rights. Private
   repositories have no rulesets on GitHub Free, so the user is never invited
   to them.
@@ -535,16 +534,17 @@ replace the former skills in every profile.
 
 ## Shared task list
 
-Claws share my existing `task` tool (`~/src/personal/tools/task`, data in
-`$TASK_FOLDER`) with me. What claws rely on:
+Claws share the operator's existing `task` tool
+(`~/src/personal/tools/task`, data in `$TASK_FOLDER`) with the operator.
+What claws rely on:
 
 - tasks live in `$TASK_FOLDER/tasks.db` (SQLite, rollback journal so the
   Syncthing backup only ever sees one self-contained file); each description
   is a plain `$TASK_FOLDER/<id>.txt` beside it, editable by hand;
-- writers take `BEGIN IMMEDIATE`, so concurrent humans and claws serialize
+- writers take `BEGIN IMMEDIATE`, so the operator and claws serialize
   and lose nothing; readers take no lock; ids are never reused;
 - tags are lowercase `/` paths (`--tag bakery/build`); filters match any
-  segment or any path from the root; `triage` sorts first;
+  segment or any path from the root;
 - `owner`, `link`, `priority` (low, medium, high), and `size` (small, medium,
   large) fields; `set --owner X` is a compare-and-set (fails if owned by
   someone else unless `--force`); `unset owner` releases;
@@ -566,33 +566,35 @@ blocked check` accepts its blockers (see triage). Each claw's
 itself (`BAKERY_CLAW`), and `task_add` always files into the claw's
 `policy.task_tag`.
 
-Claws read every task, but only change tasks tagged under `bakery/` (the
-gateway's `policy.NAMESPACE`, passed as `BAKERY_TASK_NAMESPACE`); the rest
-are mine. `task_set`, `task_link`, and `task_done` refuse any other task,
-and `task_set` refuses to move a task out of `bakery/`. Releasing a claim is
-the exception, so a task I take out of `bakery/` never keeps a claw as its
-owner. The check and the write are separate `task` calls, so a task I move
-in that moment can still take the one write.
+Claws read every task, but only change tasks in the namespace, `bakery/`
+(the gateway's `policy.NAMESPACE`, passed as `BAKERY_TASK_NAMESPACE`); the
+rest are the operator's. `task_set`, `task_link`, and `task_done` refuse any
+other task, and `task_set` refuses to move a task out of `bakery/`.
+Releasing a claim is the exception, so a task the operator takes out of
+`bakery/` never keeps a claw as its owner. The check and the write are
+separate `task` calls, so a task the operator moves in that moment can
+still take the one write.
 
-### Ticket flow
+### Task flow
 
-1. `scout` adds tasks to `bakery/triage` with a `link`. I hand a task over
-   by adding it (or moving it) there too, usually without a `link`; my own
-   inbox, `triage`, is never touched by claws.
+1. `scout` adds tasks to `bakery/triage` with a `link`. The operator hands a
+   task over by adding it (or moving it) there too, usually without a
+   `link`.
 2. `triage` claims those (lowest id first), researches, appends notes, sets
    `priority` and `size`, then re-tags to `bakery/build`, `bakery/human`,
    `bakery/blocked`, or `bakery/wontfix` and releases.
-3. I answer a `bakery/human` task by appending my answer to its description
-   and moving it to `bakery/triage`, where triage re-routes it.
+3. The operator answers a `bakery/human` task by appending their answer to
+   its description and moving it to `bakery/triage`, where triage re-routes
+   it.
 4. `triage` moves a `bakery/blocked` task back to `bakery/triage` once what
    it waits on clears (another task decided or done, or an upstream
    change), to be re-routed.
 5. `build` claims `bakery/build` tasks (high priority first), moves them to
    `bakery/review` once a PR is open, and runs `done` after merge.
 6. `baker` adds tasks about the claws themselves straight to `bakery/human`,
-   with their priority and size; I move them on.
+   with their priority and size; the operator moves them on.
 
-I close `bakery/wontfix` tasks myself, with `done`, after `bakery wontfix
+The operator closes `bakery/wontfix` tasks, with `done`, after `bakery wontfix
 add <id> --reason "…"` if the link should never be filed again. That
 records a rejection: the link (without its `#…` fragment), the task's
 summary, the reason, and the date, in
@@ -612,7 +614,7 @@ and `thinking` (one of pi's levels, `off` to `max`).
 
 ### scout — read-only
 
-Finds things in my repos that belong on my task list. Profile:
+Finds things in the operator's repos that belong on the task list. Profile:
 `claws/scout/` (`claw.toml`, `scout.toml`, `AGENTS.md`, `SOUL.md`,
 `IDENTITY.md`, `context.toml`).
 
@@ -637,9 +639,9 @@ Finds things in my repos that belong on my task list. Profile:
   - **Issues and PRs**: all open issues, and PRs not by bots, except those
     labelled `ready-for-human`. Link: their URL.
   - **TODO/FIXME comments** on the default branch, fetched with the read
-    token over HTTPS into `refs/bakery/scout/<branch>` (my checkout and its
-    `origin` refs are untouched), minus per-repo `exclude` globs. One task
-    per comment. Link: `…/blob/<branch>/<path>?todo=<fingerprint>#L<line>`;
+    token over HTTPS into `refs/bakery/scout/<branch>` (the operator's
+    checkout and its `origin` refs are untouched), minus per-repo `exclude`
+    globs. One task per comment. Link: `…/blob/<branch>/<path>?todo=<fingerprint>#L<line>`;
     the fingerprint is of the comment's text, so the line can move.
 - **Lineage, not memory**: a candidate is new unless an open task or a
   rejection (`bakery wontfix`) has its link (ignoring the `#L…` anchor).
@@ -660,61 +662,61 @@ Finds things in my repos that belong on my task list. Profile:
 ### triage — read-only + web
 
 Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
-`unblock`), $3 per ticket (and per `unblock` or `recheck` run).
+`unblock`), $3 per task (and per `unblock` or `recheck` run).
 
 - The `queue` job's `triage` collector (`bakery/bakery/collectors/triage.py`)
   hands over the lowest-numbered unowned task tagged `bakery/triage`
-  (scout's, mine handed over, and tickets sent back), skipping scheduled
-  (recurring) ones, as the unit `triage/task-<id>`. It runs hourly, within
-  two minutes of `$TASK_FOLDER` changing (scout or I add tickets), manually
+  (scout's, the operator's handed over, and tasks sent back), skipping
+  scheduled (recurring) ones, as the unit `triage/task-<id>`. It runs hourly,
+  within two minutes of `$TASK_FOLDER` changing (scout or the operator adds
+  tasks), manually
   (`bakery trigger triage queue`), and on repeat until the queue is empty.
-- Per ticket: claim it, check the source still exists, research (code,
+- Per task: claim it, check the source still exists, research (code,
   history, issues, docs, web; no reproduction, tests, or edits), append notes
   (route and reason, source check, code locations, hypothesis, approach,
   acceptance criteria, open questions), always set `priority` and `size`,
   then re-tag and release:
   - `bakery/build`: a TheKevJames repo checked out under
     `~/src/personal`, clear scope, checkable by tests, lint, or CI;
-  - `bakery/human`: needs a decision on this ticket, reproduction,
+  - `bakery/human`: needs a decision on this task, reproduction,
     credentials, outside systems, or anything uncertain;
   - `bakery/blocked`: valid and scoped, but waiting on something checkable:
-    an upstream change, another task, or my decision on another task; and
-    every duplicate of an open task, which waits on its canonical (the
-    lowest-numbered open task for the same work, or my own task whatever
-    its id) being decided, or done for my own tasks;
+    an upstream change, another task, or the operator's decision on another
+    task; and every duplicate of an open task, which waits on its canonical
+    being decided (or done, for the operator's own tasks);
   - `bakery/wontfix`: false positive, done, or obsolete (including a
     duplicate of a `bakery/wontfix` task), with what to change at the
     source.
-- A blocked ticket's notes end with a `**Blocked on:**` list, one blocker
-  per line: `#<id> decided` (that task is done or out of `bakery/triage`,
-  `bakery/human`, and `bakery/blocked`; refused for my own tasks, which
-  record no decisions), `#<id> done`, or `<url>: <condition>`. The last
-  list counts; the ticket clears once all of its blockers have.
+- A blocked task's notes end with a `**Blocked on:**` list, one blocker per
+  line: `#<id> decided` (refused for the operator's own tasks, which record
+  no decisions), `#<id> done`, or `<url>: <condition>`. The last list
+  counts; the task clears once all of its blockers have.
   `bakery/bakery/collectors/blocked.py` parses and checks it, for `bakery
   blocked check` (run by `task_set` before it moves a task to
   `bakery/blocked`) and for the collectors below. Done tasks are deleted,
   so a task which does not exist counts as done. A list is refused if it is
-  malformed, names the ticket itself, or names a task blocker which has
+  malformed, names the task itself, or names a task blocker which has
   already cleared, including one which does not exist (triage routes on the
   merits instead).
 - The `unblock` job's `triage-unblock` collector hands over, in one run,
-  every unowned blocked ticket whose blockers are all tasks and have all
+  every unowned blocked task whose blockers are all tasks and have all
   cleared; triage appends an `## Unblocked` note and moves each to
   `bakery/triage`. It runs hourly and within two minutes of `$TASK_FOLDER`
-  changing, so a ticket clears soon after its blocker is decided.
+  changing, so a task clears soon after its blocker is decided.
 - The `recheck` job (Mondays at 06:00, silent when nothing clears) uses the
-  `triage-recheck` collector: unowned blocked tickets with an external
+  `triage-recheck` collector: unowned blocked tasks with an external
   blocker whose task blockers have cleared, grouped by URL so each is
   checked once, in one run. Triage moves those whose conditions all hold to
-  `bakery/triage` likewise. The collector also reports blocked tickets it
+  `bakery/triage` likewise. The collector also reports blocked tasks it
   cannot read (eg. moved by hand without a valid list) in `#bakery`; weekly,
   rather than hourly in `unblock`, so they do not flood it.
 - Tools: read-only defaults (bash without writes), web, `github`,
-  `context7`, memory, `ask_user`, and `task_list`, `task_show`, `task_set`.
+  `context7`, memory, `ask_operator`, and `task_list`, `task_show`,
+  `task_set`.
 - Ask policy `ask`, falling back to `assume`; every question's assumption is
-  "route this ticket to bakery/human", so an unanswered question routes it
+  "route this task to bakery/human", so an unanswered question routes it
   there and the reply says triage could not finish.
-- A ticket left claimed by a failed or parked run is not picked up again;
+- A task left claimed by a failed or parked run is not picked up again;
   its thread's Resume button continues it.
 
 ### build — clones + PRs
@@ -725,12 +727,12 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
   removed after merge/close.
 - Pushes `kjames/bakery-*` branches and opens PRs; never merges.
 - Polls its PRs every 10 minutes; new review comments or failing CI resume
-  that ticket's session in the same thread.
+  that task's unit of work in the same thread.
 - Merged → `done`. Closed unmerged → `bakery/human` with a note, released.
 - `task` allowlist: triage's plus `link` and `done`.
 - Ask policy: `ask`, falling back to `park`.
 
-### baker — reads every claw, files for me
+### baker — reads every claw, files for the operator
 
 Reviews how the claws learn and files a task for each gap. Profile:
 `claws/baker/`. Opus, high thinking, $5, 45 minutes, and 100 turns per run.
@@ -753,7 +755,7 @@ Reviews how the claws learn and files a task for each gap. Profile:
   Sections are capped (about 38k characters in all) and say how to read
   what they cut. No other claw ran since the last review means no run.
 - Gap types, the `<type>` in each task's link `baker:<type>/<slug>`:
-  `tool-gap`, `false-learning`, `no-actuator`, `owner-feedback`,
+  `tool-gap`, `false-learning`, `no-actuator`, `operator-feedback`,
   `self-policy`, `memory-health`, `knowledge-silo`, `plumbing`, and `other`.
   A restriction becomes a `tool-gap` when it causes repeated failures (3+
   units of work) or a wrong conclusion. Bash that stays out of protected
@@ -766,8 +768,8 @@ Reviews how the claws learn and files a task for each gap. Profile:
     transcripts, `runs.db`, `gateway.log`); unix sockets stay blocked.
   - `task_tag = "bakery/human"`: fixes change the claws themselves, so they
     never go straight to build.
-  - No `task_set`: changes to other claws' memory or to tickets are steps
-    in a task's **Fix**, for me.
+  - No `task_set`: changes to other claws' memory or to tasks are steps in
+    a task's **Fix**, for the operator.
 - It keeps its own memory (the slugs it filed). It never files a link
   already on an open task or a rejection.
 - Ask policy `assume`; `silent_ok`, replying `NO_REPLY` when it filed
@@ -798,12 +800,12 @@ memory flush runs on its unit's model. The gateway runs whatever `pi` is on
    pre-commit.
 3. tools/task: locking, atomic writes, conflict guard, tag paths,
    `owner`/`link`, filters, `--json`, `--description-append`, tests.
-4. `context` extension and `USER.md`.
+4. `context` extension and `OPERATOR.md`.
 5. Gateway core: RPC client, scheduler, ledger, control socket, CLI.
 6. Discord adapter and setup wizard; `bakery gateway run` and
    `bakery service install|uninstall` (launchd).
 7. Policy extension, sandbox, secrets, web/context7/github tools.
-8. Memory tools, flush, dream job, `USER.md` proposals.
+8. Memory tools, flush, dream job, `OPERATOR.md` proposals.
 9. scout.
 10. triage.
 11. build, on the claws' own clones and pull requests.

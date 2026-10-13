@@ -6,7 +6,7 @@
     "../../pi/extensions/time-awareness.ts",
     "../../pi/extensions/ketch.ts",
     "../../pi/extensions/context7.ts",
-    "../../pi/claw-extensions/ask-user.ts",
+    "../../pi/claw-extensions/ask-operator.ts",
     "../../pi/claw-extensions/github.ts",
     "../../pi/claw-extensions/memory",
     "../../pi/claw-extensions/task.ts",
