@@ -24,7 +24,7 @@ that is gitignored. Pi also rewrites `settings.json` (e.g.
 
 Claw profiles list their extensions explicitly rather than loading all of
 `pi/extensions/`: they need `context/`, `bakery.ts`, `time-awareness.ts`,
-`web.ts`, `context7.ts`, and `pi/claw-extensions/` (the gateway adds
+`ketch.ts`, `context7.ts`, and `pi/claw-extensions/` (the gateway adds
 `policy/` itself), and load `pi/claw-prompts/` as prompts, but not the
 TUI-only extensions or `subagent/` (its child pi runs would escape the
 gateway's cost ledger).
@@ -312,7 +312,7 @@ when pi's own dialog timeout, which starts earlier, ends the run first.
 A claw's pi child gets only `PATH`, `HOME`, `USER`, `LANG`, `TASK_FOLDER`,
 `XDG_*` (three replaced, below), and `LC_*` from the gateway's environment,
 plus its `secrets`: entries `NAME` or `NAME=ITEM`, setting variable NAME
-from secret ITEM (default: NAME). The default is `ANTHROPIC_API_KEY`, `JINA_API_KEY`, and
+from secret ITEM (default: NAME). The default is `ANTHROPIC_API_KEY` and
 `GH_TOKEN=BAKERY_GITHUB`. Secret values come only from the Keychain (generic
 password, account `bakery`, service = ITEM), never the gateway's environment,
 which holds all of my shell's secrets when the gateway is started from a
@@ -512,7 +512,7 @@ fails the run before the model is called.
 
 Credentials (macOS Keychain, least privilege, selected per claw by `secrets`):
 
-- `DISCORD_BOT_TOKEN` (gateway only), `ANTHROPIC_API_KEY`, `JINA_API_KEY`.
+- `DISCORD_BOT_TOKEN` (gateway only), `ANTHROPIC_API_KEY`.
 - `BAKERY_GITHUB`: a classic PAT (`repo` scope only, one-year expiry) of the
   claws' own GitHub user, a collaborator on the public `TheKevJames`
   repositories they work on. Collaborators on a personal account's
@@ -525,7 +525,11 @@ Credentials (macOS Keychain, least privilege, selected per claw by `secrets`):
   repositories have no rulesets on GitHub Free, so the user is never invited
   to them.
 
-`web_search`, `web_fetch` (`pi/extensions/web.ts`), and `context7`
+`web_search` and `web_fetch` (`pi/extensions/ketch.ts`, running
+[ketch](https://ketch.run) from `pi/package.json`: search falls back
+through keyless hosted providers, fetch extracts markdown locally, with
+unpdf as its PDF converter; no API key and no headless browser, so pages
+rendered by JavaScript come back nearly empty), and `context7`
 (`pi/extensions/context7.ts`, Context7's search API, unauthenticated)
 replace the former skills in every profile.
 

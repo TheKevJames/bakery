@@ -37,12 +37,11 @@ existing item:
 
     $ security add-generic-password -U -a bakery -s DISCORD_BOT_TOKEN -w
     $ security add-generic-password -U -a bakery -s ANTHROPIC_API_KEY -w
-    $ security add-generic-password -U -a bakery -s JINA_API_KEY -w
     $ security add-generic-password -U -a bakery -s BAKERY_GITHUB -w
 
 - ``DISCORD_BOT_TOKEN``: the ``bakery`` application's bot token (Discord
   developer portal → Bot → Reset Token).
-- ``ANTHROPIC_API_KEY``, ``JINA_API_KEY``: the model and web-tool API keys.
+- ``ANTHROPIC_API_KEY``: the model's API key.
 - ``BAKERY_GITHUB``: a classic personal access token of the claws' own GitHub
   user (``thekevjames-bakery``, signed in as it: Settings → Developer settings
   → Tokens (classic)), with only the ``repo`` scope and a one-year expiry. That
@@ -53,7 +52,7 @@ Check which are stored, without printing their values:
 
 .. code-block:: console
 
-    $ for name in DISCORD_BOT_TOKEN ANTHROPIC_API_KEY JINA_API_KEY BAKERY_GITHUB; do
+    $ for name in DISCORD_BOT_TOKEN ANTHROPIC_API_KEY BAKERY_GITHUB; do
     >     security find-generic-password -a bakery -s "$name" >/dev/null 2>&1 \
     >         && echo "$name: ok" || echo "$name: missing"
     > done

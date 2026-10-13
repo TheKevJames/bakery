@@ -6,20 +6,38 @@
       "name": "bakery-pi",
       "dependencies": {
         "@anthropic-ai/sandbox-runtime": "0.0.79",
+        "ketch-cli": "0.19.0",
         "smol-toml": "1.9.1",
+        "unpdf": "1.8.1",
       },
     },
   },
   "packages": {
     "@anthropic-ai/sandbox-runtime": ["@anthropic-ai/sandbox-runtime@0.0.79", "", { "dependencies": { "@pondwader/socks5-server": "^1.0.10", "commander": "^12.1.0", "node-forge": "^1.4.0", "zod": "^3.25.0" }, "bin": { "srt": "dist/cli.js" } }, "sha512-WjBmS9fbTpnQwQkM9SU+JjhM2CcXo9eWEELktY1100RMvTy/jPhP44yZ3NXhh+GHB350OgPbM3+FubE5WVRtSA=="],
 
+    "@ketch-cli/darwin-arm64": ["@ketch-cli/darwin-arm64@0.19.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-eywtqUe1GTpkqMm8a9DNXAf7IJ2/5GZDa6wJ52kqVGuJfbacTrvvBd7dk4KNStYYXus9beBfJiJciffzkWXdqA=="],
+
+    "@ketch-cli/darwin-x64": ["@ketch-cli/darwin-x64@0.19.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-YxvF1ce7Z5wvE8kRsa5KuZ4setMpX/fJxiO7Or/3ELtZilkhXDeGZZQ+7ZW7WIV2/fnP85MecdSR3o8XW66iOg=="],
+
+    "@ketch-cli/linux-arm64": ["@ketch-cli/linux-arm64@0.19.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-gaGKTA4p3JiO0YpjW99V8cyvEPXwLcgvDPUy3UVj8bzZW2/hGCtCIKsT6moTwnp5zI5ZkBGzGhzBgMNe5B5aLA=="],
+
+    "@ketch-cli/linux-x64": ["@ketch-cli/linux-x64@0.19.0", "", { "os": "linux", "cpu": "x64" }, "sha512-7IzbfMxg7fzYAuWgft3uRQvNYhJPNWE7ui1DKmDz0COwEMHkagz80rd68VOD7TGANfErrBOmKYKzY4210Ej9SA=="],
+
+    "@ketch-cli/win32-arm64": ["@ketch-cli/win32-arm64@0.19.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-1ew5U5MgJX5sIUB2463GwabbvpsfIthVIjzUsLpHfxzjYoOIu+y8qqXkyeIan5XXJBE7lS7Xz9LLaUIOiAiBYQ=="],
+
+    "@ketch-cli/win32-x64": ["@ketch-cli/win32-x64@0.19.0", "", { "os": "win32", "cpu": "x64" }, "sha512-syhV2wGt/z8VpHkeGRTYYojjq4ptaFPNDWCTNtQU+jB8CmOyv6qyzkG0XbIVzYc4xm6cD+5fwvOFeTIq9Rf1dA=="],
+
     "@pondwader/socks5-server": ["@pondwader/socks5-server@1.0.10", "", {}, "sha512-bQY06wzzR8D2+vVCUoBsr5QS2U6UgPUQRmErNwtsuI6vLcyRKkafjkr3KxbtGFf9aBBIV2mcvlsKD1UYaIV+sg=="],
 
     "commander": ["commander@12.1.0", "", {}, "sha512-Vw8qHK3bZM9y/P10u3Vib8o/DdkvA2OtPtZvD871QKjy74Wj1WSKFILMPRPSdUSx5RFK1arlJzEtA4PkFgnbuA=="],
 
+    "ketch-cli": ["ketch-cli@0.19.0", "", { "optionalDependencies": { "@ketch-cli/darwin-arm64": "0.19.0", "@ketch-cli/darwin-x64": "0.19.0", "@ketch-cli/linux-arm64": "0.19.0", "@ketch-cli/linux-x64": "0.19.0", "@ketch-cli/win32-arm64": "0.19.0", "@ketch-cli/win32-x64": "0.19.0" }, "bin": { "ketch": "bin/ketch.js", "ketch-cli": "bin/ketch.js" } }, "sha512-8lKdIZJB/naqqAR53uKumXKfbkSJDKPxge8TMd64C9PwwPTaBm8DihTQO9oU+CyBiIPJUdXD0sBpyG4d0bEFPg=="],
+
     "node-forge": ["node-forge@1.4.0", "", {}, "sha512-LarFH0+6VfriEhqMMcLX2F7SwSXeWwnEAJEsYm5QKWchiVYVvJyV9v7UDvUv+w5HO23ZpQTXDv/GxdDdMyOuoQ=="],
 
     "smol-toml": ["smol-toml@1.9.1", "", {}, "sha512-j7WyPdf0CJoutMzMoPLF/bVXHtKZIT9Rb4eGeEbWw8X2t5oirjPgpL+OpaENZrILYaXqYwnVH+qgUwVbl+pUJQ=="],
+
+    "unpdf": ["unpdf@1.8.1", "", { "peerDependencies": { "@napi-rs/canvas": "^0.1.69 || ^1.0.0" }, "optionalPeers": ["@napi-rs/canvas"] }, "sha512-xkURhy2SoGpOIH0a1gLHNkASPIQYonadDJs2AQwPEfUakafeD9EA1WTWWsaR++gfTCXJpV27W7tU1nXuk82UKQ=="],
 
     "zod": ["zod@3.25.76", "", {}, "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="],
   }

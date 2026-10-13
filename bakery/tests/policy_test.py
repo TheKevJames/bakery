@@ -1,8 +1,11 @@
 import argparse
 import asyncio
+import functools
+import http.server
 import json
 import pathlib
 import socket
+import threading
 import urllib.parse
 from collections.abc import Iterator
 
@@ -156,6 +159,73 @@ def test_network_refuses_only_other_unix_sockets(
     logged = violations(root, 'a')
     assert 'localhost' not in logged
     assert 'example.com' not in logged
+
+
+def _pdf(words: list[str]) -> bytes:
+    """
+    A one-page PDF showing `words`, spaced by positioning rather than space
+    characters, as LaTeX does.
+    """
+    spaced = '-300'.join(f'({word})' for word in words)
+    stream = f'BT /F1 12 Tf 72 720 Td [{spaced}] TJ ET'.encode()
+    objects = [
+        b'<< /Type /Catalog /Pages 2 0 R >>',
+        b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+        b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]'
+        b' /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+        b'<< /Length %d >>\nstream\n%s\nendstream' % (len(stream), stream),
+        b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    ]
+    pdf = b'%PDF-1.4\n'
+    offsets = []
+    for number, body in enumerate(objects, 1):
+        offsets.append(len(pdf))
+        pdf += b'%d 0 obj\n%s\nendobj\n' % (number, body)
+    xref = len(pdf)
+    pdf += b'xref\n0 %d\n0000000000 65535 f \n' % (len(objects) + 1)
+    pdf += b''.join(b'%010d 00000 n \n' % offset for offset in offsets)
+    pdf += b'trailer\n<< /Size %d /Root 1 0 R >>\n' % (len(objects) + 1)
+    return pdf + b'startxref\n%d\n%%%%EOF\n' % xref
+
+
+def test_web_fetch_makes_pages_readable_in_the_sandbox(
+    root: pathlib.Path, fake_llm: harness.FakeLLM
+) -> None:
+    site = root / 'site'
+    site.mkdir()
+    prose = ' '.join(['The sandboxed claw read this article.'] * 20)
+    (site / 'page.html').write_text(
+        '<html><head><title>Fixture</title></head><body>'
+        '<nav><a href="/">Home</a></nav>'
+        f'<main><article><h1>Fixture article</h1><p>{prose}</p>'
+        '</article></main></body></html>'
+    )
+    (site / 'doc.pdf').write_bytes(
+        _pdf(['Hello', 'from', 'the', 'fixture', 'PDF'])
+    )
+    claws = testing_gateway.make_claws(
+        root,
+        {'a': '[policy]\ntools = ["web_fetch"]\n'},
+        extensions={'a': ['pi/extensions/ketch.ts']},
+    )
+    handler = functools.partial(
+        http.server.SimpleHTTPRequestHandler, directory=str(site)
+    )
+    with http.server.ThreadingHTTPServer(('127.0.0.1', 0), handler) as server:
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        base = f'http://localhost:{server.server_port}'
+        calls = [
+            call('web_fetch', url=f'{base}/page.html'),
+            call('web_fetch', url=f'{base}/doc.pdf'),
+        ]
+        run, results = run_calls(claws, fake_llm, 'a', calls)
+        server.shutdown()
+
+    assert run.status == 'settled', run.reason
+    assert '# Fixture article' in results[0]
+    assert 'The sandboxed claw read this article.' in results[0]
+    assert 'Home' not in results[0]
+    assert 'Hello from the fixture PDF' in results[1]
 
 
 def test_confirm_patterns_ask_first(
