@@ -30,6 +30,7 @@ ngrok
 observe
 prek
 pypi-versions
+renovate / renovate-config-validator
 ripgrep (command: rg)
 shellcheck
 sqlite3
