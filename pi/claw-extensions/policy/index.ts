@@ -10,10 +10,10 @@
  * neither the model nor a later reader mistakes it for eg. missing auth or
  * files.
  *
- * Bash is not handed the claw's secrets, except those the gateway leaves
- * out of BAKERY_POLICY's secret_names (its `bash_secrets`). That is hygiene,
- * not a boundary: bash shares pi's sandbox, so it could read them from pi's
- * environment.
+ * Bash, and the commands of pi/extensions/watch, are not handed the claw's
+ * secrets, except those the gateway leaves out of BAKERY_POLICY's
+ * secret_names (its `bash_secrets`). That is hygiene, not a boundary: they
+ * share pi's sandbox, so they could read them from pi's environment.
  *
  * Without a valid policy (BAKERY_POLICY, set by the gateway) pi fails to
  * start, and every tool call is blocked.
@@ -35,12 +35,16 @@ const SANDBOX_NOTE =
   "this claw's sandbox policy blocked it: it restricts which paths the claw may use, and refuses unix sockets and names other than localhost resolving to this machine. " +
   "This is not a missing credential, permission, or file; use a tool instead, or report the gap.";
 
+function stripSecrets(policy: Policy, env: NodeJS.ProcessEnv): void {
+  for (const name of policy.secretNames) delete env[name];
+}
+
 function withoutSecrets(policy: Policy): BashOperations {
   const local = createLocalBashOperations();
   return {
     async exec(command, cwd, options) {
       const env = { ...(options.env ?? process.env) };
-      for (const name of policy.secretNames) delete env[name];
+      stripSecrets(policy, env);
       return local.exec(command, cwd, { ...options, env });
     },
   };
@@ -58,6 +62,8 @@ export default function policyExtension(pi: ExtensionAPI) {
 
   if (policy) {
     pi.registerTool(createBashToolDefinition(process.cwd(), { operations: withoutSecrets(policy) }));
+    const loaded = policy;
+    pi.events.on("watch:env", (data) => stripSecrets(loaded, (data as { env: NodeJS.ProcessEnv }).env));
   }
 
   pi.on("tool_result", async (event) => {
