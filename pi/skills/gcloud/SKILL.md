@@ -63,6 +63,8 @@ gcloud logging read 'FILTER' \
   --limit=N
 ```
 
+Always use narrow time range bounds, either in the filter query itself or with `--freshness`.
+
 ### Common filters
 ```bash
 # Cloud Run service logs

@@ -17,3 +17,5 @@ information, by running the following command:
 ```bash
 jira issue view KEY --plain
 ```
+
+Ticket defaults: project=DP, assigned to me, on the backlog.

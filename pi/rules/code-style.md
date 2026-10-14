@@ -7,6 +7,7 @@
 - Before implementing a feature as a special case, ask: "is this actually the general rule applied to a new domain?" If yes, implement the general rule and remove the special case, even if it's more work
 - Helper scripts should live in "bin/"
 - Prevent bad data from entering the system, don't program defenses against that bad data in each function
+- Keep lists that are already sorted sorted
 
 ## Comments
 - Only add comments where they will be useful as additional context for future people reading the code

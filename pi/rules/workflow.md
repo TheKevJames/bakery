@@ -7,10 +7,11 @@
 - If you ever run into issues where you think the environment is not set up properly, for example where you can't run tests, can't import a library from my codebase, can't run an interpreter, etc, ask me how to proceed
 - Never remove `TODO` comments without asking me, unless you are solving that particular TODO
 - Never say 'applied/implemented/done' unless you can immediately cite: (a) tool output confirming the edit, and (b) git diff (or re-read of the edited block)
+- Verify with what's already available before saying you're blocked
 - When a task can be solved with a built-in feature of the tool/framework, prefer that over custom workarounds
 - Search docs before building regex/scripting solutions
 - Do not fabricate theories or assume system state — verify with actual data before proposing root causes
-- When you don't know something about a tool's API, read its documentation first rather than guessing and iterating
+- When you don't know something about a tool's API, read its documentation first rather than guessing and iterating; if the tool is already installed, start with its `--help` text
 - When asked to fix X, apply the minimal targeted fix — do not broaden scope without asking
 - Transient / flaky test failures should always be marked for investigation - do not interrupt your current work, but suggest it for immediate follow-up once you're done
 - Update docs, TODOs, diagrams, changelogs, etc after changing anything they refer to

@@ -12,3 +12,4 @@
 - Prefer modern APIs (such as `pathlib`) over deprecated/older alternatives (eg. `os`)
 - Prefer typed locals over cast for solving upstream typehint issues
 - Prefer importing modules instead of classes or functions, unless you are importing from `typing` or `collections.abc`
+- Avoid `__future__` imports
