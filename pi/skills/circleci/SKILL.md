@@ -56,34 +56,24 @@ curl -sS "${AUTH[@]}" "https://circleci.com/api/v2/workflow/${WORKFLOW_ID}/job" 
 | jq '.items[] | {name, job_number, status}'
 ```
 
-## 5) Watch mode (poll until terminal)
+## 5) Wait for the workflow to finish
 
-Use this when jobs are still running and you need to stop on success/failure.
+Use this when jobs are still running. Resolve `WORKFLOW_ID` as in step 4, then start a `watch` in `poll`
+mode with this probe, substituting the literal workflow id: watch commands run in their own shell, without
+the variables set above. It exits 0 once the workflow is terminal (printing its status, which the `watch`
+message shows), 1 while it runs, and 2 if the API call fails.
 
 ```bash
-SHA=$(git rev-parse HEAD)
-REMOTE=$(git remote get-url origin)
-ORG_REPO=$(echo "$REMOTE" | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##')
-PROJECT_SLUG="gh/${ORG_REPO}"
-TOKEN="${CIRCLECI_CLI_TOKEN:-${CIRCLE_TOKEN:-$CIRCLECI_TOKEN}}"
-if [ -n "$TOKEN" ]; then AUTH=(-H "Circle-Token: $TOKEN"); else AUTH=(); fi
-
-PIPELINE_ID=$(curl -sS "${AUTH[@]}" "https://circleci.com/api/v2/project/${PROJECT_SLUG}/pipeline" \
-  | jq -r --arg sha "$SHA" '[.items[] | select(.vcs.revision==$sha)] | sort_by(.number) | reverse | .[0].id')
-WORKFLOW_ID=$(curl -sS "${AUTH[@]}" "https://circleci.com/api/v2/pipeline/${PIPELINE_ID}/workflow" | jq -r '.items[0].id')
-
-for i in {1..60}; do
-  STATUS=$(curl -sS "${AUTH[@]}" "https://circleci.com/api/v2/workflow/${WORKFLOW_ID}" | jq -r '.status')
-  echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") workflow_status=${STATUS}"
-  case "$STATUS" in
-    success|failed|error|failing|canceled|unauthorized) break ;;
-  esac
-  sleep 20
-done
-
-curl -sS "${AUTH[@]}" "https://circleci.com/api/v2/workflow/${WORKFLOW_ID}/job" \
-| jq '.items[] | {name, job_number, status}'
+STATUS=$(curl -fsS ${CIRCLECI_CLI_TOKEN:+-H "Circle-Token: ${CIRCLECI_CLI_TOKEN}"} \
+  "https://circleci.com/api/v2/workflow/<workflow-id>" | jq -er .status) || exit 2
+echo "workflow_status=${STATUS}"
+case "$STATUS" in
+  success|failed|error|failing|canceled|unauthorized) exit 0 ;;
+  *) exit 1 ;;
+esac
 ```
+
+Once it reports, list the jobs with step 4.
 
 ## 6) Failed-job log retrieval (for root cause)
 
