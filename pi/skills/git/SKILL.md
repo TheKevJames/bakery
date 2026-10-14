@@ -12,9 +12,20 @@ Help with Git operations and best practices.
 * Prefer `gh` commands over raw `git` commands for GitHub-specific operations (issues, PRs, releases)
 * Use `gh repo view` to quickly inspect repository details
 * Use `gh pr checkout NUMBER` to checkout the branch corresponding to a given PR number
-* Use `gh pr checks --watch --fail-fast` as a single blocking call to wait on Github Actions CI status for a PR
-* Use `gh run watch <run-id>` to wait on a single CI test
 * Check `gh --help` for discovering subcommands and capabilities
+
+## Waiting on CI and Merges
+Never block on these in bash: start a `watch` and carry on, or end your turn.
+
+* PR checks: `exit` mode with `sleep 20; gh pr checks 12 --watch --fail-fast`. Right after a push the checks
+  may not be registered yet, which `gh pr checks` reports as a failure; the leading `sleep` covers that.
+* A single Actions run: `exit` mode with `gh run watch 123 --exit-status`.
+* PR merged: `poll` mode with this probe, which also stops if the PR is closed unmerged:
+  ```bash
+  state=$(gh pr view 12 --json state -q .state) || exit 2
+  case "$state" in MERGED) exit 0 ;; OPEN) exit 1 ;; *) echo "$state"; exit 2 ;; esac
+  ```
+* CircleCI: see the `circleci` skill.
 
 ## Commit Messages
 Follow Conventional Commits:

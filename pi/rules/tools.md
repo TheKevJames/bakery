@@ -1,5 +1,6 @@
 # Tool Use
 - Use the bash tool's `timeout` parameter when useful
+- Wait on anything slower than ~10s (CI, merges, deploys, long test runs) with the `watch` tool, not in bash
 - Read targeted ranges of files using the read tool with `offset` and `limit`
 - For multi-line file content or scripts, use the `write` tool (or a `bin/` helper), not `cat <<EOF` / `echo` with embedded quotes
 - Use `cat -vet` instead of `cat -A`
