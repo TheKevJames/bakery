@@ -210,3 +210,14 @@ repos:
     rev: 3.0.0
     hooks:
       - id: script-must-not-have-extension
+
+# typescript
+  - repo: local
+    hooks:
+      - id: typecheck
+        name: typecheck pi extensions
+        # Needs `bun install --frozen-lockfile --cwd pi` to have been run.
+        entry: bun run --cwd pi typecheck
+        language: system
+        files: '^pi/.*\.ts$'
+        pass_filenames: false
