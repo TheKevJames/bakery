@@ -26,7 +26,8 @@ that is gitignored. Pi also rewrites `settings.json` (e.g.
 
 Claw profiles list their extensions explicitly rather than loading all of
 `pi/extensions/`: they need `context/`, `bakery.ts`, `time-awareness.ts`,
-`ketch.ts`, `context7.ts`, and `pi/claw-extensions/` (the gateway adds
+`ketch.ts`, `context7.ts`, `read-mutation-queue.ts`, and
+`pi/claw-extensions/` (the gateway adds
 `policy/` itself), inject `pi/claw-rules/` through their `context.toml`,
 and load `pi/claw-prompts/` as prompts, but not the TUI-only extensions or
 `subagent/` (its child pi runs would escape the gateway's cost ledger).
