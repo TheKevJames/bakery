@@ -115,7 +115,10 @@ for it (see [Ask policy](#ask-policy)).
 
 Shared extensions' npm dependencies are declared in `pi/package.json` and
 locked in `pi/bun.lock`; run `bun install --frozen-lockfile --cwd pi` after
-cloning or when the lockfile changes (dotsystem's `sync` does this).
+cloning or when the lockfile changes (dotsystem's `sync` does this). The
+`typecheck` prek hook runs `tsc` over every extension against the
+`@earendil-works/pi-coding-agent` devDependency, which is pinned to the pi
+version CI installs; pi supplies its own copy at runtime.
 
 ## Memory
 

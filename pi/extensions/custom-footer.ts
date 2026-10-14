@@ -86,10 +86,4 @@ export default function (pi: ExtensionAPI) {
       };
     });
   });
-
-  pi.on("session_switch", async (event, _ctx) => {
-    if (event.reason === "new") {
-      sessionStart = Date.now();
-    }
-  });
 }
