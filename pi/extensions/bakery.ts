@@ -560,7 +560,7 @@ function updateStatus(ctx: ExtensionContext | null, enabled: boolean): void {
     return;
   }
   const sessionId = ctx.sessionManager.getSessionId();
-  ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("dim", `session ${sessionId}`));
+  ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("dim", sessionId));
 }
 
 // ============================================================================
