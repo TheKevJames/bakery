@@ -6,6 +6,7 @@ repo), with per-repo exclude globs from the claw's `scout.toml`.
 import dataclasses
 import operator
 import pathlib
+import subprocess
 import tomllib
 from typing import TYPE_CHECKING
 from typing import Any
@@ -38,6 +39,17 @@ class Settings:
     api: str
     # Repos are fetched from <git_url>/<owner>/<name>.git.
     git_url: str
+
+
+def git(repo: Repo, *args: str, env: dict[str, str] | None = None) -> str:
+    """Run git in the repo's clone; returns its stdout."""
+    return subprocess.run(
+        ('git', '-C', str(repo.clone), *args),
+        capture_output=True,
+        text=True,
+        check=True,
+        env=env,
+    ).stdout
 
 
 def load_settings(profile: pathlib.Path) -> Settings:
