@@ -45,7 +45,7 @@ def _save(rejections: dict[str, Rejection], message: str) -> None:
     data = {link: dataclasses.asdict(r) for link, r in rejections.items()}
     state.init()
     path().write_text(json.dumps(data, indent=2, sort_keys=True) + '\n')
-    state.commit(message)
+    state.commit(message, str(path().relative_to(state.root())))
 
 
 def add(address: str, reason: str) -> str:

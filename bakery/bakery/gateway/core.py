@@ -275,7 +275,7 @@ class Gateway:
             log.exception('channel failed reporting %s', info.work_key)
         try:
             await asyncio.to_thread(
-                state.commit, f'{info.work_key}: {info.status}'
+                state.commit, f'{info.work_key}: {info.status}', info.claw
             )
         except Exception:
             log.exception('committing state after %s failed', info.work_key)
