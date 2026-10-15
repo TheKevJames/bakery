@@ -47,7 +47,13 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Append each new violation to `file`; returns the unsubscribe function. */
+/**
+ * Append each new violation to `file`; returns the unsubscribe function.
+ *
+ * sandbox-runtime's macOS monitor drops all but the first denial in each chunk
+ * of `log stream` output (anthropics/sandbox-runtime#720); pi/patches/ fixes
+ * it until a release does.
+ */
 function recordViolations(file: string): () => void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const store = SandboxManager.getSandboxViolationStore();

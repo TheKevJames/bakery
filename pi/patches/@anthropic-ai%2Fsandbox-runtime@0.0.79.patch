@@ -1,0 +1,48 @@
+diff --git a/dist/sandbox/macos-sandbox-utils.js b/dist/sandbox/macos-sandbox-utils.js
+index 9d5dc7e3dd0a9d80f10e8855edf4251161fa14b0..74c1b7c1b0f65e7ccea249047e7908dc01af613c 100644
+--- a/dist/sandbox/macos-sandbox-utils.js
++++ b/dist/sandbox/macos-sandbox-utils.js
+@@ -1165,13 +1165,28 @@ resolveCommandText) {
+         '--style',
+         'compact',
+     ]);
++    // A chunk of `log stream` output can hold several events, or end partway
++    // through one. Each event is a `Sandbox: ... deny ...` line followed by
++    // its `CMD64_..._END_...` tag line, so carry the unterminated tail over to
++    // the next chunk and report every violation line, with the tag after it.
++    let partial = '';
++    let pendingViolation;
+     logProcess.stdout?.on('data', (data) => {
+-        const lines = data.toString().split('\n');
+-        // Get violation and command lines
+-        const violationLine = lines.find(line => line.includes('Sandbox:') && line.includes('deny'));
+-        const commandLine = lines.find(line => line.startsWith('CMD64_'));
+-        if (!violationLine)
+-            return;
++        const lines = (partial + data.toString()).split('\n');
++        partial = lines.pop() ?? '';
++        for (const line of lines) {
++            if (line.includes('Sandbox:') && line.includes('deny')) {
++                if (pendingViolation)
++                    reportViolation(pendingViolation, undefined);
++                pendingViolation = line;
++            }
++            else if (line.startsWith('CMD64_') && pendingViolation) {
++                reportViolation(pendingViolation, line);
++                pendingViolation = undefined;
++            }
++        }
++    });
++    function reportViolation(violationLine, commandLine) {
+         // Extract violation details
+         const sandboxMatch = violationLine.match(sandboxExtractRegex);
+         if (!sandboxMatch?.[1])
+@@ -1209,7 +1224,7 @@ resolveCommandText) {
+             encodedCommand,
+             timestamp: new Date(), // We could parse the timestamp from the log but this feels more reliable
+         });
+-    });
++    }
+     logProcess.stderr?.on('data', (data) => {
+         logForDebugging(`[Sandbox Monitor] Log stream stderr: ${data.toString()}`);
+     });
