@@ -60,8 +60,13 @@ async def _check_startup(proc: rpc.PiProcess) -> None:
         raise rpc.RpcError('; '.join(errors))
 
 
-def child_env(claw: config.Claw, sid: str) -> dict[str, str]:
-    """Raises secrets.SecretError if a configured secret is missing."""
+def child_env(
+    claw: config.Claw, sid: str, job: config.Job | None = None
+) -> dict[str, str]:
+    """
+    `job` (the unit's job) may override the claw's ask policy. Raises
+    secrets.SecretError if a configured secret is missing.
+    """
     env = {
         name: value
         for name, value in os.environ.items()
@@ -95,7 +100,9 @@ def child_env(claw: config.Claw, sid: str) -> dict[str, str]:
             'BAKERY_TASK_NAMESPACE': tasks.NAMESPACE,
             'PI_CODING_AGENT_DIR': str(claw.profile),
             'PI_CODING_AGENT_BAKERY_DIR': str(sandbox.sockets(claw)),
-            'BAKERY_ASK_POLICY': claw.ask.policy,
+            'BAKERY_ASK_POLICY': job.ask
+            if job and job.ask
+            else claw.ask.policy,
             'BAKERY_ASK_TIMEOUT_HOURS': f'{claw.ask.timeout_hours:g}',
             'BAKERY_ASK_ON_TIMEOUT': claw.ask.on_timeout,
             'BAKERY_MEMORY_DIR': str(claw.state_dir),
@@ -126,7 +133,7 @@ def child_spec(
         # claw without its policy.
         '--extension', str(policy_extension()),
     )  # fmt: skip
-    return command, child_env(claw, sid)
+    return command, child_env(claw, sid, job)
 
 
 @dataclasses.dataclass

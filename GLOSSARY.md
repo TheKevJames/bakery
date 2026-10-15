@@ -169,6 +169,14 @@ The operator's commits to the bakery checkout the claws run from, since a
 claw's last dream, handed to that dream.
 _Avoid_: changelog
 
+**Teach**:
+Giving a claw a lesson from the operator, which it verifies before correcting
+its long-term memory; the operator sees the resulting diff.
+_Avoid_: train, tell
+
+**Lesson**:
+What the operator teaches a claw: something to recheck, and why.
+
 **Flush**:
 The turn in which a claw nearing compaction saves anything durable to its
 daily notes.

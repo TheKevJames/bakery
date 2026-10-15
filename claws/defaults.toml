@@ -104,13 +104,24 @@ silent_ok = true
 collector = "changes"
 skip_empty = false
 
+# Run only by `bakery teach <claw|all> "<lesson>"`, which waits for the reply
+# and the MEMORY.md diff: the claw checks the operator's lesson and corrects
+# its memory, and never asks, so nothing holds up the operator waiting.
+[[claw.job]]
+name = "learn"
+prompt = "/learn"  # pi/claw-prompts/learn.md
+model = "anthropic/claude-opus-5-5"
+thinking = "xhigh"
+ask = "assume"
+
 # A claw's own jobs, in its claw.toml:
 #
 # [[job]]
 # name = "daily"
-# cron = "0 7 * * *"
+# cron = "0 7 * * *"           # optional: without it, only triggers run it
 # prompt = "..."
 # active_hours = "07:00-23:00"  # optional
 # silent_ok = false             # true: no thread unless it has news
 # model = "..."                 # optional overrides for the job's runs
 # thinking = "..."
+# ask = "assume"                # and the claw's [ask] policy

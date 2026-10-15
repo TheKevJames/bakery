@@ -23,8 +23,8 @@ log = logging.getLogger(__name__)
 Fire = Callable[[config.Claw, config.Job, datetime.datetime], None]
 
 
-def next_fire(job: config.Job, after: datetime.datetime) -> datetime.datetime:
-    fire: datetime.datetime = croniter.croniter(job.cron, after).get_next(
+def next_fire(cron: str, after: datetime.datetime) -> datetime.datetime:
+    fire: datetime.datetime = croniter.croniter(cron, after).get_next(
         datetime.datetime
     )
     return fire
@@ -64,9 +64,12 @@ class Scheduler:
             if not claw.enabled:
                 continue
             for job in claw.jobs:
-                self.tasks.append(
-                    asyncio.create_task(self._loop(claw, job, tz))
-                )
+                if job.cron is not None:
+                    self.tasks.append(
+                        asyncio.create_task(
+                            self._loop(claw, job, job.cron, tz)
+                        )
+                    )
 
     def stop(self) -> None:
         for task in self.tasks:
@@ -75,10 +78,14 @@ class Scheduler:
         self.upcoming.clear()
 
     async def _loop(
-        self, claw: config.Claw, job: config.Job, tz: datetime.tzinfo
+        self,
+        claw: config.Claw,
+        job: config.Job,
+        cron: str,
+        tz: datetime.tzinfo,
     ) -> None:
         while True:
-            due = next_fire(job, datetime.datetime.now(tz))
+            due = next_fire(cron, datetime.datetime.now(tz))
             self.upcoming[claw.name, job.name] = due
             await _sleep_until(due)
             now = datetime.datetime.now(tz)

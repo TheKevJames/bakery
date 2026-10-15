@@ -41,21 +41,21 @@ def git(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def commit(message: str, *owned: str) -> bool:
+def commit(message: str, *owned: str) -> str | None:
     """
     Commit the changes under the `owned` paths (relative to the state root),
-    and only those; False if there were none. Claws' runs overlap, so
-    committing anything wider would file one claw's changes under another's
-    run.
+    and only those; the new commit, or None if there were none. Claws' runs
+    overlap, so committing anything wider would file one claw's changes
+    under another's run.
     """
     if not owned:
         raise ValueError('commit needs at least one path')
     git('add', '--all', '--', *owned)
     if not git('status', '--porcelain', '--', *owned).stdout.strip():
-        return False
+        return None
     # With paths, commit records only them, whatever else is staged.
     git('commit', '--quiet', '--message', message, '--', *owned)
-    return True
+    return git('rev-parse', 'HEAD').stdout.strip()
 
 
 def init() -> None:

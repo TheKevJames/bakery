@@ -137,7 +137,8 @@ state repo's commits keep every change reviewable.
   or `external`.
 - `memory_edit(edits | content)` — `MEMORY.md` only: exact replacements or a
   full rewrite, capped at `[memory] max_chars` (20k, its context budget).
-  Every run has it, but its description says it is only for the dream job.
+  Every run has it, but its description says it is only for the dream and
+  learn jobs.
 
 Curation:
 
@@ -152,6 +153,18 @@ Curation:
   thinking, `silent_ok`). It distills recent
   daily notes into `MEMORY.md` and never promotes `external` notes, which
   stay in the daily notes as evidence; its report lists what it held back.
+- **Teach**: `bakery teach <claw|all> "<lesson>"` runs each claw's `learn`
+  job (`claws/defaults.toml`: no cron, Opus with xhigh thinking, `ask =
+  "assume"`; `pi/claw-prompts/learn.md`) with the operator's lesson
+  appended. The claw verifies the lesson where it can, rechecks the memory
+  it bears on, corrects `MEMORY.md`, and appends an `operator` note so its
+  next dream keeps the correction; it never asks, since the operator is
+  waiting. The CLI waits for every run (`--no-wait` does not) and prints
+  each reply and the `MEMORY.md` diff from the run's state commit; it exits
+  non-zero if a run did not settle. Ctrl-C stops waiting, not the runs.
+  `all` teaches every enabled claw at once, skipping paused ones. Baker's
+  tasks give lessons as ready-to-run `bakery teach` lines
+  (`bakery/bakery/gateway/teach.py`).
 - **Change feed**: the dream's collector (`changes`,
   `bakery/bakery/collectors/changes.py`) hands it the operator's commits to
   the bakery checkout the claws run from (its HEAD, unmerged work included;
@@ -276,10 +289,12 @@ transcripts.
   the collector hands back the unit that just settled, the run did not get
   anywhere: the repeat stops with a notice rather than looping.
 - **cron**: 5-field expressions in `claw.toml`, Europe/Lisbon, optional
-  `active_hours`. Missed runs (Mac asleep, gateway down) are skipped. Jobs in
+  `active_hours`. Missed runs (Mac asleep, gateway down) are skipped. A job
+  without one runs only when triggered (eg. `learn`). Jobs in
   `defaults.toml`'s `[claw]` table apply to every claw (a claw's job of the
-  same name replaces one); a job may override `model` and `thinking` for its
-  units of work, which keep them on later runs (eg. replies).
+  same name replaces one); a job may override `model`, `thinking`, and the
+  claw's ask policy (`ask`) for its units of work, which keep them on later
+  runs (eg. replies).
   `bakery trigger <claw>` runs the claw's only own job; shared jobs (eg.
   `dream`) must be named.
 - **heartbeat**: a cron job flagged `silent_ok` (eg. every claw's dream,
@@ -367,8 +382,9 @@ denied". The sandbox launcher creates each child's `$TMPDIR` in the claw's
 
 ### Control
 
-The control socket backs `bakery trigger|pause|resume|status|budget` and
-`bakery gateway reload`; the slash commands in `#bakery` (`/pause [claw|all]`,
+The control socket backs `bakery trigger|teach|pause|resume|status|budget`
+and `bakery gateway reload` (a request may wait, eg. `teach_result` on a
+run; stopping the gateway ends such waits); the slash commands in `#bakery` (`/pause [claw|all]`,
 `/resume`, `/status`, `/budget`) call the same operations in-process.
 `pause` stops new runs; `pause --abort` also parks in-flight ones. `resume`
 takes a claw, `all`, or a work key (re-running a parked unit).

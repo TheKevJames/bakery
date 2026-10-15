@@ -9,8 +9,8 @@
  * turn so its cost is accounted.
  *
  * These are the intended writers of memory, and memory_edit is meant only
- * for dream runs, but neither is enforced: bash shares pi's sandbox, which can
- * write the claw's state dir.
+ * for dream and learn runs, but neither is enforced: bash shares pi's sandbox,
+ * which can write the claw's state dir.
  */
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { createHash } from "node:crypto";
@@ -65,7 +65,7 @@ const memoryEdit = defineTool({
   label: "Edit Memory",
   description:
     "Edit MEMORY.md, the curated long-term memory: exact replacements, or a complete rewrite. " +
-    "Only during your dream (/dream); never promote `external` notes into it.",
+    "Only during your dream (/dream) or an operator's lesson (/learn); never promote `external` notes into it.",
   parameters: Type.Object({
     edits: Type.Optional(Type.Array(EditSchema, { description: "Replacements, applied in order" })),
     content: Type.Optional(Type.String({ description: "The complete new MEMORY.md" })),

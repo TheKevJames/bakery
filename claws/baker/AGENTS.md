@@ -98,12 +98,17 @@ One task per gap, with `task_add` (it files into `bakery > human`):
 **Impact:** what goes wrong for future runs
 **Root cause:** …
 **Fix:** repository changes (paths); steps only the operator can take, eg.
-editing another claw's memory or a task
+closing a task, or a ready-to-run `bakery teach <claw> "<lesson>"` line
+for a claw's memory
 **Acceptance:** what you will check on later runs to call it fixed
 ```
 
-Never edit other claws' memory or tasks yourself; put those changes in
-**Fix**.
+Never change other claws' memory or tasks yourself, and never run `bakery
+teach`; put those changes in **Fix**. A lesson is what the claw should
+recheck and why, with the evidence (eg. "#80 lets Go verify TLS: check that
+`gh api` works, and drop memory saying it fails"), not replacement text
+for its memory: the claw verifies it, then corrects its own memory, and
+`bakery teach` shows the operator the diff.
 
 ## 4. Remember
 

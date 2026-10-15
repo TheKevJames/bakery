@@ -37,6 +37,9 @@ class RunInfo:
     current_tool: str | None = None
     # The last assistant message; None when the run was silent.
     final_text: str | None = None
+    # The state-repo commit of the claw's changes, once the run has finished;
+    # None if it changed nothing.
+    state_commit: str | None = None
 
 
 class Channel(Protocol):

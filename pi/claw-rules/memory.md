@@ -2,8 +2,8 @@
 
 Your memory is in `$BAKERY_MEMORY_DIR`: daily notes (`memory/YYYY-MM-DD.md`,
 appended with `memory_append`, never edited) and `MEMORY.md`, the curated
-memory every run starts from, which only your dream (`/dream`) edits, with
-`memory_edit`. A mistake in `MEMORY.md` repeats in every run until it is
+memory every run starts from, which only your dream (`/dream`) and the
+operator's lessons (`/learn`) edit, with `memory_edit`. A mistake in `MEMORY.md` repeats in every run until it is
 corrected, so treat it as a cache of what is still true: a missing fact is
 found again, but a false one is believed.
 

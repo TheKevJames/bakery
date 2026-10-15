@@ -78,6 +78,8 @@ class Gateway:
         self._notices: set[asyncio.Task[None]] = set()
         # (day, claw) pairs already announced as out of budget.
         self._broke: set[tuple[datetime.date, str]] = set()
+        # Work key -> futures for its next finished run (see `finished`).
+        self._finished: dict[str, list[asyncio.Future[channel_.RunInfo]]] = {}
 
     @property
     def tz(self) -> zoneinfo.ZoneInfo:
@@ -289,11 +291,25 @@ class Gateway:
         except Exception:
             log.exception('channel failed reporting %s', info.work_key)
         try:
-            await asyncio.to_thread(
+            info.state_commit = await asyncio.to_thread(
                 state.commit, f'{info.work_key}: {info.status}', info.claw
             )
         except Exception:
             log.exception('committing state after %s failed', info.work_key)
+        for future in self._finished.pop(info.work_key, []):
+            if not future.done():
+                future.set_result(info)
+
+    def finished(self, work_key: str) -> asyncio.Future[channel_.RunInfo]:
+        """
+        The next run of `work_key` to finish, once its state is committed.
+        Ask before submitting the run, or a fast one may finish unseen.
+        """
+        future: asyncio.Future[channel_.RunInfo] = (
+            asyncio.get_running_loop().create_future()
+        )
+        self._finished.setdefault(work_key, []).append(future)
+        return future
 
     def _announce_broke(self, claw: str) -> None:
         key = (datetime.datetime.now(self.tz).date(), claw)
