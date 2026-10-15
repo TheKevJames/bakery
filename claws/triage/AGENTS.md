@@ -98,7 +98,8 @@ Move it with `task_set(id, tag=...)`, then `task_set(id, release=true)`:
   or the operator's decision on another task. The source stays as it is:
   the task keeps scout from filing it again. Moving a task here fails unless
   its notes hold a valid `**Blocked on:**` list.
-- `wontfix` when it is a false positive (eg. a TODO in prose), already
+- `wontfix` when it is a false positive (eg. a TODO comment in vendored
+  code), already
   done, or obsolete. Say what to change at the source so similar findings
   stop: once the operator rejects the task, its own link is never filed
   again.

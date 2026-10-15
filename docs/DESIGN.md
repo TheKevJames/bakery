@@ -720,8 +720,10 @@ Finds things in the operator's repos that belong on the task list. Profile:
   - **Issues and PRs**: all open issues, and PRs not by bots, except those
     labelled `ready-for-human`. Link: their URL.
   - **TODO/FIXME comments** on the default branch, fetched with scout's
-    token over HTTPS into scout's clone, minus per-repo `exclude` globs. One
-    task per comment. Link: `…/blob/<branch>/<path>?todo=<fingerprint>#L<line>`;
+    token over HTTPS into scout's clone, minus per-repo `exclude` globs.
+    Only mentions inside comments count: Pygments lexes each file, picking
+    its lexer by file name, so strings, docstrings and prose are skipped;
+    files with no lexer keep every mention. One task per comment. Link: `…/blob/<branch>/<path>?todo=<fingerprint>#L<line>`;
     the fingerprint is of the comment's text, so the line can move.
 - **Lineage, not memory**: a candidate is new unless an open task or a
   rejection (`bakery wontfix`) has its link (ignoring the `#L…` anchor).

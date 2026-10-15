@@ -1,5 +1,5 @@
 # scout: finds things in the operator's repos that belong on the task list
-# (CI failures and warnings, issues and PRs, TODO comments) and adds them for
+# (CI failures and warnings, issues and PRs, to-do comments) and adds them for
 # triage.
 # Candidates are gathered deterministically by bakery/bakery/collectors/
 # scout.py from scout.toml; the model only writes them up. Scout reads
