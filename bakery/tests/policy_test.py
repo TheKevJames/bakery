@@ -64,6 +64,15 @@ def install_editable(
     )
 
 
+def ssh_keys(home: pathlib.Path, count: int) -> list[pathlib.Path]:
+    """`count` private keys in `home`'s ~/.ssh, which claws never read."""
+    (home / '.ssh').mkdir(parents=True)
+    keys = [home / '.ssh' / f'key{i}' for i in range(count)]
+    for key in keys:
+        key.write_text('hunter2')
+    return keys
+
+
 def test_file_access_follows_the_policy(
     root: pathlib.Path,
     fake_llm: harness.FakeLLM,
@@ -71,8 +80,7 @@ def test_file_access_follows_the_policy(
 ) -> None:
     home = root / 'home'
     monkeypatch.setenv('HOME', str(home))
-    (home / '.ssh').mkdir(parents=True)
-    (home / '.ssh' / 'key').write_text('hunter2')
+    keys = ssh_keys(home, 5)
     repo = home / 'src' / 'personal' / 'repo'
     repo.mkdir(parents=True)
     (repo / 'code.py').write_text('fine')
@@ -103,8 +111,9 @@ def test_file_access_follows_the_policy(
     (claws / 'a' / 'auth.json').write_text('{}')
     (claws / 'b' / 'auth.json').write_text('{"b": "hunter4"}')
     calls = [
-        harness.call('read', path=str(home / '.ssh' / 'key')),
-        harness.call('bash', command=f'cat {home}/.ssh/key'),
+        harness.call('read', path=str(keys[0])),
+        # One process's denials reach the violation log in a single burst.
+        harness.call('bash', command=f'cat {" ".join(map(str, keys))}'),
         harness.call('read', path=str(repo / 'code.py')),
         harness.call('read', path=str(repo / '.env')),
         harness.call('read', path=str(state / 'c' / 'MEMORY.md')),
@@ -139,7 +148,11 @@ def test_file_access_follows_the_policy(
     assert 'editable' in results[13]
     for refused in (0, 1, 3, 4, 7, 10, 12, 14):
         assert 'sandbox policy blocked it' in results[refused], refused
-    assert f'file-read-data {home.resolve()}/.ssh/key' in violations(root, 'a')
+    assert not [
+        key
+        for key in keys
+        if f'file-read-data {key.resolve()}' not in violations(root, 'a')
+    ]
 
 
 def test_network_refuses_only_other_unix_sockets(

@@ -16,6 +16,9 @@
       },
     },
   },
+  "patchedDependencies": {
+    "@anthropic-ai/sandbox-runtime@0.0.79": "patches/@anthropic-ai%2Fsandbox-runtime@0.0.79.patch",
+  },
   "packages": {
     "@anthropic-ai/sandbox-runtime": ["@anthropic-ai/sandbox-runtime@0.0.79", "", { "dependencies": { "@pondwader/socks5-server": "^1.0.10", "commander": "^12.1.0", "node-forge": "^1.4.0", "zod": "^3.25.0" }, "bin": { "srt": "dist/cli.js" } }, "sha512-WjBmS9fbTpnQwQkM9SU+JjhM2CcXo9eWEELktY1100RMvTy/jPhP44yZ3NXhh+GHB350OgPbM3+FubE5WVRtSA=="],
 
