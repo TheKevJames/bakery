@@ -103,9 +103,10 @@ def fixture_world(
     (scout / 'MEMORY.md').write_text('# scout\n')
     monkeypatch.setenv('GIT_COMMITTER_DATE', f'@{SINCE - 600:.0f} +0000')
     state.init()
+    state.commit('scout/dream-0: settled', 'scout')
     monkeypatch.delenv('GIT_COMMITTER_DATE')
     (scout / 'MEMORY.md').write_text('# scout\n\n- CI logs need auth\n')
-    state.commit('scout/dream-x: settled')
+    state.commit('scout/dream-x: settled', 'scout')
     gateway = base / '_gateway'
     gateway.mkdir()
     (gateway / 'gateway.log').write_text(

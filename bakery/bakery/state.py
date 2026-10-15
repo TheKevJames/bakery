@@ -41,12 +41,20 @@ def git(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def commit(message: str) -> bool:
-    """Commit every change under the state root; False if there was none."""
-    git('add', '--all')
-    if not git('status', '--porcelain').stdout.strip():
+def commit(message: str, *owned: str) -> bool:
+    """
+    Commit the changes under the `owned` paths (relative to the state root),
+    and only those; False if there were none. Claws' runs overlap, so
+    committing anything wider would file one claw's changes under another's
+    run.
+    """
+    if not owned:
+        raise ValueError('commit needs at least one path')
+    git('add', '--all', '--', *owned)
+    if not git('status', '--porcelain', '--', *owned).stdout.strip():
         return False
-    git('commit', '--quiet', '--message', message)
+    # With paths, commit records only them, whatever else is staged.
+    git('commit', '--quiet', '--message', message, '--', *owned)
     return True
 
 
@@ -62,12 +70,19 @@ def init() -> None:
         git('config', 'commit.gpgsign', 'false')
         git('config', 'user.name', 'bakery')
         git('config', 'user.email', 'bakery@localhost')
+    seeded: list[pathlib.Path] = []
     gitignore = base / '.gitignore'
     lines = gitignore.read_text().splitlines() if gitignore.exists() else []
     missing = [line for line in GITIGNORE.splitlines() if line not in lines]
     if missing:
         gitignore.write_text(''.join(f'{line}\n' for line in lines + missing))
+        seeded.append(gitignore)
     if not operator_file().exists():
         template = importlib.resources.files('bakery') / 'templates'
         operator_file().write_text((template / 'OPERATOR.md').read_text())
-    commit('chore: initialize claw state')
+        seeded.append(operator_file())
+    if seeded:
+        commit(
+            'chore: initialize claw state',
+            *(str(path.relative_to(base)) for path in seeded),
+        )

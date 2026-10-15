@@ -19,7 +19,7 @@ def fixture_claws_state(
     return tmp_path / 'claws'
 
 
-def test_init_is_idempotent_and_tracks_only_memory(
+def test_init_is_idempotent_and_commits_only_its_own_files(
     claws_state: pathlib.Path,
 ) -> None:
     state.init()
@@ -33,10 +33,39 @@ def test_init_is_idempotent_and_tracks_only_memory(
 
     assert state.operator_file().read_text() == '# edited\n'
     tracked = commands.git(claws_state, 'ls-files').split()
-    assert sorted(tracked) == [
-        '.gitignore',
-        '_shared/OPERATOR.md',
-        'scout/MEMORY.md',
+    assert sorted(tracked) == ['.gitignore', '_shared/OPERATOR.md']
+    # The operator's edit is theirs to commit; memory is its claw's run's.
+    status = commands.git(claws_state, 'status', '--porcelain').splitlines()
+    assert sorted(status) == [' M _shared/OPERATOR.md', '?? scout/']
+    assert len(commands.git(claws_state, 'log', '--oneline').splitlines()) == 1
+
+
+def test_commit_records_only_the_given_paths(
+    claws_state: pathlib.Path,
+) -> None:
+    state.init()
+    for name in ('scout', 'scout-old', 'triage'):
+        (claws_state / name).mkdir()
+        (claws_state / name / 'MEMORY.md').write_text(f'{name}\n')
+    state.operator_file().write_text('# edited\n')
+    # Staged by someone else, eg. a commit that failed after its add.
+    commands.git(claws_state, 'add', 'triage')
+
+    assert state.commit('scout/dream-1: settled', 'scout')
+    assert not state.commit('scout/dream-2: settled', 'scout')
+
+    shown = commands.git(claws_state, 'show', '--name-only', '--format=%s')
+    assert shown.split() == ['scout/dream-1:', 'settled', 'scout/MEMORY.md']
+    status = commands.git(claws_state, 'status', '--porcelain').splitlines()
+    assert sorted(status) == [
+        ' M _shared/OPERATOR.md',
+        '?? scout-old/',
+        'A  triage/MEMORY.md',
     ]
-    assert not commands.git(claws_state, 'status', '--porcelain').strip()
-    assert len(commands.git(claws_state, 'log', '--oneline').splitlines()) == 2
+
+
+def test_commit_needs_a_path(claws_state: pathlib.Path) -> None:
+    del claws_state
+    state.init()
+    with pytest.raises(ValueError, match='at least one path'):
+        state.commit('everything')

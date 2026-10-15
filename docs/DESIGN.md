@@ -43,7 +43,10 @@ tokens on every request. Re-enabling `mcp` would also need pi's
 
 All mutable claw state lives outside the repo, under
 `$XDG_STATE_HOME/claws/`, which is a local-only git repo auto-committed after
-every run so memory changes can be reviewed and rolled back.
+every run so memory changes can be reviewed and rolled back. Each commit
+holds only what its writer owns: a run, its claw's dir; `bakery wontfix`,
+`_shared/wontfix.json`; setup, the files it seeds. The operator commits
+their own edits (eg. to `_shared/OPERATOR.md`).
 
 ```
 $XDG_STATE_HOME/claws/
@@ -154,9 +157,10 @@ Curation:
   and scope rules only from the operator), dates facts about the outside
   world, and keeps `MEMORY.md` under about 10k characters, half its cap.
   These rules are in the prompt: a tool cannot judge text.
-- **Commits**: after every run the gateway commits the state repo
-  (`<work_key>: <status>`), so every memory change can be reviewed and
-  reverted.
+- **Commits**: after every run the gateway commits the claw's state dir
+  (`<work_key>: <status>`), and nothing else: runs of different claws
+  overlap, so a run's commit holds exactly its own claw's changes, and every
+  memory change can be reviewed and reverted.
 
 Identity changes need the operator's approval:
 
