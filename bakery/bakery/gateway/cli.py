@@ -23,9 +23,11 @@ from . import pool
 from . import sandbox
 
 
-def _call(record: dict[str, object]) -> dict[str, Any]:
+def _call(
+    record: dict[str, object], timeout: float | None = 10.0
+) -> dict[str, Any]:
     try:
-        data = control.send(record)
+        data = control.send(record, timeout)
     except control.ControlError as e:
         sys.exit(str(e))
     return data if isinstance(data, dict) else {}
@@ -42,6 +44,41 @@ def do_trigger(args: argparse.Namespace) -> int:
     )
     print(render.triggered(data['work_key'], collecting=data['collecting']))
     return 0
+
+
+def do_teach(args: argparse.Namespace) -> int:
+    data = _call(
+        {
+            'type': 'teach',
+            'target': args.target,
+            'lesson': args.lesson,
+            'wait': not args.no_wait,
+        }
+    )
+    started: dict[str, str] = data['started']
+    for claw, why in data['skipped'].items():
+        print(f'skipped {claw}: {why}', file=sys.stderr)
+    for claw, work_key in started.items():
+        print(f'teaching {claw}: {work_key}')
+    if args.no_wait:
+        return 0
+    failed = False
+    try:
+        # The runs go on in parallel; waiting on each in turn takes as long
+        # as the slowest.
+        for work_key in started.values():
+            result = _call(
+                {'type': 'teach_result', 'work_key': work_key}, timeout=None
+            )
+            print(render.lesson(result))
+            failed |= result['status'] != 'settled'
+    except KeyboardInterrupt:
+        print(
+            '\nstopped waiting; the lessons go on (see `bakery read`)',
+            file=sys.stderr,
+        )
+        return 130
+    return 1 if failed else 0
 
 
 def do_pause(args: argparse.Namespace) -> int:
@@ -162,6 +199,19 @@ def add_parsers(add_parser: Callable[..., argparse.ArgumentParser]) -> None:
     trigger.add_argument('job', nargs='?', help='default: the only job')
     trigger.add_argument('--prompt', help='custom prompt instead of the job')
     trigger.set_defaults(func=do_trigger)
+
+    teach = add_parser(
+        'teach',
+        help='teach a claw a lesson: it rechecks and corrects its memory',
+    )
+    teach.add_argument('target', help='claw name or "all"')
+    teach.add_argument('lesson', help='what the claw should learn or check')
+    teach.add_argument(
+        '--no-wait',
+        action='store_true',
+        help='return once queued, without the reply and MEMORY.md diff',
+    )
+    teach.set_defaults(func=do_teach)
 
     pause = add_parser('pause', help='stop starting runs for a claw')
     pause.add_argument('target', help='claw name or "all"')

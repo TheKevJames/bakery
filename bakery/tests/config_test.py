@@ -75,8 +75,11 @@ def test_default_jobs_apply_to_every_claw(tmp_path: pathlib.Path) -> None:
     dream = loaded.claw('plain').job('dream')
     assert (dream.shared, dream.prompt) == (True, '/dream')
     assert (dream.collector, dream.skip_empty) == ('changes', False)
+    learn = loaded.claw('plain').job('learn')
+    # Only `bakery teach` runs it, which waits on it.
+    assert (learn.shared, learn.cron, learn.ask) == (True, None, 'assume')
     own = loaded.claw('own')
-    assert [j.name for j in own.jobs] == ['dream', 'daily']
+    assert [j.name for j in own.jobs] == ['dream', 'learn', 'daily']
     assert (own.job('daily').model, own.job('daily').shared) == ('m', False)
     replaced = loaded.claw('replaced').job('dream')
     assert not replaced.shared
@@ -123,6 +126,15 @@ def test_default_jobs_apply_to_every_claw(tmp_path: pathlib.Path) -> None:
             '[[job]]\nname = "x"\ncron = "* * * * *"\nprompt = "p"\n'
             'skip_empty = false',
             'skip_empty: needs a collector',
+        ),
+        (
+            '[[job]]\nname = "x"\nprompt = "p"\nactive_hours = "09:00-17:00"',
+            'active_hours: needs a cron',
+        ),
+        (
+            '[[job]]\nname = "x"\ncron = "* * * * *"\nprompt = "p"\n'
+            'ask = "maybe"',
+            'ask: must be one of',
         ),
     ],
 )
@@ -228,8 +240,8 @@ def test_should_run(
     assert scheduler.should_run(spec, due, now) is runs
 
 
-def test_next_fire_is_local_time_across_dst(tmp_path: pathlib.Path) -> None:
+def test_next_fire_is_local_time_across_dst() -> None:
     # Lisbon leaves summer time on 2026-10-25: 07:00 stays 07:00 local.
     before = datetime.datetime(2026, 10, 24, 8, tzinfo=LISBON)
-    fire = scheduler.next_fire(load_job(tmp_path, '0 7 * * *', None), before)
+    fire = scheduler.next_fire('0 7 * * *', before)
     assert fire.isoformat() == '2026-10-25T07:00:00+00:00'

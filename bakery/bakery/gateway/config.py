@@ -74,13 +74,15 @@ class ActiveHours:
 class Job:
     # pylint: disable=too-many-instance-attributes
     name: str
-    cron: str
+    # None: the job only runs when triggered (eg. `learn`, by `bakery teach`).
+    cron: str | None
     prompt: str
     active_hours: ActiveHours | None
     silent_ok: bool
     # Overrides for this job's units of work.
     model: str | None
     thinking: str | None
+    ask: str | None
     # A bakery.collectors name: gathers input first; nothing found, no run,
     # unless skip_empty is false (then the job's prompt runs on its own).
     collector: str | None
@@ -218,17 +220,25 @@ def _skip_empty(table: toml.Table) -> bool:
     return table.boolean('skip_empty')
 
 
+def _cron(table: toml.Table) -> str | None:
+    if not table.optional('cron'):
+        if table.optional('active_hours'):
+            raise ConfigError(f'{table.where}.active_hours: needs a cron')
+        return None
+    cron = table.string('cron')
+    if not croniter.croniter.is_valid(cron):
+        raise ConfigError(f'{table.where}.cron: invalid expression')
+    return cron
+
+
 def _job(table: toml.Table, names: set[str], shared: set[str]) -> Job:
     name = table.string('name')
     if not NAME_RE.fullmatch(name) or name in names:
         raise ConfigError(f'{table.where}.name: invalid or duplicate')
     names.add(name)
-    cron = table.string('cron')
-    if not croniter.croniter.is_valid(cron):
-        raise ConfigError(f'{table.where}.cron: invalid expression')
     job = Job(
         name=name,
-        cron=cron,
+        cron=_cron(table),
         prompt=table.string('prompt'),
         active_hours=(
             _active_hours(table.string('active_hours'), table.where)
@@ -242,6 +252,11 @@ def _job(table: toml.Table, names: set[str], shared: set[str]) -> Job:
         thinking=(
             table.string('thinking', THINKING_LEVELS)
             if table.optional('thinking')
+            else None
+        ),
+        ask=(
+            table.string('ask', ASK_POLICIES)
+            if table.optional('ask')
             else None
         ),
         collector=_collector(table),

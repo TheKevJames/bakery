@@ -101,6 +101,20 @@ def triggered(work_key: str, *, collecting: bool) -> str:
     return f'queued {work_key}'
 
 
+def lesson(data: Mapping[str, Any]) -> str:
+    """A taught claw's outcome: its reply, then its MEMORY.md diff."""
+    reason = f' ({data["reason"]})' if data['reason'] else ''
+    return '\n'.join(
+        (
+            f'== {data["work_key"]}: {data["status"]}{reason}',
+            (data['reply'] or '(no reply)').strip(),
+            '',
+            data['diff'].rstrip() or 'MEMORY.md unchanged',
+            '',
+        )
+    )
+
+
 def budget(data: Mapping[str, Any]) -> str:
     rows = [('all', data['global']), *sorted(data['claws'].items())]
     width = max(len(name) for name, _ in rows)

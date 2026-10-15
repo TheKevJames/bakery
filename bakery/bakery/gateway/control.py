@@ -6,6 +6,7 @@ operations in-process.
 
 import asyncio
 import contextlib
+import inspect
 import json
 import pathlib
 import socket
@@ -16,7 +17,9 @@ from collections.abc import Mapping
 from .. import state
 from . import config
 from . import core
+from . import teach
 
+# Returns the response's data, or an awaitable of it (eg. to wait on a run).
 Handler = Callable[[dict[str, object]], object]
 
 
@@ -54,8 +57,15 @@ def _trigger(
 
 
 def handlers(gateway: core.Gateway) -> dict[str, Handler]:
+    teacher = teach.Teacher(gateway)
     return {
         'trigger': lambda r: _trigger(gateway, r),
+        'teach': lambda r: teacher.start(
+            _required(r, 'target'),
+            _required(r, 'lesson'),
+            wait=bool(r.get('wait')),
+        ),
+        'teach_result': lambda r: teacher.result(_required(r, 'work_key')),
         'pause': lambda r: gateway.pause(
             _required(r, 'target'), abort=bool(r.get('abort'))
         ),
@@ -66,7 +76,9 @@ def handlers(gateway: core.Gateway) -> dict[str, Handler]:
     }
 
 
-def _respond(table: dict[str, Handler], line: bytes) -> dict[str, object]:
+async def _respond(
+    table: dict[str, Handler], line: bytes
+) -> dict[str, object]:
     try:
         request = json.loads(line)
         if not isinstance(request, dict):
@@ -74,9 +86,12 @@ def _respond(table: dict[str, Handler], line: bytes) -> dict[str, object]:
         handler = table.get(str(request.get('type')))
         if handler is None:
             raise core.GatewayError(f'unknown request: {request.get("type")}')
-        return {'ok': True, 'data': handler(request)}
+        data = handler(request)
+        if inspect.isawaitable(data):
+            data = await data
     except (ValueError, core.GatewayError, config.ConfigError) as e:
         return {'ok': False, 'error': str(e)}
+    return {'ok': True, 'data': data}
 
 
 async def serve(gateway: core.Gateway) -> Callable[[], Awaitable[None]]:
@@ -85,29 +100,45 @@ async def serve(gateway: core.Gateway) -> Callable[[], Awaitable[None]]:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.unlink(missing_ok=True)
     table = handlers(gateway)
+    connections: set[asyncio.Task[None]] = set()
 
     async def connection(
         reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
-        with contextlib.closing(writer):
-            while line := await reader.readline():
-                response = _respond(table, line)
-                writer.write(json.dumps(response).encode() + b'\n')
-                await writer.drain()
+        task = asyncio.current_task()
+        assert task is not None
+        connections.add(task)
+        try:
+            with contextlib.closing(writer):
+                while line := await reader.readline():
+                    response = await _respond(table, line)
+                    writer.write(json.dumps(response).encode() + b'\n')
+                    await writer.drain()
+        except ConnectionError:
+            pass  # The client left, eg. a CLI that stopped waiting.
+        finally:
+            connections.discard(task)
 
     server = await asyncio.start_unix_server(connection, path)
     path.chmod(0o600)
 
     async def stop() -> None:
         server.close()
+        # A request may be waiting on a run that will now never start, and
+        # wait_closed waits for every connection.
+        for task in list(connections):
+            task.cancel()
         await server.wait_closed()
         path.unlink(missing_ok=True)
 
     return stop
 
 
-def send(record: Mapping[str, object], timeout: float = 10.0) -> object:
-    """Send one request to the running gateway and return its data."""
+def send(record: Mapping[str, object], timeout: float | None = 10.0) -> object:
+    """
+    Send one request to the running gateway and return its data; `timeout`
+    None waits as long as the request does (eg. on a run).
+    """
     buffer = b''
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
         sock.settimeout(timeout)
