@@ -2,9 +2,9 @@
 Starting jobs: building their requests, and running their collectors first.
 
 Cron, file watches, repeats, and manual triggers all start a job the same
-way. A job with a collector only runs if the collector finds something, and
-only one collection or run per claw and job happens at a time, so the same
-input is never handed over twice.
+way. A job with a collector only runs if the collector finds something
+(unless its `skip_empty` is false), and only one collection or run per claw
+and job happens at a time, so the same input is never handed over twice.
 """
 
 import asyncio
@@ -14,6 +14,8 @@ import logging
 from collections.abc import Callable
 
 from .. import collectors
+from .. import paths
+from ..collectors import changes
 from . import config
 
 log = logging.getLogger(__name__)
@@ -31,6 +33,9 @@ class Request:
     trigger: str
     # The job that started the unit of work; its later runs inherit it.
     job: str | None = None
+    # The bakery checkout's HEAD when the collector gathered the input;
+    # otherwise the run records the HEAD it starts on.
+    bakery_commit: str | None = None
 
 
 def stamp() -> str:
@@ -122,6 +127,9 @@ class Jobs:
         collector = collectors.COLLECTORS[job.collector]
         name = f'{claw.name}/{job.name}'
         try:
+            # Before collecting: a commit landing meanwhile is fed again next
+            # time, rather than never.
+            commit = await asyncio.to_thread(changes.head, paths.repo())
             collection = await asyncio.to_thread(collector, claw)
         except Exception as e:
             log.exception('collecting for %s failed', name)
@@ -131,7 +139,11 @@ class Jobs:
             self.notify(
                 f'{name} collection problems:\n' + '\n'.join(collection.errors)
             )
+        request = dataclasses.replace(request, bakery_commit=commit)
         if collection.text is None:
+            if not job.skip_empty:
+                self.submit(request)
+                return
             log.info('%s: nothing new', name)
             if manual:
                 self.notify(f'{name}: nothing new')

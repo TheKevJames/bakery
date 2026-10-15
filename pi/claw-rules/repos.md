@@ -4,6 +4,9 @@
   `git clone https://github.com/<owner>/<repo> "$BAKERY_MEMORY_DIR/clones/<owner>/<repo>"`.
   This includes `TheKevJames/bakery`: the copy your tools run from may hold
   the operator's unmerged work, so it is not evidence of what is on GitHub.
+  The one exception: a commit named in a `<changes>` feed is what you run
+  on, so read it, and only read it, in that copy: `git -C <checkout> show
+  <sha>`.
 - Reuse a clone next time. Before every use, bring it up to date and read
   the default branch as it is on GitHub, never a stale local branch:
   `git fetch && git checkout --detach origin/HEAD`.

@@ -74,6 +74,7 @@ def test_default_jobs_apply_to_every_claw(tmp_path: pathlib.Path) -> None:
 
     dream = loaded.claw('plain').job('dream')
     assert (dream.shared, dream.prompt) == (True, '/dream')
+    assert (dream.collector, dream.skip_empty) == ('changes', False)
     own = loaded.claw('own')
     assert [j.name for j in own.jobs] == ['dream', 'daily']
     assert (own.job('daily').model, own.job('daily').shared) == ('m', False)
@@ -118,6 +119,11 @@ def test_default_jobs_apply_to_every_claw(tmp_path: pathlib.Path) -> None:
             'thinking = "extreme"',
             'thinking: must be one of',
         ),
+        (
+            '[[job]]\nname = "x"\ncron = "* * * * *"\nprompt = "p"\n'
+            'skip_empty = false',
+            'skip_empty: needs a collector',
+        ),
     ],
 )
 def test_invalid_config_is_rejected(
@@ -147,10 +153,11 @@ def test_job_queue_options(tmp_path: pathlib.Path) -> None:
 
     job = config.load(claws).claw('a').job('q')
 
-    assert (job.repeat, job.watch, job.debounce_seconds) == (
+    assert (job.repeat, job.watch, job.debounce_seconds, job.skip_empty) == (
         True,
         pathlib.Path.home() / 'tasks',
         config.DEFAULT_DEBOUNCE_SECONDS,
+        True,
     )
 
 
