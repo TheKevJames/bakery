@@ -152,11 +152,20 @@ Curation:
   thinking, `silent_ok`). It distills recent
   daily notes into `MEMORY.md` and never promotes `external` notes, which
   stay in the daily notes as evidence; its report lists what it held back.
-  It also leaves out volatile references (task ids, line numbers, counts),
-  promotes a rule only from the operator or two separate occasions (routing
-  and scope rules only from the operator), dates facts about the outside
-  world, and keeps `MEMORY.md` under about 10k characters, half its cap.
-  These rules are in the prompt: a tool cannot judge text.
+- **Memory rules** (`pi/claw-rules/memory.md`, in every claw's context, since
+  every run writes the notes a dream promotes): leave out volatile
+  references (task ids, line numbers, counts); promote a rule only from the
+  operator or two separate occasions (routing and scope rules only from the
+  operator); never keep sandbox or tool limits, which the operator changes
+  often (the sandbox's standing facts are in `pi/claw-rules/sandbox.md`,
+  beside the code that sets them); date facts about the outside world, and
+  move a date forward only after a recorded check; recheck or remove lines
+  dated more than 14 days ago; let a later `operator` note win over earlier
+  `self` ones; remove a line something may have made wrong when it cannot
+  be verified; keep `MEMORY.md` under about 10k characters, half its cap.
+  `MEMORY.md` is a cache of what is still true: a missing fact is found
+  again, a false one is believed. These rules are in prompts, since a tool
+  cannot judge text.
 - **Commits**: after every run the gateway commits the claw's state dir
   (`<work_key>: <status>`), and nothing else: runs of different claws
   overlap, so a run's commit holds exactly its own claw's changes, and every
