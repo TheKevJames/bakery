@@ -9,6 +9,8 @@ import threading
 import zipfile
 from collections.abc import Generator
 
+from . import servers
+
 
 @dataclasses.dataclass
 class FakeGitHub:
@@ -82,7 +84,7 @@ def _handler(fake: FakeGitHub) -> type:
 def serve() -> Generator[FakeGitHub]:
     fake = FakeGitHub()
     fake.released.set()
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), _handler(fake))
+    server = servers.LocalServer(('127.0.0.1', 0), _handler(fake))
     fake.url = f'http://127.0.0.1:{server.server_port}'
     thread = threading.Thread(
         target=server.serve_forever, args=(0.01,), daemon=True
