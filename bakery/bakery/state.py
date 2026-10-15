@@ -9,6 +9,7 @@ claw's home and temp dirs, and the gateway's runtime files are ignored.
 import importlib.resources
 import pathlib
 import subprocess
+import threading
 
 from . import paths
 
@@ -20,6 +21,11 @@ GITIGNORE = """\
 /*/home/
 /*/tmp/
 """
+
+# git allows one writer per index (.git/index.lock), and the gateway commits
+# from worker threads as runs finish, often at the same moment. Reentrant so
+# that multi-step operations can hold it across their nested git() calls.
+_LOCK = threading.RLock()
 
 
 def root() -> pathlib.Path:
@@ -33,12 +39,13 @@ def operator_file() -> pathlib.Path:
 
 
 def git(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ('git', '-C', str(root()), *args),
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    with _LOCK:
+        return subprocess.run(
+            ('git', '-C', str(root()), *args),
+            check=True,
+            capture_output=True,
+            text=True,
+        )
 
 
 def commit(message: str, *owned: str) -> str | None:
@@ -50,39 +57,47 @@ def commit(message: str, *owned: str) -> str | None:
     """
     if not owned:
         raise ValueError('commit needs at least one path')
-    git('add', '--all', '--', *owned)
-    if not git('status', '--porcelain', '--', *owned).stdout.strip():
-        return None
-    # With paths, commit records only them, whatever else is staged.
-    git('commit', '--quiet', '--message', message, '--', *owned)
-    return git('rev-parse', 'HEAD').stdout.strip()
+    with _LOCK:
+        git('add', '--all', '--', *owned)
+        if not git('status', '--porcelain', '--', *owned).stdout.strip():
+            return None
+        # With paths, commit records only them, whatever else is staged.
+        git('commit', '--quiet', '--message', message, '--', *owned)
+        return git('rev-parse', 'HEAD').stdout.strip()
 
 
 def init() -> None:
     """Create the state repo and seed shared files; safe to re-run."""
     base = root()
-    (base / SHARED).mkdir(parents=True, exist_ok=True)
-    if not (base / '.git').is_dir():
-        git('init', '--quiet')
-        # Commits are made unattended by the gateway, where a signing prompt
-        # (eg. gpg pinentry) would hang forever. A fixed identity also marks
-        # them as automated in the log.
-        git('config', 'commit.gpgsign', 'false')
-        git('config', 'user.name', 'bakery')
-        git('config', 'user.email', 'bakery@localhost')
-    seeded: list[pathlib.Path] = []
-    gitignore = base / '.gitignore'
-    lines = gitignore.read_text().splitlines() if gitignore.exists() else []
-    missing = [line for line in GITIGNORE.splitlines() if line not in lines]
-    if missing:
-        gitignore.write_text(''.join(f'{line}\n' for line in lines + missing))
-        seeded.append(gitignore)
-    if not operator_file().exists():
-        template = importlib.resources.files('bakery') / 'templates'
-        operator_file().write_text((template / 'OPERATOR.md').read_text())
-        seeded.append(operator_file())
-    if seeded:
-        commit(
-            'chore: initialize claw state',
-            *(str(path.relative_to(base)) for path in seeded),
+    with _LOCK:
+        (base / SHARED).mkdir(parents=True, exist_ok=True)
+        if not (base / '.git').is_dir():
+            git('init', '--quiet')
+            # Commits are made unattended by the gateway, where a signing
+            # prompt (eg. gpg pinentry) would hang forever. A fixed identity
+            # also marks them as automated in the log.
+            git('config', 'commit.gpgsign', 'false')
+            git('config', 'user.name', 'bakery')
+            git('config', 'user.email', 'bakery@localhost')
+        seeded: list[pathlib.Path] = []
+        gitignore = base / '.gitignore'
+        lines = (
+            gitignore.read_text().splitlines() if gitignore.exists() else []
         )
+        missing = [
+            line for line in GITIGNORE.splitlines() if line not in lines
+        ]
+        if missing:
+            gitignore.write_text(
+                ''.join(f'{line}\n' for line in lines + missing)
+            )
+            seeded.append(gitignore)
+        if not operator_file().exists():
+            template = importlib.resources.files('bakery') / 'templates'
+            operator_file().write_text((template / 'OPERATOR.md').read_text())
+            seeded.append(operator_file())
+        if seeded:
+            commit(
+                'chore: initialize claw state',
+                *(str(path.relative_to(base)) for path in seeded),
+            )
