@@ -81,8 +81,10 @@ class Job:
     # Overrides for this job's units of work.
     model: str | None
     thinking: str | None
-    # A bakery.collectors name: gathers input first; nothing found, no run.
+    # A bakery.collectors name: gathers input first; nothing found, no run,
+    # unless skip_empty is false (then the job's prompt runs on its own).
     collector: str | None
+    skip_empty: bool
     # After a run settles, start the next (until the collector finds
     # nothing): for working through a queue.
     repeat: bool
@@ -208,6 +210,14 @@ def _collector(table: toml.Table) -> str | None:
     return name
 
 
+def _skip_empty(table: toml.Table) -> bool:
+    if not table.optional('skip_empty'):
+        return True
+    if not table.optional('collector'):
+        raise ConfigError(f'{table.where}.skip_empty: needs a collector')
+    return table.boolean('skip_empty')
+
+
 def _job(table: toml.Table, names: set[str], shared: set[str]) -> Job:
     name = table.string('name')
     if not NAME_RE.fullmatch(name) or name in names:
@@ -235,6 +245,7 @@ def _job(table: toml.Table, names: set[str], shared: set[str]) -> Job:
             else None
         ),
         collector=_collector(table),
+        skip_empty=_skip_empty(table),
         repeat=table.boolean('repeat') if table.optional('repeat') else False,
         watch=(
             toml.expand(table.string('watch'), pathlib.Path.home())

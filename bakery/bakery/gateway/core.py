@@ -13,14 +13,18 @@ import dataclasses
 import datetime
 import logging
 import pathlib
+import subprocess
 import zoneinfo
 
+from .. import paths
 from .. import state
+from ..collectors import changes
 from . import channel as channel_
 from . import config
 from . import jobs
 from . import ledger
 from . import pool
+from . import prompts
 from . import rpc
 from . import runner
 from . import scheduler
@@ -213,9 +217,10 @@ class Gateway:
         budget = self._budget(claw)
         job_name = request.job or self.runs.last_job(request.work_key)
         job = next((j for j in claw.jobs if j.name == job_name), None)
+        commit = request.bakery_commit or await self._head()
         info = channel_.RunInfo(
             run_id=self.runs.start(
-                claw.name, request.work_key, request.trigger, job_name
+                claw.name, request.work_key, request.trigger, job_name, commit
             ),
             claw=claw.name,
             work_key=request.work_key,
@@ -238,8 +243,9 @@ class Gateway:
             if active.abort is not None:
                 runner.request_abort(proc, *active.abort)
             await self.channel.run_started(info)
+            prompt = await asyncio.to_thread(prompts.expand, request.prompt)
             await runner.execute(
-                proc, info, request.prompt, budget, self.channel, self.runs
+                proc, info, prompt, budget, self.channel, self.runs
             )
         except Exception as e:
             log.exception('run %s failed', request.work_key)
@@ -248,6 +254,15 @@ class Gateway:
             await self._finish(info)
             if info.status == ledger.Status.settled:
                 self._repeat(claw, job, request)
+
+    @staticmethod
+    async def _head() -> str | None:
+        """The bakery checkout's HEAD, for the ledger; never stops a run."""
+        try:
+            return await asyncio.to_thread(changes.head, paths.repo())
+        except (subprocess.CalledProcessError, paths.PathError):
+            log.exception('cannot read the bakery checkout HEAD')
+            return None
 
     def _repeat(
         self, claw: config.Claw, job: config.Job | None, request: Request

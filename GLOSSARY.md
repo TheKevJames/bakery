@@ -105,7 +105,7 @@ A scheduled job with `silent_ok`, such as a claw's dream.
 
 **Collector**:
 Deterministic code that gathers a job's input before its run. When it finds
-nothing, there is no run.
+nothing, there is no run, unless the job runs anyway (`skip_empty = false`).
 
 **Candidate**:
 Something a collector found that may become a task.
@@ -161,7 +161,13 @@ Who a memory entry came from: the operator, the claw itself, or external text
 such as issues, web pages, and logs.
 
 **Dream**:
-A claw's nightly job that distills its daily notes into long-term memory.
+A claw's nightly job that distills its daily notes into long-term memory, and
+rechecks what the change feed may have made wrong.
+
+**Change feed**:
+The operator's commits to the bakery checkout the claws run from, since a
+claw's last dream, handed to that dream.
+_Avoid_: changelog
 
 **Flush**:
 The turn in which a claw nearing compaction saves anything durable to its

@@ -27,7 +27,9 @@ CREATE TABLE IF NOT EXISTS runs (
     reason TEXT,
     cost_usd REAL NOT NULL DEFAULT 0,
     turns INTEGER NOT NULL DEFAULT 0,
-    job TEXT
+    job TEXT,
+    -- The bakery checkout's HEAD the run's input was gathered against.
+    bakery_commit TEXT
 );
 CREATE INDEX IF NOT EXISTS runs_work_key ON runs (work_key);
 CREATE INDEX IF NOT EXISTS runs_started_at ON runs (started_at);
@@ -61,20 +63,35 @@ class Ledger:
         columns = {
             row['name'] for row in self.db.execute('PRAGMA table_info(runs)')
         }
-        if 'job' not in columns:
-            self.db.execute('ALTER TABLE runs ADD COLUMN job TEXT')
+        for column in ('job', 'bakery_commit'):
+            if column not in columns:
+                self.db.execute(f'ALTER TABLE runs ADD COLUMN {column} TEXT')
 
     def close(self) -> None:
         self.db.close()
 
     def start(
-        self, claw: str, work_key: str, trigger: str, job: str | None
+        self,
+        claw: str,
+        work_key: str,
+        trigger: str,
+        job: str | None,
+        bakery_commit: str | None = None,
     ) -> int:
         cursor = self.db.execute(
             'INSERT INTO runs'
-            ' (claw, work_key, trigger, started_at, status, job)'
-            ' VALUES (?, ?, ?, ?, ?, ?)',
-            (claw, work_key, trigger, time.time(), Status.running, job),
+            ' (claw, work_key, trigger, started_at, status, job,'
+            ' bakery_commit)'
+            ' VALUES (?, ?, ?, ?, ?, ?, ?)',
+            (
+                claw,
+                work_key,
+                trigger,
+                time.time(),
+                Status.running,
+                job,
+                bakery_commit,
+            ),
         )
         assert cursor.lastrowid is not None
         return cursor.lastrowid
@@ -129,6 +146,17 @@ class Ledger:
             (work_key,),
         ).fetchone()
         return None if row is None else str(row['job'])
+
+    def last_settled_commit(self, claw: str, job: str) -> str | None:
+        """The bakery commit of the latest settled run of `claw`'s `job`."""
+        row = self.db.execute(
+            'SELECT bakery_commit FROM runs'
+            ' WHERE claw = ? AND job = ? AND status = ?'
+            ' AND bakery_commit IS NOT NULL'
+            ' ORDER BY started_at DESC, id DESC LIMIT 1',
+            (claw, job, Status.settled),
+        ).fetchone()
+        return None if row is None else str(row['bakery_commit'])
 
     def last_settled(self, claw: str, job: str) -> float | None:
         """When the latest settled run of `claw`'s `job` started."""

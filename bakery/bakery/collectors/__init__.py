@@ -1,8 +1,9 @@
 """
 Collectors: deterministic Python that gathers a job's input before its run.
 
-A job naming a `collector` only runs when the collector finds something; its
-text is appended to the job's prompt. Collectors run in a worker thread.
+A job naming a `collector` only runs when the collector finds something,
+unless its `skip_empty` is false; its text is appended to the job's prompt.
+Collectors run in a worker thread.
 """
 
 from collections.abc import Callable
@@ -10,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from . import baker
 from . import base
+from . import changes
 from . import scout
 from . import scout_repos
 from . import triage
@@ -25,6 +27,7 @@ Check = Callable[['config.Claw'], list[str]]
 
 COLLECTORS: dict[str, Collector] = {
     'baker': baker.collect,
+    'changes': changes.collect,
     'scout': scout.collect,
     'triage': triage.collect,
     'triage-recheck': triage.recheck,

@@ -99,6 +99,10 @@ prompt = "/dream"  # pi/claw-prompts/dream.md
 model = "anthropic/claude-opus-5-5"
 thinking = "medium"
 silent_ok = true
+# The operator's bakery commits since the last dream, to recheck memory
+# against; the dream runs even when there are none.
+collector = "changes"
+skip_empty = false
 
 # A claw's own jobs, in its claw.toml:
 #

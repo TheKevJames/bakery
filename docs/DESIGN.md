@@ -152,6 +152,15 @@ Curation:
   thinking, `silent_ok`). It distills recent
   daily notes into `MEMORY.md` and never promotes `external` notes, which
   stay in the daily notes as evidence; its report lists what it held back.
+- **Change feed**: the dream's collector (`changes`,
+  `bakery/bakery/collectors/changes.py`) hands it the operator's commits to
+  the bakery checkout the claws run from (its HEAD, unmerged work included;
+  bots' commits left out), since the HEAD the claw's last settled dream
+  covered (its `bakery_commit`), or from the last 14 days when there is none
+  or it was rewritten away. The dream rechecks every memory line those
+  commits could have made wrong (eg. a widened sandbox, a removed tool, a
+  new scout exclude), reading them read-only in that checkout, and fixes or
+  removes it. A dream that does not settle leaves the base where it was.
 - **Memory rules** (`pi/claw-rules/memory.md`, in every claw's context, since
   every run writes the notes a dream promotes): leave out volatile
   references (task ids, line numbers, counts); promote a rule only from the
@@ -245,13 +254,22 @@ transcripts.
 - **collectors**: a job may name a `collector` (`bakery/bakery/collectors/`),
   deterministic Python run in a worker thread before the job's run. Its
   output is appended to the job's prompt; if it finds nothing, there is no
-  run. One collection or run per claw and job at a time, so the same
+  run, unless the job sets `skip_empty = false` (eg. the dream, which runs
+  every night, with or without a change feed). One collection or run per
+  claw and job at a time, so the same
   candidates are never handed over twice (a manual trigger while one is
   under way is refused). `bakery status` shows collections in progress, and
   a manual trigger says when it is collecting. Problems are posted to
   `#bakery`. A collector may also name the run's unit of work (eg. one per
   task, `triage/task-151`), so a task keeps one unit of work.
   Job starting lives in `bakery/bakery/gateway/jobs.py`.
+- **templates**: a run's opening prompt that names a claw template
+  (`/dream`, from `pi/claw-prompts/`) is expanded by the gateway, which
+  appends any text after it (a collector's output, the operator's words)
+  verbatim; pi would shell-parse that text and drop it, since the templates
+  take no arguments. This covers job prompts, `bakery trigger --prompt`, and
+  Discord messages that start a run; replies steered into a running unit are
+  left to pi (`bakery/bakery/gateway/prompts.py`).
 - **repeat**: a job with `repeat = true` starts again after each settled run
   (not after replies or resumes), until its collector finds nothing, the
   claw is paused, or its budget runs out; for working through a queue. If
@@ -289,7 +307,9 @@ Configurable in `claw.toml`; defaults:
 ### Limits and accounting
 
 A SQLite run ledger at `$XDG_STATE_HOME/claws/_gateway/runs.db`, one row
-per run. Defaults, all configurable per claw:
+per run, including the bakery checkout's HEAD its input was gathered
+against (`bakery_commit`: at collection for jobs with a collector, else when
+the run starts). Defaults, all configurable per claw:
 $5, 30 minutes, and 50 turns per run; $20 per claw per day; $50 per day
 globally. Daily budgets reset at midnight in the gateway timezone.
 
