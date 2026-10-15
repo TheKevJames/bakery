@@ -4,9 +4,9 @@ task list.
 
 Repos are every one the claws' GitHub user can reach (see scout_repos). For
 each: CI failures and warnings on the default branch (warnings only from runs
-whose workflow file is still current), open issues and non-bot pull
-requests, and TODO/FIXME comments on the default branch (fetched into
-scout's own clone).
+whose workflow file is still current, and not Node deprecations raised in
+actions), open issues and non-bot pull requests, and TODO/FIXME comments on
+the default branch (fetched into scout's own clone).
 A candidate is new unless a task already has its link, which is
 deterministic: the link is the task's lineage.
 """
@@ -53,6 +53,13 @@ WARNING_RE = re.compile(
     r'|::warning'
 )
 LOG_TIMESTAMP_RE = re.compile(r'^\d{4}-\d\d-\d\dT[\d:.]+Z\s*')
+STEP_PREFIX = '##[group]Run '
+# `uses: owner/repo[/path]@ref`; local (`./…`) actions are the repo's own.
+ACTION_STEP_RE = re.compile(r'^##\[group\]Run [\w.-]+/[\w./-]+@\S+$')
+# Only actions have post steps, and the log does not name theirs.
+POST_STEP = 'Post job cleanup.'
+NODE_PID_RE = re.compile(r'^\(node:\d+\) ')
+NODE_DEPRECATION_RE = re.compile(r'^\[DEP\d+\] ')
 WARNINGS_PER_REPO = 20
 BODY_CHARS = 1500
 CONTEXT_LINES = 3
@@ -140,13 +147,33 @@ def _current(repo: scout_repos.Repo, ref: str, run: dict[str, Any]) -> bool:
     return not changed.strip()
 
 
+def _job_warnings(job_log: str) -> Iterator[str]:
+    """
+    Warnings in a job's log, minus Node deprecations raised in actions.
+
+    An action ships its dependencies bundled outside node_modules, so Node
+    reports their deprecations, which only the action's maintainers can fix.
+    Node prefixes its warnings with a pid, which differs every run.
+    """
+    in_action = False
+    for raw in job_log.splitlines():
+        line = LOG_TIMESTAMP_RE.sub('', raw).strip()
+        if line.startswith(STEP_PREFIX) or line == POST_STEP:
+            in_action = line == POST_STEP or bool(ACTION_STEP_RE.match(line))
+        if not WARNING_RE.search(line):
+            continue
+        message = NODE_PID_RE.sub('', line)
+        if in_action and NODE_DEPRECATION_RE.match(message):
+            continue
+        yield message
+
+
 def _log_warnings(logs: bytes) -> Iterator[str]:
     with zipfile.ZipFile(io.BytesIO(logs)) as archive:
         for member in sorted(archive.namelist()):
-            lines = archive.read(member).decode(errors='replace')
-            for line in lines.splitlines():
-                if WARNING_RE.search(line):
-                    yield LOG_TIMESTAMP_RE.sub('', line).strip()
+            yield from _job_warnings(
+                archive.read(member).decode(errors='replace')
+            )
 
 
 def _warnings(

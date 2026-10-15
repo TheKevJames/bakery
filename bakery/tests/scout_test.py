@@ -116,9 +116,23 @@ def serve_repo(fake: fake_github.FakeGitHub, initial: str) -> None:
     fake.authorized[f'{base}/actions/runs/8/logs'] = COLLECTOR_TOKEN
     fake.routes['/blob/logs.zip'] = fake_github.logs_zip(
         {
+            # Node deprecations in actions and their post steps are the
+            # actions' bundled dependencies'; the repo's own steps' are
+            # deduplicated across pids.
             '1_test.txt': (
-                '2026-10-01T00:00:00.1Z DeprecationWarning: old api\n'
+                '2026-10-01T00:00:00.1Z ##[group]Run actions/checkout@v9\n'
+                '2026-10-01T00:00:00.2Z (node:11) [DEP0005]'
+                ' DeprecationWarning: Buffer() is deprecated\n'
+                '2026-10-01T00:00:00.3Z ##[group]Run npm test\n'
+                '2026-10-01T00:00:00.4Z DeprecationWarning: old api\n'
                 '2026-10-01T00:00:01.2Z DeprecationWarning: old api\n'
+                '2026-10-01T00:00:01.3Z (node:22) [DEP0040]'
+                ' DeprecationWarning: punycode\n'
+                '2026-10-01T00:00:01.4Z (node:33) [DEP0040]'
+                ' DeprecationWarning: punycode\n'
+                '2026-10-01T00:00:01.5Z Post job cleanup.\n'
+                '2026-10-01T00:00:01.6Z (node:44) [DEP0169]'
+                ' DeprecationWarning: url.parse()\n'
                 '2026-10-01T00:00:02.3Z all good\n'
             )
         }
@@ -232,6 +246,7 @@ def test_collects_new_candidates_in_priority_order(
     collection = scout.collect(claw)
 
     warning = scout.fingerprint('DeprecationWarning: old api')
+    node = scout.fingerprint('[DEP0040] DeprecationWarning: punycode')
     todo = scout.fingerprint('    pass  # TODO: handle errors')
 
     found = candidates(collection.text)
@@ -243,6 +258,7 @@ def test_collects_new_candidates_in_priority_order(
         ('pr', f'{REPO}/issues/3'),
         ('issue', f'{REPO}/issues/1'),
         ('warning', f'{REPO}/actions/workflows/w2.yml?warning={warning}'),
+        ('warning', f'{REPO}/actions/workflows/w2.yml?warning={node}'),
         ('todo', f'{REPO}/blob/main/app.py?todo={todo}#L2'),
     ]
     assert 'test: pytest' in found[0]['detail']
@@ -276,7 +292,7 @@ def test_caps_candidates_per_run(
     text = scout.collect(claw).text
 
     assert text is not None
-    assert '<candidates count="2" deferred="5">' in text
+    assert '<candidates count="2" deferred="6">' in text
     assert [c['kind'] for c in candidates(text)] == ['ci', 'pr']
 
 
