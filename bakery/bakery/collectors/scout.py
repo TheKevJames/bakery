@@ -6,7 +6,7 @@ Repos are every one the claws' GitHub user can reach (see scout_repos). For
 each: CI failures and warnings on the default branch (warnings only from runs
 whose workflow file is still current, and not Node deprecations raised in
 actions), open issues and non-bot pull requests, and TODO/FIXME comments on
-the default branch (fetched into scout's own clone).
+the default branch (fetched into scout's own clone; see scout_todos).
 A candidate is new unless a task already has its link, which is
 deterministic: the link is the task's lineage.
 """
@@ -34,6 +34,7 @@ from .. import github
 from .. import secrets
 from . import base
 from . import scout_repos
+from . import scout_todos
 from . import tasks
 from . import wontfix
 
@@ -62,7 +63,6 @@ NODE_PID_RE = re.compile(r'^\(node:\d+\) ')
 NODE_DEPRECATION_RE = re.compile(r'^\[DEP\d+\] ')
 WARNINGS_PER_REPO = 20
 BODY_CHARS = 1500
-CONTEXT_LINES = 3
 WORKERS = 8
 
 
@@ -138,10 +138,10 @@ def _current(repo: scout_repos.Repo, ref: str, run: dict[str, Any]) -> bool:
     """Whether the run's workflow file is unchanged on the branch since."""
     sha = run['head_sha']
     try:
-        _git(repo, 'cat-file', '-e', f'{sha}^{{commit}}')
+        scout_repos.git(repo, 'cat-file', '-e', f'{sha}^{{commit}}')
     except subprocess.CalledProcessError:
         return False  # history was rewritten past the run
-    changed = _git(
+    changed = scout_repos.git(
         repo, 'rev-list', '-n', '1', f'{sha}..{ref}', '--', run['path']
     )
     return not changed.strip()
@@ -236,18 +236,6 @@ def _issues(
         )
 
 
-def _git(
-    repo: scout_repos.Repo, *args: str, env: dict[str, str] | None = None
-) -> str:
-    return subprocess.run(
-        ('git', '-C', str(repo.clone), *args),
-        capture_output=True,
-        text=True,
-        check=True,
-        env=env,
-    ).stdout
-
-
 def _fetch(repo: scout_repos.Repo, branch: str, token: str) -> str:
     """
     Fetch the default branch into scout's clone; returns its ref. The clone is
@@ -273,7 +261,7 @@ def _fetch(repo: scout_repos.Repo, branch: str, token: str) -> str:
             env=env,
         )  # fmt: skip
     ref = f'refs/remotes/origin/{branch}'
-    _git(
+    scout_repos.git(
         repo,
         'fetch',
         '--quiet',
@@ -282,43 +270,24 @@ def _fetch(repo: scout_repos.Repo, branch: str, token: str) -> str:
         f'+refs/heads/{branch}:{ref}',
         env=env,
     )
-    _git(repo, 'remote', 'set-head', 'origin', branch)
+    scout_repos.git(repo, 'remote', 'set-head', 'origin', branch)
     return ref
 
 
 def _todos(
     repo: scout_repos.Repo, branch: str, ref: str
 ) -> Iterator[Candidate]:
-    pathspecs = ['.', *(f':(exclude,glob){p}' for p in repo.exclude)]
-    try:
-        out = _git(
-            repo, 'grep', '-n', '-I', '-w', '-E', 'TODO|FIXME', ref, '--',
-            *pathspecs,
-        )  # fmt: skip
-    except subprocess.CalledProcessError as e:
-        if e.returncode == 1:  # no matches
-            return
-        raise
-    files: dict[str, list[str]] = {}
-    for line in out.splitlines():
-        _, path, number, text = line.split(':', 3)
-        if path not in files:
-            files[path] = _git(repo, 'show', f'{ref}:{path}').splitlines()
-        lineno = int(number)
-        lines = files[path]
-        context = lines[
-            max(0, lineno - 1 - CONTEXT_LINES) : lineno + CONTEXT_LINES
-        ]
-        quoted = urllib.parse.quote(path)
+    for todo in scout_todos.find(repo, ref):
+        quoted = urllib.parse.quote(todo.path)
         yield Candidate(
             kind='todo',
             repo=repo.name,
             link=(
                 f'https://github.com/{repo.name}/blob/{branch}/{quoted}'
-                f'?todo={fingerprint(text)}#L{lineno}'
+                f'?todo={fingerprint(todo.text)}#L{todo.lineno}'
             ),
-            title=_clip(text, 200),
-            detail=f'{path}:{lineno}\n' + '\n'.join(context),
+            title=_clip(todo.text, 200),
+            detail=f'{todo.path}:{todo.lineno}\n' + '\n'.join(todo.context),
         )
 
 
