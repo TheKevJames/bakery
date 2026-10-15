@@ -191,7 +191,8 @@ Curation:
 - **Commits**: after every run the gateway commits the claw's state dir
   (`<work_key>: <status>`), and nothing else: runs of different claws
   overlap, so a run's commit holds exactly its own claw's changes, and every
-  memory change can be reviewed and reverted.
+  memory change can be reviewed and reverted. Commits run one at a time, as
+  git allows one writer per index.
 
 Identity changes need the operator's approval:
 
