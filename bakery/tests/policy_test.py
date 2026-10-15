@@ -16,6 +16,7 @@ from bakery.gateway import cli as gateway_cli
 from bakery.gateway import core
 from testing import gateway as testing_gateway
 from testing import harness
+from testing import servers
 
 
 def run_calls(
@@ -230,7 +231,7 @@ def test_web_fetch_makes_pages_readable_in_the_sandbox(
     handler = functools.partial(
         http.server.SimpleHTTPRequestHandler, directory=str(site)
     )
-    with http.server.ThreadingHTTPServer(('127.0.0.1', 0), handler) as server:
+    with servers.LocalServer(('127.0.0.1', 0), handler) as server:
         threading.Thread(target=server.serve_forever, daemon=True).start()
         base = f'http://localhost:{server.server_port}'
         calls = [
