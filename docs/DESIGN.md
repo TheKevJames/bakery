@@ -657,7 +657,12 @@ Finds things in the operator's repos that belong on the task list. Profile:
     the current failure streak, so a fresh failure after a fix is new.
   - **Warnings**: `DeprecationWarning`, `FutureWarning`,
     `PendingDeprecationWarning`, and `::warning` lines in the logs of each
-    workflow's latest passing run, deduplicated, at most 20 per repo. A run
+    workflow's latest passing run, deduplicated, at most 20 per repo. Node
+    deprecations (`(node:<pid>) [DEP…]`) printed inside a third-party
+    action's step or a post step are dropped: they come from the action's
+    bundled dependencies, which Node does not treat as `node_modules`, so
+    only its maintainers can fix them. Node's pid prefix is stripped before
+    fingerprinting, as it differs every run. A run
     is skipped if its workflow file has changed on the default branch since
     its commit (or its commit is gone), so a fix that has not run yet does
     not resurface its old warnings. The detail names the run, its commit, and
