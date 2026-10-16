@@ -17,23 +17,6 @@
             ],
             "versioningTemplate": "{{#if versioning}}{{versioning}}{{else}}semver{{/if}}",
         },
-        {
-            "description": "Update the task CLI installed in CI",
-            "managerFilePatterns": [
-                "/^\\.github/workflows/ci\\.yml$/",
-            ],
-            "customType": "regex",
-            // Only the version is captured: extractVersion applies to the
-            // tags, never to currentValue, so `v` stays outside.
-            "matchStrings": [
-                "git\\+https://github\\.com/TheKevJames/task@v(?<currentValue>[^\"\\s]+)",
-            ],
-            "datasourceTemplate": "github-tags",
-            "packageNameTemplate": "TheKevJames/task",
-            "depNameTemplate": "task",
-            "extractVersionTemplate": "^v(?<version>.+)$",
-            "versioningTemplate": "semver",
-        },
     ],
     "packageRules": [
         {
