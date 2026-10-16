@@ -604,7 +604,7 @@ replace the former skills in every profile.
 ## Shared task list
 
 Claws share the operator's existing `task` tool
-(`~/src/personal/tools/task`, data in `$TASK_FOLDER`) with the operator.
+(`~/src/personal/task`, data in `$TASK_FOLDER`) with the operator.
 What claws rely on:
 
 - tasks live in namespaces, one directory each: `$TASK_FOLDER/<ns>/tasks.db`

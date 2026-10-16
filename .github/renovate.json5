@@ -24,14 +24,14 @@
             ],
             "customType": "regex",
             // Only the version is captured: extractVersion applies to the
-            // tags, never to currentValue, so `task-` stays outside.
+            // tags, never to currentValue, so `v` stays outside.
             "matchStrings": [
-                "git\\+https://github\\.com/TheKevJames/tools@task-(?<currentValue>[^#\"\\s]+)#subdirectory=task",
+                "git\\+https://github\\.com/TheKevJames/task@v(?<currentValue>[^\"\\s]+)",
             ],
             "datasourceTemplate": "github-tags",
-            "packageNameTemplate": "TheKevJames/tools",
+            "packageNameTemplate": "TheKevJames/task",
             "depNameTemplate": "task",
-            "extractVersionTemplate": "^task-(?<version>.+)$",
+            "extractVersionTemplate": "^v(?<version>.+)$",
             "versioningTemplate": "semver",
         },
     ],
