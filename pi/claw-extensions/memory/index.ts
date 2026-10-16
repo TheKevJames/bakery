@@ -15,6 +15,7 @@
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { createHash } from "node:crypto";
 import { Type } from "typebox";
+import { fileTask, notFiled, ref } from "../lib/file-task.ts";
 import * as store from "./store.ts";
 
 const DEFAULT_RESERVE_TOKENS = 16_384;
@@ -85,19 +86,7 @@ const memoryEdit = defineTool({
 // write it: proposals become tasks the operator applies by hand.
 const OPERATOR_TASK_TAG = "human";
 
-type Filed = { namespace: string; id: number };
-
-function ref(filed: Filed): string {
-  return `${filed.namespace}:${filed.id}`;
-}
-
 function proposeOperatorUpdate(pi: ExtensionAPI) {
-  async function task(args: string[], signal?: AbortSignal): Promise<string> {
-    const result = await pi.exec("task", args, { signal });
-    if (result.code !== 0) throw new Error(result.stderr.trim() || `task exited with ${result.code}`);
-    return result.stdout.trim();
-  }
-
   return defineTool({
     name: "propose_operator_update",
     label: "Propose OPERATOR.md Update",
@@ -115,20 +104,19 @@ function proposeOperatorUpdate(pi: ExtensionAPI) {
       if (updated.length > OPERATOR_MAX_CHARS) {
         throw new Error(`OPERATOR.md would be ${updated.length} characters; the limit is ${OPERATOR_MAX_CHARS}`);
       }
-      // The same proposal is the same task.
+      // The same proposal is the same lineage.
       const link = `operator-md:${createHash("sha256").update(updated).digest("hex").slice(0, 16)}`;
-      const filed = JSON.parse(await task(["list", "--json", "-f", `link=${link}`], signal)) as Filed[];
-      if (filed.length > 0) return text(`Already proposed as task #${ref(filed[0])}.`, { task: ref(filed[0]) });
       const description = `${params.reason}\n\nApply to ${file}:\n\n${store.describeEdits(params.edits)}`;
       const summary = `Update OPERATOR.md: ${params.reason.split("\n")[0]}`.slice(0, 120);
       const namespace = process.env.BAKERY_TASK_NAMESPACE;
       if (!namespace) throw new Error("BAKERY_TASK_NAMESPACE is not set");
-      await task(
-        ["add", "-n", namespace, "--tag", OPERATOR_TASK_TAG, "--link", link, "--description", description, "--", summary],
+      const filing = await fileTask(
+        pi,
+        ["-n", namespace, "--tag", OPERATOR_TASK_TAG, "--link", link, "--description", description, "--", summary],
         signal,
       );
-      const [added] = JSON.parse(await task(["list", "--json", "-f", `link=${link}`], signal)) as Filed[];
-      return text(`Filed as task #${ref(added)} for the operator to apply.`, { task: ref(added) });
+      if (!("filed" in filing)) return text(notFiled(filing), filing);
+      return text(`Filed as task #${ref(filing.filed)} for the operator to apply.`, { task: ref(filing.filed) });
     },
   });
 }

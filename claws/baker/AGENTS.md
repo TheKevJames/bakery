@@ -79,10 +79,10 @@ One task per gap, with `task_add` (it files into `bakery > human`):
 
 - `summary`: one line, at most ~80 characters, saying what to fix.
 - `link`: `baker:<type>/<slug>`, the slug lowercase-kebab and naming the
-  gap rather than one instance of it. Never file a link that is already on
-  an open task, in any section, or on a rejection; check the digest's
-  tasks (or `task list --json -f 'link~baker:'`) and your memory for the same
-  gap under another slug first. Rejections are permanent. Other tasks
+  gap rather than one instance of it. `task_add` refuses a link that is
+  already on an open task, in any section, or on a rejection, and says which;
+  check the digest's tasks (or `task list --json -f 'link~baker:'`) and your
+  memory for the same gap under another slug first. Rejections are permanent. Other tasks
   disappear once the operator marks them done; file again only if the gap is
   still there.
 - `priority`: high = broken, blocking, or a security concern, or a

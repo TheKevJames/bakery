@@ -45,8 +45,3 @@ def shown(address: str) -> dict[str, object]:
         raise TaskError(result.stderr.strip())
     task: dict[str, object] = json.loads(result.stdout)
     return task
-
-
-def lineage(link: str) -> str:
-    """A link without its fragment, since line anchors move."""
-    return link.split('#', 1)[0]

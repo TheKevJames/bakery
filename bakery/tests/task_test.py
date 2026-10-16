@@ -1,6 +1,8 @@
+import json
 import pathlib
 
 from bakery.gateway import core
+from bakery.task_list import wontfix
 from testing import gateway as testing_gateway
 from testing import harness
 from testing import tasks as testing_tasks
@@ -16,6 +18,9 @@ def test_task_claims_and_adds(
         '--owner', 'operator',
     )  # fmt: skip
     testing_tasks.task('add', "the operator's")
+    testing_tasks.task('add', '--link', 'https://x/gone', 'rejected')
+    wontfix.add('2', 'not ours')
+    testing_tasks.task('2', 'done')
     claws = testing_gateway.make_claws(
         root,
         {
@@ -39,6 +44,15 @@ def test_task_claims_and_adds(
             priority='high',
             size='small',
         ),
+        harness.call(
+            'task_add',
+            summary='again',
+            description='d',
+            link='BAKER:plumbing/x',
+        ),
+        harness.call(
+            'task_add', summary='no', description='d', link='https://x/gone#L1'
+        ),
         # The sandbox lets claws read every namespace, but write only theirs.
         harness.call('bash', command='task list -f namespace=default'),
         harness.call('bash', command='task 1 set --summary mine'),
@@ -57,8 +71,10 @@ def test_task_claims_and_adds(
     assert 'not claimed by triage' in results[2]
     assert '"owner": null' in results[3]
     assert '"id":3,' in results[4]
-    assert "1: the operator's" in results[5]
-    assert 'attempt to write a readonly database' in results[6]
+    assert 'open task #bakery:3 already has' in results[5]
+    assert 'the operator rejected' in results[6] and 'not ours' in results[6]
+    assert "1: the operator's" in results[7]
+    assert 'attempt to write a readonly database' in results[8]
     assert testing_tasks.show('1')['summary'] == "the operator's"
     final = testing_tasks.show('bakery:1')
     assert (final['owner'], final['tag'], final['description']) == (
@@ -66,6 +82,10 @@ def test_task_claims_and_adds(
         'build',
         'n',
     )
+    claws_tasks = testing_tasks.task(
+        'list', '--json', '-f', 'namespace=bakery'
+    )
+    assert len(json.loads(claws_tasks)) == 3
     added = testing_tasks.show('bakery:3')
     assert (added['tag'], added['priority'], added['size']) == (
         'human',

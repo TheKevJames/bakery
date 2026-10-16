@@ -155,7 +155,7 @@ def test_operator_updates_are_filed_for_the_operator(
     testing_gateway.run_gateway(claws, fake, scenario)
     results = fake_llm.tool_results()
     assert 'Filed as task #bakery:1' in results[0]
-    assert 'Already proposed as task #bakery:1' in results[1]
+    assert 'open task #bakery:1 already has' in results[1]
     assert 'text not found' in results[2]
     shown = testing_tasks.task('bakery:1', 'show')
     assert 'bakery > human' in shown

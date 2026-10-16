@@ -33,8 +33,8 @@ from typing import TypeVar
 
 from .. import github
 from .. import secrets
-from ..task_list import store
-from ..task_list import wontfix
+from ..task_list import filing
+from ..task_list import lineage
 from . import base
 from . import scout_logs
 from . import scout_repos
@@ -400,15 +400,6 @@ def _repo_candidates(
     return found, attempt.errors
 
 
-def tracked_links() -> set[str]:
-    """Lineages never to file again: open tasks' and rejections."""
-    return {
-        store.lineage(str(task['link']))
-        for task in store.listed()
-        if task.get('link')
-    } | set(wontfix.load())
-
-
 def render(chosen: list[Candidate], remaining: int, errors: list[str]) -> str:
     payload = [dataclasses.asdict(c) for c in chosen]
     parts = [
@@ -451,8 +442,8 @@ def collect(claw: 'config.Claw') -> base.Collection:
     token = secrets.get(base.GITHUB_TOKEN)
     gh = github.GitHub(settings.api, token)
     found, errors = _gather(gh, settings, token, claw.state_dir / 'clones')
-    tracked = tracked_links()
-    new = [c for c in found if store.lineage(c.link) not in tracked]
+    tracked = filing.tracked()
+    new = [c for c in found if lineage.of(c.link) not in tracked]
     new.sort(key=lambda c: KINDS.index(c.kind))
     chosen = new[: settings.max_candidates]
     log.info(

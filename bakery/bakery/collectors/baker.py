@@ -258,9 +258,9 @@ def _tasks() -> Section:
         f' {t["priority"]}/{t["size"]} {t["summary"]} ({t["link"]})'
         for t in store.listed('-f', f'link~{TASK_LINK_PREFIX}')
     ] + [
-        f'- [rejected] {r.summary} ({link})'
-        for link, r in sorted(wontfix.load().items())
-        if link.startswith(TASK_LINK_PREFIX)
+        f'- [rejected] {r.summary} ({r.link})'
+        for _, r in sorted(wontfix.load().items())
+        if r.link.startswith(TASK_LINK_PREFIX)
     ]
     return Section(
         'Your tasks (open, and rejected)',

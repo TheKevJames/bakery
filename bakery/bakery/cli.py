@@ -28,6 +28,7 @@ from . import paths
 from . import state
 from .gateway import cli as gateway_cli
 from .task_list import blocked
+from .task_list import filing
 from .task_list import wontfix
 
 WAIT_POLL_INTERVAL = 0.25
@@ -833,6 +834,7 @@ def build_parser() -> argparse.ArgumentParser:
     ).set_defaults(func=do_state_init)
 
     blocked.add_parsers(sub.add_parser)
+    filing.add_parsers(sub.add_parser)
     wontfix.add_parsers(sub.add_parser)
     gateway_cli.add_parsers(sub.add_parser)
 
@@ -841,7 +843,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     parser = build_parser()
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
+    if unknown:
+        # Only a command that passes arguments through takes unknown ones.
+        if not hasattr(args, 'task_args'):
+            parser.error(f'unrecognized arguments: {" ".join(unknown)}')
+        args.task_args = unknown
     handler: Callable[[argparse.Namespace], int] | None = getattr(
         args, 'func', None
     )

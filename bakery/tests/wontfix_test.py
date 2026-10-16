@@ -27,7 +27,7 @@ def fixture_tasks(
         ('-n', 'bakery', '--tag', 'wontfix', '--link', 'https://x/a?todo=f#L3',
          'a'),
         ('-n', 'bakery', '--tag', 'wontfix', 'no link'),
-        ('--link', 'https://x/b', 'mine'),
+        ('--link', 'https://x/B', 'mine'),
     ):  # fmt: skip
         testing_tasks.task('add', *args)
 
@@ -59,18 +59,19 @@ def test_rejections_are_recorded_by_lineage_and_committed(tasks: None) -> None:
             'reason': 'prose, not a todo',
             'summary': 'a',
         },
-        'https://x/b': {'date': today, 'reason': 'mine', 'summary': 'mine'},
+        'https://x/B': {'date': today, 'reason': 'mine', 'summary': 'mine'},
     }
     # Rejecting keeps the task: the operator closes it themself.
     assert len(json.loads(testing_tasks.task('list', '--json'))) == 3
-    assert 'https://x/b\n    mine\n    mine\n' in bakery('list').stdout
+    assert 'https://x/B\n    mine\n    mine\n' in bakery('list').stdout
 
-    assert bakery('rm', 'https://x/b').returncode == 0
-    assert 'https://x/b is not rejected' in bakery('rm', 'https://x/b').stderr
+    # Any link with the lineage unrejects it.
+    assert bakery('rm', 'https://x/b#L1').returncode == 0
+    assert 'https://x/B is not rejected' in bakery('rm', 'https://x/B').stderr
     assert set(wontfix.load()) == {'https://x/a?todo=f'}
     log = state.git('log', '--format=%s').stdout.splitlines()
     assert log[:3] == [
-        'wontfix: rm https://x/b',
-        'wontfix: add https://x/b',
+        'wontfix: rm https://x/B',
+        'wontfix: add https://x/B',
         'wontfix: add https://x/a?todo=f',
     ]
