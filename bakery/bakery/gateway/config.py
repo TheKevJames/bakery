@@ -21,7 +21,7 @@ import croniter
 
 from .. import collectors
 from .. import state
-from ..collectors import tasks
+from ..task_list import store
 from . import policy as policy_
 from . import toml
 
@@ -108,7 +108,7 @@ class Memory:
 
 @dataclasses.dataclass(frozen=True)
 class Tasks:
-    # The tag `task_add` files into, in tasks.NAMESPACE.
+    # The tag `task_add` files into, in store.NAMESPACE.
     tag: str
 
 
@@ -313,7 +313,7 @@ def _git(table: toml.Table) -> Git:
 
 def _tasks(table: toml.Table) -> Tasks:
     tag = table.string('tag')
-    if not tasks.TAG_RE.fullmatch(tag):
+    if not store.TAG_RE.fullmatch(tag):
         raise ConfigError(f'{table.where}.tag: {tag!r} is not a lowercase tag')
     table.done()
     return Tasks(tag=tag)

@@ -5,14 +5,14 @@ import os
 import pathlib
 import subprocess
 
-from bakery.collectors import tasks
+from bakery.task_list import store
 
 
 def create(folder: pathlib.Path) -> None:
     """A task list in `folder`, with the claws' namespace."""
     folder.mkdir()
     subprocess.run(
-        ('task', 'namespace', 'add', tasks.NAMESPACE),
+        ('task', 'namespace', 'add', store.NAMESPACE),
         check=True,
         env=os.environ | {'TASK_FOLDER': str(folder)},
     )

@@ -9,9 +9,9 @@ import pytest
 
 from bakery import state
 from bakery.collectors import baker
-from bakery.collectors import wontfix
 from bakery.gateway import config
 from bakery.gateway import ledger
+from bakery.task_list import wontfix
 from testing import gateway as testing_gateway
 from testing import tasks as testing_tasks
 

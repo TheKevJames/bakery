@@ -6,8 +6,8 @@
  * bash. Claws read every namespace but the sandbox lets them write only their
  * own (BAKERY_TASK_NAMESPACE), so these tools address tasks there by id alone.
  * Claims are always made as the claw itself (BAKERY_CLAW), and `task_add`
- * files into the claw's `[tasks] tag` (BAKERY_TASK_TAG); `task` serializes
- * concurrent writers.
+ * files into the claw's `[tasks] tag` (BAKERY_TASK_TAG), through its link's
+ * lineage (lib/file-task.ts); `task` serializes concurrent writers.
  *
  * Within the namespace, the remaining checks are guard rails on the easy path,
  * not a boundary: bash shares pi's sandbox, so those rules hold because the
@@ -15,6 +15,7 @@
  */
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { fileTask, notFiled } from "./lib/file-task.ts";
 
 function claw(): string {
   const name = process.env.BAKERY_CLAW;
@@ -53,7 +54,7 @@ async function task(pi: ExtensionAPI, args: string[], signal?: AbortSignal): Pro
 }
 
 // Blocked tasks must say what they wait on, in a form triage's collectors can
-// check (bakery/bakery/collectors/blocked.py).
+// check (bakery/bakery/task_list/blocked.py).
 const BLOCKED = "blocked";
 
 type Shown = { owner: string | null };
@@ -75,8 +76,9 @@ export default function tasks(pi: ExtensionAPI) {
       label: "Add Task",
       description:
         `Add a task to ${NS}${process.env.BAKERY_TASK_TAG ? `, tagged \`${process.env.BAKERY_TASK_TAG}\`` : ""}. ` +
-        "`link` is its lineage: the exact source URL, which is also how duplicates are recognized, so copy it " +
-        "verbatim.",
+        "`link` is the exact source URL, so copy it verbatim: its lineage (the link, ignoring line anchors and " +
+        "case) is how a source is recognized, so nothing is added if an open task, in any namespace, or a " +
+        "rejection by the operator already has it.",
       parameters: Type.Object({
         summary: Type.String({ maxLength: 120, description: "One line, at most ~80 characters" }),
         description: Type.String({ description: "Source, link, and enough context to triage it cold" }),
@@ -85,13 +87,14 @@ export default function tasks(pi: ExtensionAPI) {
         size: Type.Optional(Size),
       }),
       async execute(_id, params, signal) {
-        const args = ["add", "-n", namespace(), "--tag", taskTag(), "--description", params.description];
+        const args = ["-n", namespace(), "--tag", taskTag(), "--description", params.description];
         args.push("--link", params.link);
         if (params.priority) args.push("--priority", params.priority);
         if (params.size) args.push("--size", params.size);
-        args.push("--json", "--", params.summary);
-        const added = JSON.parse(await task(pi, args, signal));
-        return text(`Added: ${JSON.stringify(added)}`);
+        args.push("--", params.summary);
+        const filing = await fileTask(pi, args, signal);
+        if ("filed" in filing) return text(`Added: ${JSON.stringify(filing.filed)}`);
+        return text(notFiled(filing), filing);
       },
     }),
   );

@@ -18,7 +18,7 @@ import time
 from .. import paths
 from .. import secrets
 from .. import state
-from ..collectors import tasks
+from ..task_list import store
 from . import config
 from . import policy
 from . import rpc
@@ -97,7 +97,7 @@ def child_env(
             ),
             'BAKERY_CLAW': claw.name,
             'BAKERY_TASK_TAG': claw.tasks.tag,
-            'BAKERY_TASK_NAMESPACE': tasks.NAMESPACE,
+            'BAKERY_TASK_NAMESPACE': store.NAMESPACE,
             'PI_CODING_AGENT_DIR': str(claw.profile),
             'PI_CODING_AGENT_BAKERY_DIR': str(sandbox.sockets(claw)),
             'BAKERY_ASK_POLICY': job.ask

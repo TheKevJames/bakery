@@ -116,8 +116,9 @@ or a step that was allowed to fail.
 _Avoid_: hidden error, green-run error, tolerated failure
 
 **Lineage**:
-Identifying a candidate by its link alone: it is new unless an open task or a
-rejection already has that link.
+The identity of a task's source: its link, ignoring line anchors and case. A
+task is filed only if no open task, in any namespace, and no rejection has its
+lineage.
 
 **Gap**:
 A way the claws are failing, which baker files as a task.

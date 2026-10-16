@@ -9,7 +9,7 @@ daemon and controlled over Discord. Its terms are defined in
 
 | Path | Contents |
 | --- | --- |
-| `pi/` | Shared pi resources: `extensions/`, `claw-extensions/` (claws only: `policy/`, `memory/`, `task.ts`, `ask-operator.ts`), `claw-sandbox/` (the claws' sandbox launcher), `claw-prompts/` (claws only, eg. `/dream`), `skills/` (incl. vendored), `prompts/`, `agents/`, `rules/` (instruction fragments). |
+| `pi/` | Shared pi resources: `extensions/`, `claw-extensions/` (claws only: `policy/`, `memory/`, `task.ts`, `ask-operator.ts`, and `lib/` for what they share), `claw-sandbox/` (the claws' sandbox launcher), `claw-prompts/` (claws only, eg. `/dream`), `skills/` (incl. vendored), `prompts/`, `agents/`, `rules/` (instruction fragments). |
 | `interactive/` | The interactive profile; used directly as `PI_CODING_AGENT_DIR`. |
 | `claws/<name>/` | One profile per claw: `claw.toml`, `context.toml`, `settings.json`, `SOUL.md`, `IDENTITY.md`, `AGENTS.md`. |
 | `bakery/` | Python project: the `bakery` CLI, the gateway, and collectors. |
@@ -200,7 +200,8 @@ Identity changes need the operator's approval:
   cannot write it. `propose_operator_update(edits, reason)` files a
   `bakery > human` task with the diff (checked to apply, and to stay within
   4000 characters), which the operator applies by hand; the same proposal is
-  the same task (its link is `operator-md:<hash of the result>`).
+  the same lineage (its link is `operator-md:<hash of the result>`), so it is
+  not filed again while open, nor once rejected.
 - `SOUL.md` / `AGENTS.md` (and other claw configuration) edits are proposed
   as PRs on this repo from the claw's own clone (see
   [Safety](#safety)), merging being the approval.
@@ -504,7 +505,7 @@ The `[policy]` keys:
   the intended writers of memory, but bash could write it too.
 
 A claw's `[tasks] tag` is the section of the claws' namespace (`bakery`,
-`tasks.NAMESPACE`) that `task_add` files into (default `triage`); the tool
+`store.NAMESPACE`) that `task_add` files into (default `triage`); the tool
 does not let the model choose another.
 
 Enforcement:
@@ -635,13 +636,14 @@ What claws rely on:
 Claws read it with `task list --json` and `task show --json` in bash, and
 change it through tools in `pi/claw-extensions/task.ts`: `task_add` (with an
 optional priority and size) and `task_set` (tag, claim, release, append
-notes). Both address only the claws' namespace, `bakery` (`tasks.NAMESPACE`,
+notes). Both address only the claws' namespace, `bakery` (`store.NAMESPACE`,
 passed as `BAKERY_TASK_NAMESPACE`): `task_set` takes a bare id there.
 `task_set` refuses to move a task to `blocked` unless `bakery blocked check`
 accepts its blockers (see triage). Claims are always made as the claw itself
-(`BAKERY_CLAW`), and `task_add` always files into the claw's `[tasks] tag`.
-Which claw uses which tool is a rule in its `AGENTS.md`; no claw completes
-or deletes tasks (a deleted task's source would be filed again).
+(`BAKERY_CLAW`), and `task_add` always files into the claw's `[tasks] tag`,
+through `bakery task add` (see below). Which claw uses which tool is a rule
+in its `AGENTS.md`; no claw completes or deletes tasks (a deleted task's
+source would be filed again).
 
 Claws read every namespace but write only `bakery`: the sandbox grants
 `$TASK_FOLDER` for reading and only `$TASK_FOLDER/bakery` for writing (see
@@ -677,10 +679,21 @@ records a rejection: the link (without its `#…` fragment), the task's
 summary, the reason, and the date, in
 `$XDG_STATE_HOME/claws/_shared/wontfix.json`, committed to the state repo
 (`bakery wontfix list` and `rm <link>` read and undo them;
-`bakery/bakery/collectors/wontfix.py`). Any task with a link can be
-rejected, whatever its namespace or tag. Scout and baker skip links on open
-tasks (in any namespace) and on rejections, so done tasks free their link: a
-gap which comes back after it was fixed is filed again. A `blocked` task is
+`bakery/bakery/task_list/wontfix.py`). Any task with a link can be
+rejected, whatever its namespace or tag; `rm` takes any link with its
+lineage.
+
+Every claw tool that adds a task (`task_add`, `propose_operator_update`)
+files through `bakery task add` (`bakery/bakery/task_list/filing.py`, via
+`pi/claw-extensions/lib/file-task.ts`): `task add`, with any of its
+arguments, unless an open task (in any namespace) or a rejection already
+has the link's lineage, the link without its `#…` anchor, ignoring case.
+With `--json` it prints `{"filed": task}`, `{"open": task}`, or
+`{"rejected": rejection}`, and exits 0 for all three, so the tools report
+why nothing was added rather than fail. Links holding a comma are refused,
+as `task` splits filters on commas. Scout's collector drops tracked
+candidates up front, with the same rule. Done tasks free their link: a gap
+which comes back after it was fixed is filed again. A `blocked` task is
 open, so its link is not filed again either, and its source stays as it is.
 
 ## Claws (v1)
@@ -740,7 +753,8 @@ Finds things in the operator's repos that belong on the task list. Profile:
     files with no lexer keep every mention. One task per comment. Link: `…/blob/<branch>/<path>?todo=<fingerprint>#L<line>`;
     the fingerprint is of the comment's text, so the line can move.
 - **Lineage, not memory**: a candidate is new unless an open task or a
-  rejection (`bakery wontfix`) has its link (ignoring the `#L…` anchor).
+  rejection (`bakery wontfix`) has its lineage (its link, ignoring the `#L…`
+  anchor and case).
   There is no "seen" store, so a done task comes back if its source still
   exists and was not rejected. Scout therefore never merges or drops
   candidates and copies links verbatim.
@@ -793,7 +807,7 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
   `bakery`, which record no decisions), `#<ns>:<id> done`, or
   `<url>: <condition>`. The last list
   counts; the task clears once all of its blockers have.
-  `bakery/bakery/collectors/blocked.py` parses and checks it, for `bakery
+  `bakery/bakery/task_list/blocked.py` parses and checks it, for `bakery
   blocked check` (run by `task_set` before it moves a task to
   `bakery > blocked`) and for the collectors below. Done tasks are deleted,
   so a task which does not exist counts as done. A list is refused if it is
@@ -871,8 +885,8 @@ Reviews how the claws learn and files a task for each gap. Profile:
   never go straight to build.
 - Never `task_set`, by its `AGENTS.md`: changes to other claws' memory or to
   tasks are steps in a task's **Fix**, for the operator.
-- It keeps its own memory (the slugs it filed). It never files a link
-  already on an open task or a rejection.
+- It keeps its own memory (the slugs it filed). `task_add` refuses a link
+  already on an open task or a rejection, and says which.
 - Ask policy `assume`; `silent_ok`, replying `NO_REPLY` when it filed
   nothing and none of its tasks is still open.
 
