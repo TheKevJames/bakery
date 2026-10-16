@@ -627,6 +627,8 @@ What claws rely on:
   task bumps `updated`;
 - `set --description-append`, `add --link`, `owner`/`link`/`priority`/`size`
   filters, `--json` on `list` and `show`;
+- `--json` on every write, printing the task as it stands after the command
+  (`null` once `done` deletes it), so tools need no follow-up read;
 - property tests (DB round-trip, SQL filters against a reference; concurrent
   writers and moves lose nothing).
 

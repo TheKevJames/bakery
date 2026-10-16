@@ -89,11 +89,9 @@ export default function tasks(pi: ExtensionAPI) {
         args.push("--link", params.link);
         if (params.priority) args.push("--priority", params.priority);
         if (params.size) args.push("--size", params.size);
-        args.push("--", params.summary);
-        await task(pi, args, signal);
-        const filter = `namespace=${namespace()},link=${params.link}`;
-        const added = JSON.parse(await task(pi, ["list", "--json", "-s", "id", "-f", filter], signal));
-        return text(`Added: ${JSON.stringify(added.at(-1) ?? {})}`);
+        args.push("--json", "--", params.summary);
+        const added = JSON.parse(await task(pi, args, signal));
+        return text(`Added: ${JSON.stringify(added)}`);
       },
     }),
   );
@@ -133,9 +131,10 @@ export default function tasks(pi: ExtensionAPI) {
         if (params.priority) args.push("--priority", params.priority);
         if (params.size) args.push("--size", params.size);
         if (params.description_append) args.push("--description-append", params.description_append);
-        if (args.length > 2) await task(pi, args, signal);
-        if (params.release) await task(pi, ["unset", id, "owner"], signal);
-        return text(await task(pi, ["show", id, "--json"], signal));
+        let result: string | undefined;
+        if (args.length > 2) result = await task(pi, [...args, "--json"], signal);
+        if (params.release) result = await task(pi, ["unset", id, "owner", "--json"], signal);
+        return text(result ?? (await task(pi, ["show", id, "--json"], signal)));
       },
     }),
   );
