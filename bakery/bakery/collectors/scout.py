@@ -4,9 +4,10 @@ task list.
 
 Repos are every one the claws' GitHub user can reach (see scout_repos). For
 each: CI failures and warnings on the default branch (warnings only from runs
-whose workflow file is still current, and not Node deprecations raised in
-actions), open issues and non-bot pull requests, and TODO/FIXME comments on
-the default branch (fetched into scout's own clone; see scout_todos).
+whose workflow file is still current, and neither Node deprecations raised
+in actions nor any matching `ignore_warnings`), open issues and non-bot pull
+requests, and TODO/FIXME comments on the default branch (fetched into
+scout's own clone; see scout_todos).
 A candidate is new unless a task already has its link, which is
 deterministic: the link is the task's lineage.
 """
@@ -181,6 +182,7 @@ def _warnings(
     repo: scout_repos.Repo,
     ref: str,
     passing: list[dict[str, Any]],
+    ignore: tuple[re.Pattern[str], ...],
 ) -> Iterator[Candidate]:
     seen: set[str] = set()
     for run in passing:
@@ -200,6 +202,8 @@ def _warnings(
             f' {run["created_at"]}):\n'
         )
         for message in _log_warnings(logs):
+            if any(pattern.search(message) for pattern in ignore):
+                continue
             key = fingerprint(message)
             if key in seen:
                 continue
@@ -343,7 +347,9 @@ def _repo_candidates(
         found += (
             attempt(
                 'reading CI logs',
-                lambda: list(_warnings(gh, repo, ref, passing)),
+                lambda: list(
+                    _warnings(gh, repo, ref, passing, settings.ignore_warnings)
+                ),
             )
             or []
         )

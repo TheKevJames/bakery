@@ -698,7 +698,7 @@ Finds things in the operator's repos that belong on the task list. Profile:
   repo the claws' GitHub user can reach (`GET /user/repos?affiliation=
   collaborator`): inviting it is how a repo is added, so the public
   `TheKevJames` repos with rulesets, and no private ones. `scout.toml`
-  holds per-repo `exclude` globs by name. The collector keeps scout's own
+  holds per-repo `exclude` globs by name, and `ignore_warnings`. The collector keeps scout's own
   clone of each, in scout's `clones/`: an ordinary clone, as
   `pi/claw-rules/repos.md` has the model use, from which the collector only
   reads refs:
@@ -712,7 +712,10 @@ Finds things in the operator's repos that belong on the task list. Profile:
     action's step or a post step are dropped: they come from the action's
     bundled dependencies, which Node does not treat as `node_modules`, so
     only its maintainers can fix them. Node's pid prefix is stripped before
-    fingerprinting, as it differs every run. A run
+    fingerprinting, as it differs every run. Lines matching any of
+    `scout.toml`'s `ignore_warnings` regexes (eg. brew test-bot's cleanup
+    noise) are dropped before deduplication, so they never take up the
+    per-repo cap. A run
     is skipped if its workflow file has changed on the default branch since
     its commit (or its commit is gone), so a fix that has not run yet does
     not resurface its old warnings. The detail names the run, its commit, and

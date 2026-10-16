@@ -7,9 +7,19 @@
 # [[repo]] entries `exclude` git glob pathspecs from one repo by `name`, eg.
 # for vendored code. `bakery gateway check` reports entries for repos the
 # claws cannot reach.
+#
+# `ignore_warnings` regexes are searched for in each CI warning line (as
+# logged, eg. `##[warning]…`); matches are never candidates, nor count
+# towards the per-repo cap. Keep them tight: a broad one hides real
+# warnings, and a run's noise can sit beside them.
 
 max_candidates = 25                # handed over per run; the rest wait
 opt_out_label = "ready-for-human"  # issues and PRs with it are skipped
+ignore_warnings = [
+    # brew test-bot's cleanup, for runner-image formulae it did not install.
+    'Skipping \S+: most recent version \S+ not installed$',
+    'Treating \S+ as a formula\. For the cask, use ',
+]
 
 [[repo]]
 name = "TheKevJames/bakery"

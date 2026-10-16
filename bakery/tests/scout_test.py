@@ -148,10 +148,16 @@ def serve_repo(fake: fake_github.FakeGitHub, initial: str) -> None:
     fake.routes['/page2'] = [issue(5)]
 
 
-def scout_toml(root: pathlib.Path, api: str, max_candidates: int = 25) -> str:
+def scout_toml(
+    root: pathlib.Path,
+    api: str,
+    max_candidates: int = 25,
+    ignore_warnings: tuple[str, ...] = (),
+) -> str:
     return f"""
 max_candidates = {max_candidates}
 opt_out_label = "ready-for-human"
+ignore_warnings = {json.dumps(ignore_warnings)}
 api = "{api}"
 git_url = "{(root / 'remote').as_uri()}"
 
@@ -179,7 +185,10 @@ def fixture_github(
 
 
 def scout_claws(
-    root: pathlib.Path, api: str, max_candidates: int = 25
+    root: pathlib.Path,
+    api: str,
+    max_candidates: int = 25,
+    ignore_warnings: tuple[str, ...] = (),
 ) -> pathlib.Path:
     claws = testing_gateway.make_claws(
         root,
@@ -198,7 +207,7 @@ def scout_claws(
         extensions={'scout': ['pi/claw-extensions/task.ts']},
     )
     (claws / 'scout' / scout_repos.SETTINGS_NAME).write_text(
-        scout_toml(root, api, max_candidates)
+        scout_toml(root, api, max_candidates, ignore_warnings)
     )
     return claws
 
@@ -282,6 +291,43 @@ def test_collects_new_candidates_in_priority_order(
     commands.git(clone, 'checkout', '-q', '--detach', 'origin/HEAD')
     assert 'TODO: handle errors' in (clone / 'app.py').read_text()
     assert candidates(scout.collect(claw).text) == found
+
+
+def test_shipped_ignore_warnings_drop_only_noise(
+    root: pathlib.Path, github: fake_github.FakeGitHub
+) -> None:
+    shipped = scout_repos.load_settings(harness.REPO / 'claws' / 'scout')
+    ignore = tuple(pattern.pattern for pattern in shipped.ignore_warnings)
+    claw = config.load(scout_claws(root, github.url, 25, ignore)).claw('scout')
+    # From one brew test-bot run: more cleanup noise than the per-repo cap,
+    # then a formula audit problem, which must still be found.
+    noise = [
+        f'##[warning]Skipping {name}: most recent version {version}'
+        ' not installed'
+        for name, version in (
+            ('azure/bicep/bicep', '0.48.1'),
+            ('ca-certificates', '2026-09-25'),
+            ('gnupg', '2.5.24_1'),
+            ('ruby@3.4', '3.4.11_1'),
+            *(
+                (f'formula{i}', f'1.{i}')
+                for i in range(scout.WARNINGS_PER_REPO)
+            ),
+        )
+    ] + [
+        '##[warning]Treating azure-cli as a formula. For the cask, use'
+        ' homebrew/cask/azure-cli or specify the `--cask` flag. To silence'
+        ' this message, use the `--formula` flag.'
+    ]
+    audit = '##[warning]HEAD: Git `head` URL must specify a branch name'
+    github.routes['/blob/logs.zip'] = fake_github.logs_zip(
+        {'0_test-bot.txt': '\n'.join([*noise, audit]) + '\n'}
+    )
+
+    found = candidates(scout.collect(claw).text)
+
+    warnings = [c['detail'] for c in found if c['kind'] == 'warning']
+    assert [w.split('\n', 1)[1] for w in warnings] == [audit]
 
 
 def test_caps_candidates_per_run(
