@@ -16,7 +16,7 @@ When finished, report:
 What was done or found.
 
 ## Changes (if any)
-- `path/to/file` — what changed
+- `path/to/file` - what changed
 
 ## Notes
 Assumptions made, and anything the main session should know.

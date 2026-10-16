@@ -1,6 +1,6 @@
 ---
 name: researcher
-description: Autonomous investigation and research agent — searches, evaluates, and synthesizes a focused research brief
+description: Autonomous investigation and research agent - searches, evaluates, and synthesizes a focused research brief
 model: anthropic/claude-opus-5-5
 ---
 

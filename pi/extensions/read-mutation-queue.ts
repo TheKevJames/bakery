@@ -6,7 +6,7 @@
  * `writeFile`; pi's own `read` takes no part in the queue, so a `read`
  * batched with an `edit` of the same file can see it empty ("Offset N is
  * beyond end of file (1 lines total)", or silently empty content).
- * Upstream: https://github.com/earendil-works/pi/issues/8318 — delete this
+ * Upstream: https://github.com/earendil-works/pi/issues/8318 - delete this
  * extension once pi's `read` takes the queue itself.
  *
  * Batches start their calls' `execute()` in message order, and `edit` joins

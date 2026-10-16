@@ -1,5 +1,5 @@
 /**
- * Custom Footer Extension — Enhanced status bar
+ * Custom Footer Extension - Enhanced status bar
  *
  * Displays:
  *   Left: model, in/out tokens, cost, context%, cwd, git branch

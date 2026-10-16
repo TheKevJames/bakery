@@ -2,13 +2,13 @@
  * gpg-unlock-check
  *
  * Motivation: with commit.gpgsign=true, a locked GPG key surfaces only at the
- * first commit, mid-task, as "gpg: signing failed: Timeout" — across sessions
+ * first commit, mid-task, as "gpg: signing failed: Timeout" - across sessions
  * this forced ~15 manual "gpg unlocked, continue" interventions. This checks at
  * session start whether the signing key is already cached in gpg-agent and warns
  * up front so the key can be unlocked before any commit.
  *
  * Probe: a real signing operation with `--pinentry-mode error`, which never
- * pops a pinentry prompt — it succeeds iff the passphrase is already cached, and
+ * pops a pinentry prompt - it succeeds iff the passphrase is already cached, and
  * returns non-zero otherwise. This answers exactly "will signing succeed without
  * blocking?" without side effects.
  *

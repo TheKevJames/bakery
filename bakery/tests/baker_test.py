@@ -213,12 +213,12 @@ def test_digest_covers_activity_since_the_last_review(
     )
     assert (
         'scout · sandbox · gh: open ~/.config/gh/config.yml: operation not'
-        ' permitted — 2 calls in 1 units; latest scout-daily-x' in text
+        ' permitted - 2 calls in 1 units; latest scout-daily-x' in text
     )
     assert f'bash `{gh}`' in text
     assert 'scout · sandbox · curl: CONNECT tunnel failed' in text
     assert (
-        '- scout · curl deny file-read-data /x/y — 2×; latest in'
+        '- scout · curl deny file-read-data /x/y - 2×; latest in'
         ' scout-daily-x' in text
     )
     assert '/old' not in text

@@ -132,10 +132,10 @@ read like any other files, and is meant to be written through tools
 the claw's state dir, so this is convention rather than enforcement; the
 state repo's commits keep every change reviewable.
 
-- `memory_append(text, source)` — a timestamped entry in today's
+- `memory_append(text, source)` - a timestamped entry in today's
   `memory/YYYY-MM-DD.md`, tagged with its memory source: `operator`, `self`,
   or `external`.
-- `memory_edit(edits | content)` — `MEMORY.md` only: exact replacements or a
+- `memory_edit(edits | content)` - `MEMORY.md` only: exact replacements or a
   full rewrite, capped at `[memory] max_chars` (20k, its context budget).
   Every run has it, but its description says it is only for the dream and
   learn jobs.
@@ -396,7 +396,7 @@ One bot application in a private guild; the gateway creates what is missing
 on connect:
 
 - a `bakery` category,
-- `#bakery` — gateway notices (start/stop, rejected reloads, exhausted daily
+- `#bakery` - gateway notices (start/stop, rejected reloads, exhausted daily
   budgets) and slash commands,
 - `#bakery-<claw>` per enabled claw (eg. `#bakery-scout`), each with one
   bot-owned webhook so the claw posts under its own name (and
@@ -437,7 +437,7 @@ In each thread:
 Slash commands (guild-scoped): `/status`, `/budget`, `/trigger claw [job]
 [prompt]`, `/pause target [abort]`, `/resume target`, `/reload`.
 
-Code: `bakery/bakery/chat/` — `relay` (all behaviour; implements the
+Code: `bakery/bakery/chat/` - `relay` (all behaviour; implements the
 gateway's `Channel`), `transport` (the interface), `discord_transport`
 (discord.py, kept thin), and `render` (text, shared with the CLI).
 
@@ -687,7 +687,7 @@ All configuration (models, limits, schedules, ask policy, concurrency) lives
 in each claw's `claw.toml`. Models have no default: every claw sets `model`
 and `thinking` (one of pi's levels, `off` to `max`).
 
-### scout — read-only GitHub
+### scout - read-only GitHub
 
 Finds things in the operator's repos that belong on the task list. Profile:
 `claws/scout/` (`claw.toml`, `scout.toml`, `AGENTS.md`, `SOUL.md`,
@@ -757,7 +757,7 @@ Finds things in the operator's repos that belong on the task list. Profile:
   each candidate up with `task_add` (into `bakery > triage`) and reports what
   it added.
 
-### triage — read-only + web
+### triage - read-only + web
 
 Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
 `unblock`), $3 per task (and per `unblock` or `recheck` run).
@@ -818,7 +818,7 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
 - A task left claimed by a failed or parked run is not picked up again;
   its thread's Resume button continues it.
 
-### build — clones + PRs
+### build - clones + PRs
 
 - Picks `bakery > build` tasks by `priority` (`high`, then `medium`, then
   `low`), then lowest id.
@@ -832,7 +832,7 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
   to `task.ts` with build.
 - Ask policy: `ask`, falling back to `park`.
 
-### baker — reads every claw, files for the operator
+### baker - reads every claw, files for the operator
 
 Reviews how the claws learn and files a task for each gap. Profile:
 `claws/baker/`. Opus, high thinking, $5, 45 minutes, and 100 turns per run.

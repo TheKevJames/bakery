@@ -2,7 +2,7 @@
  * gcloud-auth-check
  *
  * Motivation: an expired or absent gcloud credential surfaces only at the first
- * API call, mid-task, as a "reauthentication required" / "invalid_grant" error —
+ * API call, mid-task, as a "reauthentication required" / "invalid_grant" error -
  * forcing a manual `gcloud auth login` interruption. This checks at session
  * start whether the active account already has a usable credential and warns up
  * front so it can be refreshed before any gcloud-dependent work.

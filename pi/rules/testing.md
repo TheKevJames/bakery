@@ -5,6 +5,9 @@
 - prefer property testing approaches and tools like `hypothesis`
 - transient and flaky tests must be identified for later follow-up
 - do not disable tests or linters without confirmation, fix the issue instead
+- when tests fail due to unrealistic mocks, fix the mocks/fixtures (match real interfaces; prefer real local servers/fakes over mocks) before relaxing production contracts
+- never suppress warnings/errors or change public behaviour for test convenience without asking first
+- include print statements in tests where they'd help explain a failure
 - running the full test harness must be fast:
     - run tests in parallel (eg. with ``pytest-xdist`` or similar)
     - wait on events, never on hardcoded / fixed waits (avoid ``sleep(x)``)

@@ -42,7 +42,7 @@ def progress(info: channel.RunInfo) -> str:
 
 def outcome(info: channel.RunInfo) -> str:
     icon = OUTCOME_ICONS.get(info.status, '•')
-    reason = f' — {info.reason}' if info.reason else ''
+    reason = f' - {info.reason}' if info.reason else ''
     return clip(
         f'{icon} {info.work_key} {info.status}{reason} · {_stats(info)}'
     )

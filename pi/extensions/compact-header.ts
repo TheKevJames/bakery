@@ -1,5 +1,5 @@
 /**
- * oh-pi Compact Header — table-style startup info with dynamic column widths
+ * oh-pi Compact Header - table-style startup info with dynamic column widths
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { VERSION } from "@earendil-works/pi-coding-agent";

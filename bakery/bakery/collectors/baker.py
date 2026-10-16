@@ -124,7 +124,7 @@ def _grouped(
         units = len({c.name for c in group})
         sample = group[-1]
         lines.append(
-            f'- {" · ".join(key)} — {len(group)} calls in {units} units;'
+            f'- {" · ".join(key)} - {len(group)} calls in {units} units;'
             f' latest {sample.name} ({sample.session.name}):'
             f' {sample.tool} `{_call_args(sample)}`'
         )
@@ -159,7 +159,7 @@ def _violations(root: pathlib.Path, window: datetime.datetime) -> Section:
             counts[key] += 1
             latest[key] = log.stem
     lines = [
-        f'- {claw} · {line} — {n}×; latest in {latest[(claw, line)]}'
+        f'- {claw} · {line} - {n}×; latest in {latest[(claw, line)]}'
         for (claw, line), n in counts.most_common()
     ]
     return Section(

@@ -51,7 +51,7 @@ Append notes with `task_set(id, description_append=...)`, as markdown:
 ```
 ## Triage (YYYY-MM-DD)
 
-**Route:** build | human | blocked | wontfix — one-sentence reason
+**Route:** build | human | blocked | wontfix - one-sentence reason
 **Source:** still present / gone / changed (and how you checked)
 **Code:** paths and line numbers involved
 **Hypothesis:** what is wrong or wanted, and why; your confidence

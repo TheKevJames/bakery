@@ -1,110 +1,49 @@
 ---
 name: circleci
-description: Check and watch CircleCI pipeline/workflow/job status for the current commit using CircleCI v2 API, then fetch failing job logs and fix issues.
+description: Inspect, wait on, and fetch failing-step logs for CircleCI pipelines (checks prefixed with `ci/circleci`). Not for GitHub Actions - use `gh run` for those.
 ---
 
-# CircleCI Status + Watch (v2 API)
+# CircleCI (API v2 + v1.1 logs)
 
-Use this skill when `circleci` CLI cannot show workflow/job run status.
+First confirm which CI failed: `gh pr checks` (or `gh api repos/{o}/{r}/commits/$SHA/check-runs`).
+CircleCI links look like `https://circleci.com/gh/<org>/<repo>/<job-number>`; with a job number, skip to "Failed-step logs".
 
-## Requirements
+Auth: inline `${CIRCLECI_CLI_TOKEN:+-H "Circle-Token: ${CIRCLECI_CLI_TOKEN}"}` unquoted in each `curl`. Do not store
+the header in a variable: word-splitting turns the token into a hostname, and curl prints it in its error.
 
-- `curl`
-- `jq`
-- Optional token for private repos: `CIRCLECI_CLI_TOKEN`
-
-## 1) Resolve commit + project slug
+## Pipeline → workflows → jobs
 
 ```bash
-SHA=$(git rev-parse HEAD)
-REMOTE=$(git remote get-url origin)
-ORG_REPO=$(echo "$REMOTE" | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##')
-PROJECT_SLUG="gh/${ORG_REPO}"
+SHA=$(git rev-parse HEAD); BRANCH=$(git branch --show-current)
+ORG_REPO=$(git remote get-url origin | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##')
+API=https://circleci.com/api/v2
+PID=$(curl -sS ${CIRCLECI_CLI_TOKEN:+-H "Circle-Token: ${CIRCLECI_CLI_TOKEN}"} "$API/project/gh/$ORG_REPO/pipeline?branch=$BRANCH" \
+  | jq -r --arg sha "$SHA" '[.items[] | select(.vcs.revision == $sha)] | max_by(.number) | .id // empty')
+curl -sS ${CIRCLECI_CLI_TOKEN:+-H "Circle-Token: ${CIRCLECI_CLI_TOKEN}"} "$API/pipeline/$PID/workflow" | jq -r '.items[] | "\(.id) \(.name) \(.status)"'
+curl -sS ${CIRCLECI_CLI_TOKEN:+-H "Circle-Token: ${CIRCLECI_CLI_TOKEN}"} "$API/workflow/<workflow-id>/job" | jq -r '.items[] | "\(.job_number) \(.status) \(.name)"'
 ```
 
-## 2) Build auth header (optional)
+An empty `PID` means no CircleCI pipeline for this commit: re-check with `gh pr checks`, don't retry variants.
 
-```bash
-TOKEN="${CIRCLECI_CLI_TOKEN}"
-if [ -n "$TOKEN" ]; then
-  AUTH=(-H "Circle-Token: $TOKEN")
-else
-  AUTH=()
-fi
-```
-
-## 3) Find latest pipeline for current commit
-
-```bash
-PIPELINE_JSON=$(curl -sS "${AUTH[@]}" "https://circleci.com/api/v2/project/${PROJECT_SLUG}/pipeline" \
-  | jq --arg sha "$SHA" '[.items[] | select(.vcs.revision == $sha)] | sort_by(.number) | reverse | .[0]')
-
-PIPELINE_ID=$(echo "$PIPELINE_JSON" | jq -r '.id // empty')
-[ -n "$PIPELINE_ID" ] || { echo "No pipeline found for $SHA"; exit 1; }
-
-echo "$PIPELINE_JSON" | jq '{pipeline_id:.id, number, state, branch:.vcs.branch, revision:.vcs.revision, subject:.vcs.commit.subject}'
-```
-
-## 4) Get workflow(s) and job status
-
-```bash
-curl -sS "${AUTH[@]}" "https://circleci.com/api/v2/pipeline/${PIPELINE_ID}/workflow" \
-| jq '.items[] | {workflow_id:.id, name, status, created_at, stopped_at}'
-
-WORKFLOW_ID=$(curl -sS "${AUTH[@]}" "https://circleci.com/api/v2/pipeline/${PIPELINE_ID}/workflow" | jq -r '.items[0].id')
-curl -sS "${AUTH[@]}" "https://circleci.com/api/v2/workflow/${WORKFLOW_ID}/job" \
-| jq '.items[] | {name, job_number, status}'
-```
-
-## 5) Wait for the workflow to finish
-
-Use this when jobs are still running. Resolve `WORKFLOW_ID` as in step 4, then start a `watch` in `poll`
-mode with this probe, substituting the literal workflow id: watch commands run in their own shell, without
-the variables set above. It exits 0 once the workflow is terminal (printing its status, which the `watch`
-message shows), 1 while it runs, and 2 if the API call fails.
+## Wait
+`watch` poll probe (literal workflow id; watch shells don't inherit variables):
 
 ```bash
 STATUS=$(curl -fsS ${CIRCLECI_CLI_TOKEN:+-H "Circle-Token: ${CIRCLECI_CLI_TOKEN}"} \
   "https://circleci.com/api/v2/workflow/<workflow-id>" | jq -er .status) || exit 2
 echo "workflow_status=${STATUS}"
-case "$STATUS" in
-  success|failed|error|failing|canceled|unauthorized) exit 0 ;;
-  *) exit 1 ;;
-esac
+case "$STATUS" in success|failed|error|failing|canceled|unauthorized|on_hold) exit 0 ;; *) exit 1 ;; esac
 ```
 
-Once it reports, list the jobs with step 4.
-
-## 6) Failed-job log retrieval (for root cause)
-
-- First list failed jobs:
+## Failed-step logs (v1.1; output URLs are presigned, no auth)
 
 ```bash
-curl -sS "${AUTH[@]}" "https://circleci.com/api/v2/workflow/${WORKFLOW_ID}/job" \
-| jq -r '.items[] | select(.status=="failed") | .job_number'
+V1="https://circleci.com/api/v1.1/project/github/${ORG_REPO}/<job-number>"
+J=$(curl -sS ${CIRCLECI_CLI_TOKEN:+-H "Circle-Token: ${CIRCLECI_CLI_TOKEN}"} "$V1")
+echo "$J" | jq -r '.steps[] | .name as $n | .actions[] | "\(.status)\t\($n)"'
+for u in $(echo "$J" | jq -r '.steps[].actions[] | select(.status=="failed") | .output_url'); do
+  curl -sS "$u" | jq -r '.[].message' | sed -E 's/\x1b\[[0-9;]*m//g' | tail -n 120
+done
 ```
 
-- Then fetch step output URLs via v1.1 and print last lines from failed step logs:
-
-```bash
-JOB_NUMBER="<job-number>"
-V1="https://circleci.com/api/v1.1/project/github/${ORG_REPO}/${JOB_NUMBER}"
-FAILED_STEP_URL=$(curl -sS "${AUTH[@]}" "$V1" \
-  | jq -r '.steps[] | select(any(.actions[]?; .status=="failed")) | .actions[] | select(.status=="failed") | .output_url' \
-  | head -n1)
-
-curl -sS "$FAILED_STEP_URL" | jq -r '.[].message' | tail -n 120
-```
-
-## 7) Fix flow
-
-1. Identify failed jobs.
-2. Pull failing step logs.
-3. Make minimal code/config fix.
-4. Run local validation where possible (e.g., `circleci config validate`).
-
-## Notes
-
-- Public projects may work without auth; private projects usually require a token.
-- A commit may have multiple pipelines (re-runs/retriggers). Use highest pipeline number as latest.
-- Workflow status is the top-level CI signal.
+After editing `.circleci/config.yml`, run `circleci config validate`.
