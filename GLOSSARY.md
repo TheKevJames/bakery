@@ -110,6 +110,11 @@ nothing, there is no run, unless the job runs anyway (`skip_empty = false`).
 **Candidate**:
 Something a collector found that may become a task.
 
+**Masked failure**:
+A failure reported during a CI run that still passed: an error a tool logged,
+or a step that was allowed to fail.
+_Avoid_: hidden error, green-run error, tolerated failure
+
 **Lineage**:
 Identifying a candidate by its link alone: it is new unless an open task or a
 rejection already has that link.

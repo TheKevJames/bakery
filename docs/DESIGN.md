@@ -698,25 +698,37 @@ Finds things in the operator's repos that belong on the task list. Profile:
   repo the claws' GitHub user can reach (`GET /user/repos?affiliation=
   collaborator`): inviting it is how a repo is added, so the public
   `TheKevJames` repos with rulesets, and no private ones. `scout.toml`
-  holds per-repo `exclude` globs by name. The collector keeps scout's own
-  clone of each, in scout's `clones/`: an ordinary clone, as
-  `pi/claw-rules/repos.md` has the model use, from which the collector only
-  reads refs:
+  holds per-repo `exclude` globs by name, and `ignore_ci_lines`. The
+  collector keeps scout's own clone of each, in scout's `clones/`: an
+  ordinary clone, as `pi/claw-rules/repos.md` has the model use, from which
+  the collector only reads refs:
   - **CI**: the latest completed default-branch run of each workflow failed
     (Dependabot's own update jobs excluded). Link: the first failed run of
     the current failure streak, so a fresh failure after a fix is new.
-  - **Warnings**: `DeprecationWarning`, `FutureWarning`,
-    `PendingDeprecationWarning`, and `::warning` lines in the logs of each
-    workflow's latest passing run, deduplicated, at most 20 per repo. Node
-    deprecations (`(node:<pid>) [DEP…]`) printed inside a third-party
-    action's step or a post step are dropped: they come from the action's
-    bundled dependencies, which Node does not treat as `node_modules`, so
-    only its maintainers can fix them. Node's pid prefix is stripped before
-    fingerprinting, as it differs every run. A run
-    is skipped if its workflow file has changed on the default branch since
-    its commit (or its commit is gone), so a fix that has not run yet does
-    not resurface its old warnings. The detail names the run, its commit, and
-    its date. Link: the workflow URL with `?warning=<fingerprint>`.
+  - **Passing runs' logs** (`scout_logs.py`): each workflow's latest
+    passing run, unless its workflow file has changed on the default branch
+    since its commit (or its commit is gone), so a fix that has not run yet
+    does not resurface its old findings. Only annotations the runner
+    rendered (`##[warning]…`, `##[error]…`) count, never a raw
+    `::warning::`/`::error::`: the runner prints each step's script before
+    running it, so an `echo "::error::…"` appears whether or not it ran.
+    Lines matching any of `scout.toml`'s `ignore_ci_lines` regexes (eg. brew
+    test-bot's cleanup noise) are dropped first, so they never take up a
+    per-repo cap. The detail names the run, its commit, and its date.
+    - **Masked failures**: `##[error]` lines, from a tool, or `Process
+      completed with exit code N.` from a step allowed to fail. One per
+      message per run, its detail listing every job and step (`Run …`
+      header) it was in; at most 20 per repo. Link: the workflow URL with
+      `?error=<fingerprint>`.
+    - **Warnings**: `##[warning]`, `DeprecationWarning`, `FutureWarning`,
+      and `PendingDeprecationWarning` lines, deduplicated across the repo's
+      runs, at most 20 per repo. Node deprecations (`(node:<pid>) [DEP…]`)
+      printed inside a third-party action's step or a post step are
+      dropped: they come from the action's bundled dependencies, which Node
+      does not treat as `node_modules`, so only its maintainers can fix
+      them. Node's pid prefix is stripped before fingerprinting, as it
+      differs every run. Link: the workflow URL with
+      `?warning=<fingerprint>`.
   - **Issues and PRs**: all open issues, and PRs not by bots, except those
     labelled `ready-for-human`. Link: their URL.
   - **TODO/FIXME comments** on the default branch, fetched with scout's
@@ -730,9 +742,9 @@ Finds things in the operator's repos that belong on the task list. Profile:
   There is no "seen" store, so a done task comes back if its source still
   exists and was not rejected. Scout therefore never merges or drops
   candidates and copies links verbatim.
-- At most `max_candidates` (25) per run, ordered CI, PRs, issues, warnings,
-  TODOs; the rest wait for the next run. Repos are collected in parallel
-  (8 at a time). Repos that cannot be read are reported in `#bakery` and in
+- At most `max_candidates` (25) per run, ordered CI, masked failures, PRs,
+  issues, warnings, TODOs; the rest wait for the next run. Repos are
+  collected in parallel (8 at a time). Repos that cannot be read are reported in `#bakery` and in
   scout's report; the others still run.
 - Scout reads untrusted issue and PR text, so the model's `GH_TOKEN` is
   `BAKERY_GITHUB_READONLY`: a classic PAT with no scopes, which reads public

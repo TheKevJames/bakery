@@ -31,6 +31,12 @@ exactly NO_REPLY.
 - Find the relevant code, history (`git log`, `git blame` in your clone),
   and related issues. Use `web_search`, `web_fetch`, and `context7` for
   library behavior and documentation.
+- A masked failure (a CI error in a run that still passed, linked as
+  `?error=`) is two problems: the error itself, and why the run passed
+  anyway (eg. `continue-on-error`, `|| true`, or a lost exit code such as
+  `find -exec \;`). Research both. If an open task already covers the
+  second, name it in your notes; otherwise make it part of the
+  **Approach**, as fixing the error alone leaves the next one masked too.
 - Look for duplicates: open tasks for the same work, eg. the same
   boilerplate TODO in another repository (`task list --json` with
   `summary~` or `link~` filters).

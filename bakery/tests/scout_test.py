@@ -118,7 +118,9 @@ def serve_repo(fake: fake_github.FakeGitHub, initial: str) -> None:
         {
             # Node deprecations in actions and their post steps are the
             # actions' bundled dependencies'; the repo's own steps' are
-            # deduplicated across pids.
+            # deduplicated across pids. Steps allowed to fail, in two jobs,
+            # are one masked failure; workflow commands echoed in a step's
+            # script are not findings.
             '1_test.txt': (
                 '2026-10-01T00:00:00.1Z ##[group]Run actions/checkout@v9\n'
                 '2026-10-01T00:00:00.2Z (node:11) [DEP0005]'
@@ -134,7 +136,20 @@ def serve_repo(fake: fake_github.FakeGitHub, initial: str) -> None:
                 '2026-10-01T00:00:01.6Z (node:44) [DEP0169]'
                 ' DeprecationWarning: url.parse()\n'
                 '2026-10-01T00:00:02.3Z all good\n'
-            )
+                '2026-10-01T00:00:02.4Z ##[group]Run ./flaky.sh\n'
+                '2026-10-01T00:00:02.5Z \x1b[36;1mecho "::warning::odd"'
+                '\x1b[0m\n'
+                '2026-10-01T00:00:02.6Z \x1b[36;1mecho "::error::bad"'
+                '\x1b[0m\n'
+                '2026-10-01T00:00:02.7Z ##[error]Process completed with'
+                ' exit code 1.\n'
+            ),
+            '2_lint.txt': (
+                '2026-10-01T00:00:03.1Z ##[group]Run make lint\n'
+                '2026-10-01T00:00:03.2Z ##[error]Process completed with'
+                ' exit code 1.\n'
+            ),
+            'lint/system.txt': '2026-10-01T00:00:03.0Z Runner: x\n',
         }
     )
     issues = f'{base}/issues?per_page=100&state=open'
@@ -148,10 +163,16 @@ def serve_repo(fake: fake_github.FakeGitHub, initial: str) -> None:
     fake.routes['/page2'] = [issue(5)]
 
 
-def scout_toml(root: pathlib.Path, api: str, max_candidates: int = 25) -> str:
+def scout_toml(
+    root: pathlib.Path,
+    api: str,
+    max_candidates: int = 25,
+    ignore_ci_lines: tuple[str, ...] = (),
+) -> str:
     return f"""
 max_candidates = {max_candidates}
 opt_out_label = "ready-for-human"
+ignore_ci_lines = {json.dumps(ignore_ci_lines)}
 api = "{api}"
 git_url = "{(root / 'remote').as_uri()}"
 
@@ -179,7 +200,10 @@ def fixture_github(
 
 
 def scout_claws(
-    root: pathlib.Path, api: str, max_candidates: int = 25
+    root: pathlib.Path,
+    api: str,
+    max_candidates: int = 25,
+    ignore_ci_lines: tuple[str, ...] = (),
 ) -> pathlib.Path:
     claws = testing_gateway.make_claws(
         root,
@@ -198,7 +222,7 @@ def scout_claws(
         extensions={'scout': ['pi/claw-extensions/task.ts']},
     )
     (claws / 'scout' / scout_repos.SETTINGS_NAME).write_text(
-        scout_toml(root, api, max_candidates)
+        scout_toml(root, api, max_candidates, ignore_ci_lines)
     )
     return claws
 
@@ -247,6 +271,7 @@ def test_collects_new_candidates_in_priority_order(
 
     warning = scout.fingerprint('DeprecationWarning: old api')
     node = scout.fingerprint('[DEP0040] DeprecationWarning: punycode')
+    masked = scout.fingerprint('##[error]Process completed with exit code 1.')
     todo = scout.fingerprint('    pass  # TODO: handle errors')
 
     found = candidates(collection.text)
@@ -255,6 +280,7 @@ def test_collects_new_candidates_in_priority_order(
         for c in found
     ] == [
         ('ci', f'{REPO}/actions/runs/7'),
+        ('error', f'{REPO}/actions/workflows/w2.yml?error={masked}'),
         ('pr', f'{REPO}/issues/3'),
         ('issue', f'{REPO}/issues/1'),
         ('warning', f'{REPO}/actions/workflows/w2.yml?warning={warning}'),
@@ -262,7 +288,11 @@ def test_collects_new_candidates_in_priority_order(
         ('todo', f'{REPO}/blob/main/app.py?todo={todo}#L2'),
     ]
     assert 'test: pytest' in found[0]['detail']
-    assert found[3]['detail'].startswith(
+    assert found[1]['title'] == 'Masked failure in w2.yml'
+    assert found[1]['detail'].endswith(
+        '\n- test > ./flaky.sh\n- lint > make lint'
+    )
+    assert found[4]['detail'].startswith(
         f'From https://github.com/{REPO}/actions/runs/8 (commit '
     )
     assert 'def main():' in found[-1]['detail']
@@ -284,6 +314,57 @@ def test_collects_new_candidates_in_priority_order(
     assert candidates(scout.collect(claw).text) == found
 
 
+def test_shipped_ignore_ci_lines_drop_only_noise(
+    root: pathlib.Path, github: fake_github.FakeGitHub
+) -> None:
+    shipped = scout_repos.load_settings(harness.REPO / 'claws' / 'scout')
+    ignore = tuple(pattern.pattern for pattern in shipped.ignore_ci_lines)
+    claw = config.load(scout_claws(root, github.url, 25, ignore)).claw('scout')
+    # From brew test-bot runs: more cleanup noise than the per-repo cap,
+    # then formula audit problems and their tally; the problems must still
+    # be found.
+    noise = [
+        f'##[warning]Skipping {name}: most recent version {version}'
+        ' not installed'
+        for name, version in (
+            ('azure/bicep/bicep', '0.48.1'),
+            ('ca-certificates', '2026-09-25'),
+            ('gnupg', '2.5.24_1'),
+            ('ruby@3.4', '3.4.11_1'),
+            *(
+                (f'formula{i}', f'1.{i}')
+                for i in range(scout.WARNINGS_PER_REPO)
+            ),
+        )
+    ] + [
+        '##[warning]Treating azure-cli as a formula. For the cask, use'
+        ' homebrew/cask/azure-cli or specify the `--cask` flag. To silence'
+        ' this message, use the `--formula` flag.'
+    ]
+    problem = 'HEAD: Git `head` URL must specify a branch name'
+    audit = [
+        f'##[warning]{problem}',
+        '##[error]1 problem in 1 formula detected.',
+        '##[error]2 problems in 2 formulae detected.',
+        f'##[error]{problem}',
+    ]
+    github.routes['/blob/logs.zip'] = fake_github.logs_zip(
+        {'0_test-bot.txt': '\n'.join([*noise, *audit]) + '\n'}
+    )
+
+    found = candidates(scout.collect(claw).text)
+
+    messages = [
+        (c['kind'], c['detail'].split('\n')[1])
+        for c in found
+        if c['kind'] in {'warning', 'error'}
+    ]
+    assert messages == [
+        ('error', f'##[error]{problem}'),
+        ('warning', f'##[warning]{problem}'),
+    ]
+
+
 def test_caps_candidates_per_run(
     root: pathlib.Path, github: fake_github.FakeGitHub
 ) -> None:
@@ -292,8 +373,8 @@ def test_caps_candidates_per_run(
     text = scout.collect(claw).text
 
     assert text is not None
-    assert '<candidates count="2" deferred="6">' in text
-    assert [c['kind'] for c in candidates(text)] == ['ci', 'pr']
+    assert '<candidates count="2" deferred="7">' in text
+    assert [c['kind'] for c in candidates(text)] == ['ci', 'error']
 
 
 def test_scout_adds_tasks_then_finds_nothing_new(
@@ -329,7 +410,8 @@ def test_scout_adds_tasks_then_finds_nothing_new(
         assert first.status == 'settled', first.reason
         assert 'actions/runs/7' in fake_llm.transcript(0)
         # Everything left is still new, but one per run: the next run
-        # hands over the PR. Drop the other sources to see "nothing new".
+        # hands over the masked failure. Drop the other sources to see
+        # "nothing new".
         github.routes[f'/repos/{REPO}/issues?per_page=100&state=open'] = []
         github.next_pages.clear()
         runs = (

@@ -3,10 +3,11 @@ The scout collector: things in the operator's repos that should be on the
 task list.
 
 Repos are every one the claws' GitHub user can reach (see scout_repos). For
-each: CI failures and warnings on the default branch (warnings only from runs
-whose workflow file is still current, and not Node deprecations raised in
-actions), open issues and non-bot pull requests, and TODO/FIXME comments on
-the default branch (fetched into scout's own clone; see scout_todos).
+each: CI failures on the default branch, and the masked failures and
+warnings in passing runs whose workflow file is still current (minus lines
+matching `ignore_ci_lines`; see scout_logs), open issues and non-bot pull
+requests, and TODO/FIXME comments on the default branch (fetched into
+scout's own clone; see scout_todos).
 A candidate is new unless a task already has its link, which is
 deterministic: the link is the task's lineage.
 """
@@ -15,7 +16,7 @@ import base64
 import concurrent.futures
 import dataclasses
 import hashlib
-import io
+import itertools
 import json
 import logging
 import os
@@ -33,6 +34,7 @@ from typing import TypeVar
 from .. import github
 from .. import secrets
 from . import base
+from . import scout_logs
 from . import scout_repos
 from . import scout_todos
 from . import tasks
@@ -45,23 +47,12 @@ log = logging.getLogger(__name__)
 T = TypeVar('T')
 
 # Hand-over order: what is most likely broken or blocking someone first.
-KINDS = ('ci', 'pr', 'issue', 'warning', 'todo')
+KINDS = ('ci', 'error', 'pr', 'issue', 'warning', 'todo')
 FAILED = frozenset({'failure', 'timed_out', 'startup_failure'})
 # Dependabot's own update jobs: their failures surface in Dependabot itself.
 IGNORED_EVENTS = frozenset({'dynamic'})
-WARNING_RE = re.compile(
-    r'DeprecationWarning|FutureWarning|PendingDeprecationWarning|##\[warning\]'
-    r'|::warning'
-)
-LOG_TIMESTAMP_RE = re.compile(r'^\d{4}-\d\d-\d\dT[\d:.]+Z\s*')
-STEP_PREFIX = '##[group]Run '
-# `uses: owner/repo[/path]@ref`; local (`./…`) actions are the repo's own.
-ACTION_STEP_RE = re.compile(r'^##\[group\]Run [\w.-]+/[\w./-]+@\S+$')
-# Only actions have post steps, and the log does not name theirs.
-POST_STEP = 'Post job cleanup.'
-NODE_PID_RE = re.compile(r'^\(node:\d+\) ')
-NODE_DEPRECATION_RE = re.compile(r'^\[DEP\d+\] ')
 WARNINGS_PER_REPO = 20
+ERRORS_PER_REPO = 20
 BODY_CHARS = 1500
 WORKERS = 8
 
@@ -147,42 +138,14 @@ def _current(repo: scout_repos.Repo, ref: str, run: dict[str, Any]) -> bool:
     return not changed.strip()
 
 
-def _job_warnings(job_log: str) -> Iterator[str]:
-    """
-    Warnings in a job's log, minus Node deprecations raised in actions.
-
-    An action ships its dependencies bundled outside node_modules, so Node
-    reports their deprecations, which only the action's maintainers can fix.
-    Node prefixes its warnings with a pid, which differs every run.
-    """
-    in_action = False
-    for raw in job_log.splitlines():
-        line = LOG_TIMESTAMP_RE.sub('', raw).strip()
-        if line.startswith(STEP_PREFIX) or line == POST_STEP:
-            in_action = line == POST_STEP or bool(ACTION_STEP_RE.match(line))
-        if not WARNING_RE.search(line):
-            continue
-        message = NODE_PID_RE.sub('', line)
-        if in_action and NODE_DEPRECATION_RE.match(message):
-            continue
-        yield message
-
-
-def _log_warnings(logs: bytes) -> Iterator[str]:
-    with zipfile.ZipFile(io.BytesIO(logs)) as archive:
-        for member in sorted(archive.namelist()):
-            yield from _job_warnings(
-                archive.read(member).decode(errors='replace')
-            )
-
-
-def _warnings(
+def _run_findings(
     gh: github.GitHub,
     repo: scout_repos.Repo,
     ref: str,
     passing: list[dict[str, Any]],
-) -> Iterator[Candidate]:
-    seen: set[str] = set()
+    ignore: tuple[re.Pattern[str], ...],
+) -> Iterator[tuple[dict[str, Any], list[scout_logs.Finding]]]:
+    """Each current passing run, with its log's findings minus ignored ones."""
     for run in passing:
         if not _current(repo, ref, run):
             continue
@@ -194,28 +157,107 @@ def _warnings(
             if e.status == 410:  # past log retention
                 continue
             raise
-        workflow = pathlib.PurePosixPath(run['path']).name
-        source = (
-            f'From {run["html_url"]} (commit {run["head_sha"][:7]},'
-            f' {run["created_at"]}):\n'
+        kept = [
+            finding
+            for finding in scout_logs.findings(logs)
+            if not any(p.search(finding.message) for p in ignore)
+        ]
+        yield run, kept
+
+
+def _workflow(run: dict[str, Any]) -> str:
+    return pathlib.PurePosixPath(run['path']).name
+
+
+def _ci_link(repo: str, run: dict[str, Any], kind: str, key: str) -> str:
+    return (
+        f'https://github.com/{repo}/actions/workflows/{_workflow(run)}'
+        f'?{kind}={key}'
+    )
+
+
+def _source(run: dict[str, Any]) -> str:
+    return (
+        f'From {run["html_url"]} (commit {run["head_sha"][:7]},'
+        f' {run["created_at"]}):\n'
+    )
+
+
+def _warning_candidates(
+    repo: str,
+    run: dict[str, Any],
+    found: list[scout_logs.Finding],
+    seen: set[str],
+) -> Iterator[Candidate]:
+    """Warnings not yet in `seen`, which spans the repo's runs."""
+    for finding in found:
+        key = fingerprint(finding.message)
+        if finding.kind != 'warning' or key in seen:
+            continue
+        if len(seen) >= WARNINGS_PER_REPO:
+            return
+        seen.add(key)
+        yield Candidate(
+            kind='warning',
+            repo=repo,
+            link=_ci_link(repo, run, 'warning', key),
+            title=f'CI warning in {_workflow(run)}',
+            detail=_source(run) + _clip(finding.message),
         )
-        for message in _log_warnings(logs):
-            key = fingerprint(message)
-            if key in seen:
-                continue
-            seen.add(key)
-            yield Candidate(
-                kind='warning',
-                repo=repo.name,
-                link=(
-                    f'https://github.com/{repo.name}/actions/'
-                    f'workflows/{workflow}?warning={key}'
-                ),
-                title=f'CI warning in {workflow}',
-                detail=source + _clip(message),
+
+
+def _error_candidates(
+    repo: str, run: dict[str, Any], found: list[scout_logs.Finding]
+) -> Iterator[Candidate]:
+    """
+    Masked failures: one per message in the run, naming every job and step
+    it was in, as a generic message (eg. a step allowed to fail's exit code)
+    can come from several.
+    """
+    places: dict[str, tuple[str, list[str]]] = {}
+    for finding in found:
+        if finding.kind != 'error':
+            continue
+        place = _clip(f'{finding.job} > {finding.step}', 200)
+        _, seen_in = places.setdefault(
+            fingerprint(finding.message), (finding.message, [])
+        )
+        if place not in seen_in:
+            seen_in.append(place)
+    for key, (message, seen_in) in places.items():
+        yield Candidate(
+            kind='error',
+            repo=repo,
+            link=_ci_link(repo, run, 'error', key),
+            title=f'Masked failure in {_workflow(run)}',
+            detail=(
+                _source(run)
+                + _clip(message)
+                + '\nSeen in (job > step):\n'
+                + '\n'.join(f'- {place}' for place in seen_in)
+            ),
+        )
+
+
+def _log_candidates(
+    gh: github.GitHub,
+    repo: scout_repos.Repo,
+    ref: str,
+    passing: list[dict[str, Any]],
+    ignore: tuple[re.Pattern[str], ...],
+) -> Iterator[Candidate]:
+    seen: set[str] = set()
+    errors = 0
+    for run, found in _run_findings(gh, repo, ref, passing, ignore):
+        yield from _warning_candidates(repo.name, run, found, seen)
+        masked = list(
+            itertools.islice(
+                _error_candidates(repo.name, run, found),
+                ERRORS_PER_REPO - errors,
             )
-            if len(seen) >= WARNINGS_PER_REPO:
-                return
+        )
+        errors += len(masked)
+        yield from masked
 
 
 def _issues(
@@ -343,7 +385,11 @@ def _repo_candidates(
         found += (
             attempt(
                 'reading CI logs',
-                lambda: list(_warnings(gh, repo, ref, passing)),
+                lambda: list(
+                    _log_candidates(
+                        gh, repo, ref, passing, settings.ignore_ci_lines
+                    )
+                ),
             )
             or []
         )

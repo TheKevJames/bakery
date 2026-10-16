@@ -6,6 +6,7 @@ repo), with per-repo exclude globs from the claw's `scout.toml`.
 import dataclasses
 import operator
 import pathlib
+import re
 import subprocess
 import tomllib
 from typing import TYPE_CHECKING
@@ -34,6 +35,9 @@ class Repo:
 class Settings:
     # Each repo's exclude globs, by owner/name.
     excludes: dict[str, tuple[str, ...]]
+    # CI log lines (warnings and errors) matching any of these (searched)
+    # are never candidates.
+    ignore_ci_lines: tuple[re.Pattern[str], ...]
     max_candidates: int
     opt_out_label: str
     api: str
@@ -69,6 +73,9 @@ def load_settings(profile: pathlib.Path) -> Settings:
         entry.done()
     settings = Settings(
         excludes=excludes,
+        ignore_ci_lines=_patterns(table, 'ignore_ci_lines')
+        if table.optional('ignore_ci_lines')
+        else (),
         max_candidates=table.count('max_candidates'),
         opt_out_label=table.string('opt_out_label'),
         api=table.string('api')
@@ -80,6 +87,18 @@ def load_settings(profile: pathlib.Path) -> Settings:
     )
     table.done()
     return settings
+
+
+def _patterns(table: toml.Table, key: str) -> tuple[re.Pattern[str], ...]:
+    patterns = []
+    for raw in table.strings(key):
+        try:
+            patterns.append(re.compile(raw))
+        except re.error as e:
+            raise toml.ConfigError(
+                f'{table.where}.{key}: {raw!r}: {e}'
+            ) from None
+    return tuple(patterns)
 
 
 def _accessible(gh: github.GitHub) -> list[dict[str, Any]]:
