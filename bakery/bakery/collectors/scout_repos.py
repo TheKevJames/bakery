@@ -35,8 +35,9 @@ class Repo:
 class Settings:
     # Each repo's exclude globs, by owner/name.
     excludes: dict[str, tuple[str, ...]]
-    # CI warnings matching any of these (searched) are never candidates.
-    ignore_warnings: tuple[re.Pattern[str], ...]
+    # CI log lines (warnings and errors) matching any of these (searched)
+    # are never candidates.
+    ignore_ci_lines: tuple[re.Pattern[str], ...]
     max_candidates: int
     opt_out_label: str
     api: str
@@ -72,8 +73,8 @@ def load_settings(profile: pathlib.Path) -> Settings:
         entry.done()
     settings = Settings(
         excludes=excludes,
-        ignore_warnings=_patterns(table, 'ignore_warnings')
-        if table.optional('ignore_warnings')
+        ignore_ci_lines=_patterns(table, 'ignore_ci_lines')
+        if table.optional('ignore_ci_lines')
         else (),
         max_candidates=table.count('max_candidates'),
         opt_out_label=table.string('opt_out_label'),
