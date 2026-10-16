@@ -45,21 +45,20 @@ export default function (pi: ExtensionAPI) {
           const modelStr = theme.fg("accent", ctx.model?.id || "no-model");
 
           const pct = ctx.getContextUsage()?.percent ?? 0;
-
           const pctColor = pct > 75 ? "error" : pct > 50 ? "warning" : "success";
 
           const tokenStats = [
-            theme.fg("accent", `${fmt(input)}/${fmt(output)}`),
             theme.fg("warning", `$${cost.toFixed(2)}`),
             theme.fg(pctColor, `${pct.toFixed(0)}%`),
+            theme.fg("accent", `${fmt(input)}:${fmt(output)}`),
           ].join(" ");
 
           const parts = process.cwd().split("/");
           const short = parts.length > 2 ? parts.slice(-2).join("/") : process.cwd();
-          const cwdStr = theme.fg("muted", `⌂ ${short}`);
+          const cwdStr = theme.fg("muted", short);
 
           const branch = footerData.getGitBranch();
-          const branchStr = branch ? theme.fg("accent", `⎇ ${branch}`) : "";
+          const branchStr = branch ? theme.fg("accent", branch) : "";
 
           const sep = theme.fg("dim", " | ");
           const leftParts = [modelStr, tokenStats, cwdStr];
