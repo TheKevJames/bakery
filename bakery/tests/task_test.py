@@ -55,6 +55,8 @@ def test_task_claims_and_adds(
     assert '"owner": "triage"' in results[0]
     assert 'owned by operator' in results[1]
     assert 'not claimed by triage' in results[2]
+    assert '"owner": null' in results[3]
+    assert '"id":3,' in results[4]
     assert "1: the operator's" in results[5]
     assert 'attempt to write a readonly database' in results[6]
     assert testing_tasks.show('1')['summary'] == "the operator's"
