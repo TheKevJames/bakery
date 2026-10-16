@@ -53,7 +53,7 @@ async function task(pi: ExtensionAPI, args: string[], signal?: AbortSignal): Pro
 }
 
 // Blocked tasks must say what they wait on, in a form triage's collectors can
-// check (bakery/bakery/collectors/blocked.py).
+// check (bakery/bakery/task_list/blocked.py).
 const BLOCKED = "blocked";
 
 type Shown = { owner: string | null };

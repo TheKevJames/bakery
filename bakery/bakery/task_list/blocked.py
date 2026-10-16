@@ -22,7 +22,7 @@ import sys
 from collections.abc import Callable
 from typing import Literal
 
-from . import tasks
+from . import store
 
 TAG = 'blocked'
 DONE = 'done'
@@ -108,7 +108,7 @@ class Board:
 
     @classmethod
     def load(cls) -> 'Board':
-        return cls({tasks.ref(t): str(t['tag']) for t in tasks.listed()})
+        return cls({store.ref(t): str(t['tag']) for t in store.listed()})
 
     def state(self, blocker: TaskBlocker) -> str:
         """Its task's tag, or DONE once there is no such task."""
@@ -120,7 +120,7 @@ class Board:
         state = self.state(blocker)
         if blocker.until == 'done':
             return state == DONE
-        return blocker.namespace != tasks.NAMESPACE or state not in UNDECIDED
+        return blocker.namespace != store.NAMESPACE or state not in UNDECIDED
 
 
 def problems(ident: int, description: str | None, board: Board) -> list[str]:
@@ -136,13 +136,13 @@ def problems(ident: int, description: str | None, board: Board) -> list[str]:
     for blocker in blockers:
         if not isinstance(blocker, TaskBlocker):
             continue
-        if blocker.ref == f'{tasks.NAMESPACE}:{ident}':
+        if blocker.ref == f'{store.NAMESPACE}:{ident}':
             found.append(f'{blocker}: a task cannot block itself')
             continue
         state = board.state(blocker)
         if not (
             DONE in (blocker.until, state)
-            or blocker.namespace == tasks.NAMESPACE
+            or blocker.namespace == store.NAMESPACE
         ):
             found.append(
                 f"{blocker}: #{blocker.ref} is the operator's ({state}),"
@@ -161,9 +161,9 @@ def problems(ident: int, description: str | None, board: Board) -> list[str]:
 def check(ident: int, append: str = '') -> list[str]:
     """`problems` for task `ident` once `append` is appended to its notes."""
     try:
-        shown = tasks.shown(f'{tasks.NAMESPACE}:{ident}')
+        shown = store.shown(f'{store.NAMESPACE}:{ident}')
         description = str(shown['description'] or '')
-    except tasks.TaskError as e:
+    except store.TaskError as e:
         return [str(e)]
     # Joined as `task set --description-append` joins it.
     description = '\n\n'.join(p for p in (description, append.strip()) if p)
@@ -173,7 +173,7 @@ def check(ident: int, append: str = '') -> list[str]:
 def do_check(args: argparse.Namespace) -> int:
     if found := check(args.id, args.append):
         sys.exit(
-            f'cannot block #{tasks.NAMESPACE}:{args.id}: ' + '; '.join(found)
+            f'cannot block #{store.NAMESPACE}:{args.id}: ' + '; '.join(found)
         )
     return 0
 
@@ -188,7 +188,7 @@ def add_parsers(add_parser: Callable[..., argparse.ArgumentParser]) -> None:
         )
     )
     check_.add_argument(
-        'id', type=int, help=f'id of a task in {tasks.NAMESPACE}'
+        'id', type=int, help=f'id of a task in {store.NAMESPACE}'
     )
     check_.add_argument(
         '--append', default='', help='notes about to be appended to it'

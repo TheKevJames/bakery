@@ -26,9 +26,9 @@ from collections.abc import Callable
 
 from . import paths
 from . import state
-from .collectors import blocked
-from .collectors import wontfix
 from .gateway import cli as gateway_cli
+from .task_list import blocked
+from .task_list import wontfix
 
 WAIT_POLL_INTERVAL = 0.25
 # pi runs an interactive TUI that exits immediately without a terminal, so a

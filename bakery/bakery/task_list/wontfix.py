@@ -15,7 +15,7 @@ import sys
 from collections.abc import Callable
 
 from .. import state
-from . import tasks
+from . import store
 
 
 class WontfixError(ValueError):
@@ -34,7 +34,7 @@ def path() -> pathlib.Path:
 
 
 def load() -> dict[str, Rejection]:
-    """Rejections by lineage (see `tasks.lineage`)."""
+    """Rejections by lineage (see `store.lineage`)."""
     if not path().exists():
         return {}
     data: dict[str, dict[str, str]] = json.loads(path().read_text())
@@ -53,12 +53,12 @@ def add(address: str, reason: str) -> str:
     if not reason.strip():
         raise WontfixError('the reason is empty')
     try:
-        task = tasks.shown(address)
-    except tasks.TaskError as e:
+        task = store.shown(address)
+    except store.TaskError as e:
         raise WontfixError(str(e)) from e
     if not task['link']:
         raise WontfixError(f'task {address} has no link')
-    link = tasks.lineage(str(task['link']))
+    link = store.lineage(str(task['link']))
     rejections = load()
     if link in rejections:
         raise WontfixError(f'{link} is already rejected')

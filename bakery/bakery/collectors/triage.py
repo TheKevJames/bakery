@@ -17,9 +17,9 @@ import dataclasses
 import json
 from typing import TYPE_CHECKING
 
+from ..task_list import blocked
+from ..task_list import store
 from . import base
-from . import blocked
-from . import tasks
 
 if TYPE_CHECKING:
     from ..gateway import config
@@ -31,8 +31,8 @@ UNTRUSTED = (
 
 
 def waiting() -> list[dict[str, object]]:
-    listed = tasks.listed(
-        '-f', f'namespace={tasks.NAMESPACE},tag=triage,owner='
+    listed = store.listed(
+        '-f', f'namespace={store.NAMESPACE},tag=triage,owner='
     )
     scheduled = ('next', 'interval')
     return [t for t in listed if all(t[k] is None for k in scheduled)]
@@ -63,7 +63,7 @@ class Blocked:
     external: tuple[blocked.ExternalBlocker, ...]
 
     def label(self) -> str:
-        return f'#{tasks.NAMESPACE}:{self.ident} {json.dumps(self.summary)}'
+        return f'#{store.NAMESPACE}:{self.ident} {json.dumps(self.summary)}'
 
 
 def _blocked() -> tuple[list[Blocked], list[str]]:
@@ -71,8 +71,8 @@ def _blocked() -> tuple[list[Blocked], list[str]]:
     board = blocked.Board.load()
     ready: list[Blocked] = []
     errors: list[str] = []
-    for task in tasks.listed(
-        '-f', f'namespace={tasks.NAMESPACE},tag={blocked.TAG},owner='
+    for task in store.listed(
+        '-f', f'namespace={store.NAMESPACE},tag={blocked.TAG},owner='
     ):
         ident = int(str(task['id']))
         try:
@@ -83,7 +83,7 @@ def _blocked() -> tuple[list[Blocked], list[str]]:
             if not all(board.cleared(b) for b in on_tasks):
                 continue
         except blocked.BlockerError as e:
-            errors.append(f'{blocked.TAG} #{tasks.ref(task)}: {e}')
+            errors.append(f'{blocked.TAG} #{store.ref(task)}: {e}')
             continue
         external = tuple(
             b for b in blockers if isinstance(b, blocked.ExternalBlocker)

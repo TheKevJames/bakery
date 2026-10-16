@@ -8,10 +8,10 @@ from bakery.chat import render
 from bakery.collectors import base as collectors_base
 from bakery.collectors import scout
 from bakery.collectors import scout_repos
-from bakery.collectors import wontfix
 from bakery.gateway import config
 from bakery.gateway import control
 from bakery.gateway import core
+from bakery.task_list import wontfix
 from testing import commands
 from testing import fake_github
 from testing import gateway as testing_gateway

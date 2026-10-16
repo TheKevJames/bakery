@@ -20,9 +20,9 @@ from typing import TYPE_CHECKING
 from .. import state
 from .. import transcripts
 from ..gateway import ledger
+from ..task_list import store
+from ..task_list import wontfix
 from . import base
-from . import tasks
-from . import wontfix
 
 if TYPE_CHECKING:
     from ..gateway import config
@@ -254,9 +254,9 @@ def _memory(
 
 def _tasks() -> Section:
     lines = [
-        f'- #{tasks.ref(t)} [{t["tag"]}]'
+        f'- #{store.ref(t)} [{t["tag"]}]'
         f' {t["priority"]}/{t["size"]} {t["summary"]} ({t["link"]})'
-        for t in tasks.listed('-f', f'link~{TASK_LINK_PREFIX}')
+        for t in store.listed('-f', f'link~{TASK_LINK_PREFIX}')
     ] + [
         f'- [rejected] {r.summary} ({link})'
         for link, r in sorted(wontfix.load().items())

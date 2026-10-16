@@ -6,7 +6,7 @@ import subprocess
 import pytest
 
 from bakery import state
-from bakery.collectors import wontfix
+from bakery.task_list import wontfix
 from testing import commands
 from testing import tasks as testing_tasks
 

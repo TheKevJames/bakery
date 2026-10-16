@@ -504,7 +504,7 @@ The `[policy]` keys:
   the intended writers of memory, but bash could write it too.
 
 A claw's `[tasks] tag` is the section of the claws' namespace (`bakery`,
-`tasks.NAMESPACE`) that `task_add` files into (default `triage`); the tool
+`store.NAMESPACE`) that `task_add` files into (default `triage`); the tool
 does not let the model choose another.
 
 Enforcement:
@@ -635,7 +635,7 @@ What claws rely on:
 Claws read it with `task list --json` and `task show --json` in bash, and
 change it through tools in `pi/claw-extensions/task.ts`: `task_add` (with an
 optional priority and size) and `task_set` (tag, claim, release, append
-notes). Both address only the claws' namespace, `bakery` (`tasks.NAMESPACE`,
+notes). Both address only the claws' namespace, `bakery` (`store.NAMESPACE`,
 passed as `BAKERY_TASK_NAMESPACE`): `task_set` takes a bare id there.
 `task_set` refuses to move a task to `blocked` unless `bakery blocked check`
 accepts its blockers (see triage). Claims are always made as the claw itself
@@ -677,7 +677,7 @@ records a rejection: the link (without its `#…` fragment), the task's
 summary, the reason, and the date, in
 `$XDG_STATE_HOME/claws/_shared/wontfix.json`, committed to the state repo
 (`bakery wontfix list` and `rm <link>` read and undo them;
-`bakery/bakery/collectors/wontfix.py`). Any task with a link can be
+`bakery/bakery/task_list/wontfix.py`). Any task with a link can be
 rejected, whatever its namespace or tag. Scout and baker skip links on open
 tasks (in any namespace) and on rejections, so done tasks free their link: a
 gap which comes back after it was fixed is filed again. A `blocked` task is
@@ -793,7 +793,7 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
   `bakery`, which record no decisions), `#<ns>:<id> done`, or
   `<url>: <condition>`. The last list
   counts; the task clears once all of its blockers have.
-  `bakery/bakery/collectors/blocked.py` parses and checks it, for `bakery
+  `bakery/bakery/task_list/blocked.py` parses and checks it, for `bakery
   blocked check` (run by `task_set` before it moves a task to
   `bakery > blocked`) and for the collectors below. Done tasks are deleted,
   so a task which does not exist counts as done. A list is refused if it is
