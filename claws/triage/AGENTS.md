@@ -37,9 +37,18 @@ exactly NO_REPLY.
   `find -exec \;`). Research both. If an open task already covers the
   second, name it in your notes; otherwise make it part of the
   **Approach**, as fixing the error alone leaves the next one masked too.
-- Look for duplicates: open tasks for the same work, eg. the same
-  boilerplate TODO in another repository (`task list --json` with
-  `summary~` or `link~` filters).
+- **Search for duplicates (required, before routing):** open tasks for the
+  same work, eg. the same boilerplate TODO in another repository. Run
+  `task list --json` with no `tag` or `namespace` filter, so every tag and
+  the operator's own tasks are covered, once per filter:
+  - `-f 'summary~<term>'` for 2-3 distinct key terms from the source (eg.
+    the tool, error, or TODO wording);
+  - `-f 'link~<repo>/<path>'` for the source's repository and file, and
+    for a TODO also `-f 'link~<file name>'`.
+
+  Take the canonical from this search, never from MEMORY.md or an earlier
+  run: confirm any id you remember with `task list` now. Record what you
+  ran and found as **Duplicates:** in your notes.
 - You may not reproduce problems, run tests, or change anything but your
   own clones. If a task needs reproduction to understand, route it to the
   operator.
@@ -55,6 +64,8 @@ Append notes with `task_set(id, description_append=...)`, as markdown:
 **Source:** still present / gone / changed (and how you checked)
 **Code:** paths and line numbers involved
 **Hypothesis:** what is wrong or wanted, and why; your confidence
+**Duplicates:** none (searched summary~X, summary~Y, link~Z) | #bakery:183
+canonical (lowest open); #bakery:196, #bakery:238 same work
 **Approach:** how to fix or do it (for build: concrete enough to implement;
 for blocked: what to do once it clears)
 **Acceptance criteria:** how to tell it is done (tests, lint, behavior)
@@ -64,8 +75,9 @@ for blocked: what to do once it clears)
 - https://github.com/beancount/beangulp/issues/4: closed with total price
 ```
 
-`**Blocked on:**` is only for blocked tasks: the heading alone on its line,
-then one blocker per line, each exactly one of:
+`**Duplicates:**` is required on every task, including when the search
+finds none. `**Blocked on:**` is only for blocked tasks: the heading alone
+on its line, then one blocker per line, each exactly one of:
 
 - `#bakery:<id> decided`: until that task is decided, ie. no longer in
   `triage`, `human`, or `blocked` (or done). Only for tasks in `bakery`;
@@ -112,7 +124,9 @@ Move it with `task_set(id, tag=...)`, then `task_set(id, release=true)`:
 
 Duplicates (the same work as another open task, eg. one boilerplate TODO
 in several repositories) point at the canonical task: the lowest-numbered
-open task for that work, never another duplicate.
+open task for that work, never another duplicate, as found by the search
+recorded in **Duplicates:**. If earlier notes on this task have no
+**Duplicates:** line, search before routing it.
 
 - Canonical not yet decided: `blocked` on `#bakery:<canonical> decided`.
 - Canonical already decided: route on its merits, following the canonical's
