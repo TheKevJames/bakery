@@ -173,6 +173,38 @@ def test_extension_errors_fail_the_run(
     testing_gateway.run_gateway(claws, fake, scenario)
 
 
+class DeadThread(testing_gateway.FakeChannel):
+    """A channel whose run reports fail, like a deleted Discord thread."""
+
+    async def run_started(self, info: channel.RunInfo) -> None:
+        raise RuntimeError('Unknown Channel')
+
+    async def run_progress(self, info: channel.RunInfo) -> None:
+        raise RuntimeError('Unknown Channel')
+
+
+def test_reporting_errors_do_not_fail_the_run(
+    root: pathlib.Path, fake_llm: harness.FakeLLM
+) -> None:
+    claws = testing_gateway.make_claws(root, {'scout': ''})
+    fake = DeadThread()
+    fake_llm.queue(
+        harness.Reply(tool='bash', args={'command': 'true'}),
+        harness.Reply(text='done'),
+    )
+
+    async def scenario(gateway: core.Gateway) -> None:
+        key = gateway.trigger('scout', None, 'go')
+        run = await fake.wait(key)
+        assert (run.status, run.final_text) == ('settled', 'done')
+        print(fake.notices)
+        reported = [n for n in fake.notices if key in n]
+        assert len(reported) == 1
+        assert 'Unknown Channel' in reported[0]
+
+    testing_gateway.run_gateway(claws, fake, scenario)
+
+
 def test_slots_pause_and_shutdown(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:

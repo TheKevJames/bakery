@@ -61,7 +61,7 @@ class Gateway:
         self, claws_dir: pathlib.Path, channel: channel_.Channel
     ) -> None:
         self.claws_dir = claws_dir
-        self.channel = channel
+        self.channel = channel_.Reporting(channel)
         self.config = config.load(claws_dir)
         self.runs = ledger.Ledger(ledger.default_path())
         self.pool = pool.Pool()
@@ -100,7 +100,7 @@ class Gateway:
         self.scheduler.stop()
         self.watcher.stop()
         self.jobs.stop()
-        await self._notice('gateway stopping')
+        await self.channel.notice('gateway stopping')
         if self._dispatcher:
             self._dispatcher.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -114,15 +114,9 @@ class Gateway:
         self.runs.mark_interrupted()
         self.runs.close()
 
-    async def _notice(self, text: str) -> None:
-        try:
-            await self.channel.notice(text)
-        except Exception:
-            log.exception('channel failed posting notice: %s', text)
-
     def _notify(self, text: str) -> None:
         log.info('notice: %s', text)
-        task = asyncio.create_task(self._notice(text))
+        task = asyncio.create_task(self.channel.notice(text))
         self._notices.add(task)
         task.add_done_callback(self._notices.discard)
 
@@ -286,10 +280,7 @@ class Gateway:
             info.status,
             f': {info.reason}' if info.reason else '',
         )
-        try:
-            await self.channel.run_finished(info)
-        except Exception:
-            log.exception('channel failed reporting %s', info.work_key)
+        await self.channel.run_finished(info)
         try:
             info.state_commit = await asyncio.to_thread(
                 state.commit, f'{info.work_key}: {info.status}', info.claw
