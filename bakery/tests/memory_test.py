@@ -127,7 +127,6 @@ def test_flush_before_compaction(
 def test_operator_updates_are_filed_for_the_operator(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
-    testing_tasks.create(root / 'tasks')
     claws = testing_gateway.make_claws(
         root, {'a': ''}, extensions={'a': [MEMORY]}
     )

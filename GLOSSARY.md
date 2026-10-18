@@ -210,7 +210,9 @@ A task's address, `<namespace>:<id>`, eg. `bakery:12`; ids are unique only
 within a namespace, and a bare id means `default`.
 
 **Claim**:
-To become a task's owner, so that no one else works on it.
+To become a task's owner, so that no one else works on it. A claw's claim
+never outlives its runs: the gateway releases it once the claw has no run in
+flight.
 
 **Owner**:
 Whoever has claimed a task: a claw or the operator.

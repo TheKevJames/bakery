@@ -11,7 +11,6 @@ from testing import tasks as testing_tasks
 def test_task_claims_and_adds(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
-    testing_tasks.create(root / 'tasks')
     testing_tasks.task('add', 'mine', '-n', 'bakery', '--tag', 'triage')
     testing_tasks.task(
         'add', 'theirs', '-n', 'bakery', '--tag', 'triage',
