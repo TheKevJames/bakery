@@ -788,10 +788,11 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
 - Per task: claim it, check the source still exists, research (code,
   history in its clones, issues, docs, web; no reproduction, tests, or
   edits), append notes
-  (route and reason, source check, code locations, hypothesis, the
-  duplicate search and its result (required on every task), approach,
-  acceptance criteria, open questions), always set `priority` and `size`,
-  then re-tag and release:
+  (route and reason, priority and reason, source check, code locations,
+  hypothesis, the duplicate search and its result (required on every
+  task), approach, acceptance criteria, open questions), always set
+  `priority` (by a rubric of examples per level) and `size`, then re-tag
+  and release:
   - `bakery > build`: a TheKevJames repo the claws can push to, clear
     scope, checkable by tests, lint, or CI;
   - `bakery > human`: needs a decision on this task, reproduction,

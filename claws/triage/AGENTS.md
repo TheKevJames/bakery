@@ -61,6 +61,7 @@ Append notes with `task_set(id, description_append=...)`, as markdown:
 ## Triage (YYYY-MM-DD)
 
 **Route:** build | human | blocked | wontfix - one-sentence reason
+**Priority:** high | medium | low - what breaks, for whom, in a sentence
 **Source:** still present / gone / changed (and how you checked)
 **Code:** paths and line numbers involved
 **Hypothesis:** what is wrong or wanted, and why; your confidence
@@ -91,10 +92,28 @@ The task clears once all of its blockers have. Never list a blocker which
 has already cleared; if none remain, route the task on its merits.
 
 Always set `priority` (`low`, `medium`, `high`) and `size` (`small`,
-`medium`, `large`) with `task_set`, whatever the route:
+`medium`, `large`) with `task_set`, whatever the route. `**Priority:**` is
+required on every task and must match the `priority` you set:
 
-- **priority**: high = broken, blocking, or a security concern; medium =
-  worth doing soon; low = nice to have.
+- **priority**, by what the source shows now, not by the route (a `human`
+  or `blocked` task can be high):
+  - high = broken, blocking, or a security concern: a workflow failing
+    every run on a default branch (scout's CI failures), or one which no
+    longer produces its output (eg. a release, image push, or tag prune);
+    halted automation (eg. Renovate opening no PRs over an invalid config,
+    broken automerge); a security advisory or leaked credential; a bug
+    that breaks users of the code.
+  - medium = worth doing soon: intermittent CI failures which do not block
+    merges (eg. rate limits, cache races); masked failures; deprecation or
+    end-of-life warnings with a known deadline; an issue or PR from a user
+    or bot awaiting a reply or merge; a TODO marking a known bug or missing
+    correctness; work that unblocks other tasks.
+  - low = nice to have: cleanup or refactor TODOs, style and lint tweaks,
+    warnings with no deadline, log noise, speculative ideas, and
+    personal-config TODOs you cannot verify.
+
+  Torn between two levels, take the higher for CI failures and halted
+  automation on a default branch, and the lower for TODOs.
 - **size**: small = under an hour, a file or two; medium = a few hours or
   several files; large = a day or more, or design work.
 
