@@ -178,12 +178,9 @@ def test_job_queue_options(tmp_path: pathlib.Path) -> None:
 
 
 def test_repo_claws_load(
-    tmp_path: pathlib.Path,
-    short_tmp: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv('TASK_FOLDER', str(tmp_path))  # triage watches it
-    monkeypatch.setenv('XDG_STATE_HOME', str(short_tmp))  # baker reads it
     loaded = config.load(harness.REPO / 'claws')
     claw = loaded.claw('scout')
     settings = scout_repos.load_settings(claw.profile)

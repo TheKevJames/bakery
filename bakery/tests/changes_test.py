@@ -30,12 +30,9 @@ skip_empty = false
 
 @pytest.fixture(name='repo', scope='function')
 def fixture_repo(
-    tmp_path: pathlib.Path,
-    short_tmp: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> pathlib.Path:
     """The bakery checkout the claws run from."""
-    monkeypatch.setenv('XDG_STATE_HOME', str(short_tmp / 'state'))
     repo = tmp_path / 'repo'
     repo.mkdir()
     monkeypatch.setenv('BAKERY_REPO', str(repo))

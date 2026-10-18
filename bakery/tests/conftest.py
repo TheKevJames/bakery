@@ -39,6 +39,18 @@ def fixture_short_tmp() -> Iterator[pathlib.Path]:
     shutil.rmtree(path)
 
 
+@pytest.fixture(name='state_home', scope='function', autouse=True)
+def fixture_state_home(
+    short_tmp: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> pathlib.Path:
+    """
+    $XDG_STATE_HOME, apart from the operator's; short, since loading a claw's
+    config checks that its registry sockets fit.
+    """
+    monkeypatch.setenv('XDG_STATE_HOME', str(short_tmp))
+    return short_tmp
+
+
 @pytest.fixture(name='run_pi', scope='function')
 def fixture_run_pi(
     tmp_path: pathlib.Path, short_tmp: pathlib.Path, fake_llm: harness.FakeLLM
