@@ -20,6 +20,7 @@ from typing import Any
 import croniter
 
 from .. import collectors
+from .. import paths
 from .. import state
 from ..task_list import store
 from . import policy as policy_
@@ -34,6 +35,13 @@ ASK_POLICIES = ('ask', 'assume', 'park')
 TIMEOUT_POLICIES = ('assume', 'park')
 # pi's levels; pi, not this check, clamps a level the model does not support.
 THINKING_LEVELS = ('off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max')
+# macOS caps a unix socket path at 104 bytes, its terminating NUL included.
+MAX_SOCKET_PATH = 103
+# Session ids are work keys with `/` as `-`: `<claw>-<job>` plus a stamp, or
+# `<claw>-` plus a fixed suffix, the longest of which is a Discord thread's
+# (`thread-` and a snowflake of up to 20 digits).
+STAMP_LENGTH = len('-YYYYmmdd-HHMMSS')
+LONGEST_FIXED_SUFFIX = len('thread-') + 20
 
 
 @dataclasses.dataclass(frozen=True)
@@ -148,6 +156,11 @@ class Claw:
     @property
     def sessions_dir(self) -> pathlib.Path:
         return self.state_dir / 'sessions'
+
+    @property
+    def pi_state_dir(self) -> pathlib.Path:
+        """Its pi children's $PI_CODING_AGENT_STATE_DIR, apart from others'."""
+        return state.claw_pi_states() / self.name
 
     def job(self, name: str) -> Job:
         for job in self.jobs:
@@ -373,7 +386,24 @@ def _claw(
     )
     for sub in (limits, concurrency, ask, memory, table):
         sub.done()
+    _check_socket_paths(claw)
     return claw
+
+
+def _check_socket_paths(claw: Claw) -> None:
+    """Refuse a claw whose sessions' registry sockets pi could not bind."""
+    suffix = max(
+        (len(job.name) + STAMP_LENGTH for job in claw.jobs), default=0
+    )
+    session_id = len(claw.name) + 1 + max(suffix, LONGEST_FIXED_SUFFIX)
+    registry = str(paths.registry(claw.pi_state_dir))
+    length = len(f'{registry}/') + session_id + len('.sock')
+    if length > MAX_SOCKET_PATH:
+        raise ConfigError(
+            f'{claw.name}: its session sockets need {length} bytes, over the'
+            f' {MAX_SOCKET_PATH}-byte limit; shorten its name, its job names,'
+            ' or $XDG_STATE_HOME'
+        )
 
 
 def _gateway(data: Mapping[str, Any]) -> Gateway:

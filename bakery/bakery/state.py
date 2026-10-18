@@ -34,6 +34,11 @@ def root() -> pathlib.Path:
     )
 
 
+def claw_pi_states() -> pathlib.Path:
+    """Each claw's $PI_CODING_AGENT_STATE_DIR is a dir in here, its name."""
+    return root() / '_gateway' / 'pi'
+
+
 def operator_file() -> pathlib.Path:
     return root() / SHARED / 'OPERATOR.md'
 

@@ -3,6 +3,7 @@
   "extensions": [
     "../../pi/extensions/context",
     "../../pi/extensions/bakery.ts",
+    "../../pi/extensions/session-registry",
     "../../pi/extensions/time-awareness.ts",
     "../../pi/extensions/ketch.ts",
     "../../pi/extensions/context7.ts",

@@ -65,8 +65,8 @@ def tmp(claw: config.Claw) -> pathlib.Path:
 
 
 def sockets(claw: config.Claw) -> pathlib.Path:
-    """pi/extensions/bakery.ts's control sockets, apart from other claws'."""
-    return state.root() / '_gateway' / 'bakery' / claw.name
+    """pi/extensions/session-registry's sockets, apart from other claws'."""
+    return paths.registry(claw.pi_state_dir)
 
 
 def git_config(claw: config.Claw) -> pathlib.Path:

@@ -25,7 +25,8 @@ that is gitignored. Pi also rewrites `settings.json` (e.g.
 `lastChangelogVersion`), which is accepted churn.
 
 Claw profiles list their extensions explicitly rather than loading all of
-`pi/extensions/`: they need `context/`, `bakery.ts`, `time-awareness.ts`,
+`pi/extensions/`: they need `context/`, `bakery.ts`, `session-registry/`,
+`time-awareness.ts`,
 `ketch.ts`, `context7.ts`, `read-mutation-queue.ts`, `watch/`, and
 `pi/claw-extensions/` (the gateway adds
 `policy/` itself), inject `pi/claw-rules/` through their `context.toml`,
@@ -51,7 +52,7 @@ their own edits (eg. to `_shared/OPERATOR.md`).
 ```
 $XDG_STATE_HOME/claws/
 ├── _shared/OPERATOR.md      # facts about the operator, injected into every profile
-├── _gateway/                # gitignored: run ledger (runs.db), control socket, bakery sockets, sandbox violations
+├── _gateway/                # gitignored: run ledger (runs.db), control socket, claws' pi state (session registries), sandbox violations
 └── <name>/
     ├── MEMORY.md            # curated long-term memory
     ├── memory/YYYY-MM-DD.md # daily notes (kept forever)
@@ -61,10 +62,12 @@ $XDG_STATE_HOME/claws/
     └── tmp/                 # gitignored: its pi children's $TMPDIRs
 ```
 
-The interactive profile keeps using `$XDG_STATE_HOME/pi/{sessions,bakery}`.
+The interactive profile keeps using `$XDG_STATE_HOME/pi/{sessions,bakery}`,
+and its session registry in `$PI_CODING_AGENT_STATE_DIR/registry`.
 `bakery list|show|read|send|pin|attach` cover both the interactive and the
-claw locations (claw sockets live in `_gateway/bakery/<claw>/`, named after the work
-key, eg. `bakery read triage-task-151`). `bakery attach` refuses a claw
+claw locations (each claw's `$PI_CODING_AGENT_STATE_DIR` is
+`_gateway/pi/<claw>/`, its sockets named after the work key, eg.
+`bakery read triage-task-151`). `bakery attach` refuses a claw
 session the gateway is running, and runs pi with the claw's profile
 otherwise. `bakery gc` never collects claw sessions, since units of work
 resume from them.
@@ -221,8 +224,9 @@ Each unit of work is a `pi --mode rpc` child with a persisted session, run
 with the claw's profile as `PI_CODING_AGENT_DIR`. The gateway speaks pi's
 JSONL RPC protocol directly, waits for `agent_settled` to detect completion,
 and forwards `extension_ui_request` dialogs to Discord as buttons. The bakery
-extension still loads (sockets under
-`$XDG_STATE_HOME/claws/_gateway/bakery/<claw>`). The child runs through the
+and session-registry extensions still load (sockets under
+`$XDG_STATE_HOME/claws/_gateway/pi/<claw>/registry`); a claw whose socket
+paths could exceed macOS's 104-byte limit fails config loading. The child runs through the
 claws' sandbox launcher (see [Safety](#safety)); one whose command or
 environment (and so sandbox or policy) changed since it started, eg. after a
 `bakery gateway reload`, is replaced at its unit's next run, resuming the

@@ -2,9 +2,10 @@
 """
 Control plane for the pi bakery extension.
 
-Talks to per-session control sockets under the bakery directory:
-$PI_CODING_AGENT_BAKERY_DIR if set, else $PI_CODING_AGENT_DIR/bakery,
-else ~/.pi/agent/bakery.
+Talks to per-session control sockets in the session registry
+(pi/extensions/session-registry) of pi's state dir, and keeps pins in its
+`bakery/`: $PI_CODING_AGENT_STATE_DIR if set, else $XDG_STATE_HOME/pi, else
+~/.local/state/pi.
 """
 
 import argparse
@@ -43,22 +44,21 @@ STATE_COLORS = {'idle': 32, 'working': 33, 'blocked': 31, 'dead': 90}
 
 
 def bakery_dir() -> pathlib.Path:
-    override = os.getenv('PI_CODING_AGENT_BAKERY_DIR', '').strip()
-    if override:
-        return pathlib.Path(override).resolve()
-    return paths.resolve_base(
-        'PI_CODING_AGENT_DIR', pathlib.Path.home() / '.pi' / 'agent', 'bakery'
-    )
+    return paths.pi_state() / 'bakery'
 
 
-def claw_bakery_dirs() -> list[pathlib.Path]:
-    """Sockets of the gateway's claw sessions, a dir per claw."""
-    base = state.root() / '_gateway' / 'bakery'
-    return sorted(p for p in base.glob('*') if p.is_dir())
+def registry_dir() -> pathlib.Path:
+    return paths.registry(paths.pi_state())
 
 
-def bakery_dirs() -> list[pathlib.Path]:
-    return [bakery_dir(), *claw_bakery_dirs()]
+def claw_registry_dirs() -> list[pathlib.Path]:
+    """Sockets of the gateway's claw sessions, a registry per claw."""
+    base = state.claw_pi_states()
+    return sorted(paths.registry(p) for p in base.glob('*') if p.is_dir())
+
+
+def registry_dirs() -> list[pathlib.Path]:
+    return [registry_dir(), *claw_registry_dirs()]
 
 
 def is_safe_name(name: str) -> bool:
@@ -81,17 +81,17 @@ def alias_map(base: pathlib.Path) -> dict[str, list[str]]:
 
 def all_aliases() -> dict[str, list[str]]:
     result: dict[str, list[str]] = {}
-    for base in bakery_dirs():
+    for base in registry_dirs():
         if base.is_dir():
             result.update(alias_map(base))
     return result
 
 
 def live_sockets() -> list[pathlib.Path]:
-    """Socket files in every bakery dir (live or stale)."""
+    """Socket files in every registry (live or stale)."""
     return [
         socket_path
-        for base in bakery_dirs()
+        for base in registry_dirs()
         if base.is_dir()
         for socket_path in base.glob(f'*{SOCKET_SUFFIX}')
     ]
@@ -100,14 +100,14 @@ def live_sockets() -> list[pathlib.Path]:
 def resolve_socket(session: str) -> pathlib.Path:
     if not is_safe_name(session):
         sys.exit(f'invalid session: {session}')
-    for base in bakery_dirs():
+    for base in registry_dirs():
         alias = base / f'{session}{ALIAS_SUFFIX}'
         if alias.is_symlink():
             return pathlib.Path(os.path.normpath(base / os.readlink(alias)))
         socket_path = base / f'{session}{SOCKET_SUFFIX}'
         if socket_path.exists():
             return socket_path
-    return bakery_dir() / f'{session}{SOCKET_SUFFIX}'
+    return registry_dir() / f'{session}{SOCKET_SUFFIX}'
 
 
 def sessions_dir() -> pathlib.Path:
@@ -338,7 +338,7 @@ def do_list(args: argparse.Namespace) -> int:
 def status_for_id(session_id: str) -> str:
     if not session_id:
         return 'dead'
-    for base in bakery_dirs():
+    for base in registry_dirs():
         status = query_status(base / f'{session_id}{SOCKET_SUFFIX}')
         if status is not None:
             return status
@@ -662,7 +662,7 @@ def spawn_detached(session: str, cwd: pathlib.Path | None) -> None:
 
 
 def wait_for_registration(session: str, timeout: float) -> bool:
-    alias = bakery_dir() / f'{session}{ALIAS_SUFFIX}'
+    alias = registry_dir() / f'{session}{ALIAS_SUFFIX}'
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if alias.is_symlink() and query_status(resolve_socket(session)):

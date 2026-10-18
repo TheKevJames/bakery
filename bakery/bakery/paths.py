@@ -22,6 +22,24 @@ def repo() -> pathlib.Path:
     raise PathError('cannot find the bakery checkout; set BAKERY_REPO')
 
 
+def pi_state() -> pathlib.Path:
+    """
+    Pi's state dir: $PI_CODING_AGENT_STATE_DIR, else $XDG_STATE_HOME/pi, else
+    ~/.local/state/pi (as pi/extensions/session-registry resolves it).
+    """
+    override = os.getenv('PI_CODING_AGENT_STATE_DIR', '').strip()
+    if override:
+        return pathlib.Path(override).expanduser().resolve()
+    return resolve_base(
+        'XDG_STATE_HOME', pathlib.Path.home() / '.local' / 'state', 'pi'
+    )
+
+
+def registry(pi_state_dir: pathlib.Path) -> pathlib.Path:
+    """The session registry: a socket and aliases per running pi session."""
+    return pi_state_dir / 'registry'
+
+
 def resolve_base(
     env_var: str, fallback: pathlib.Path, *subpath: str
 ) -> pathlib.Path:

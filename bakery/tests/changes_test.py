@@ -33,7 +33,6 @@ def fixture_repo(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> pathlib.Path:
     """The bakery checkout the claws run from."""
-    monkeypatch.setenv('XDG_STATE_HOME', str(tmp_path / 'state'))
     repo = tmp_path / 'repo'
     repo.mkdir()
     monkeypatch.setenv('BAKERY_REPO', str(repo))
