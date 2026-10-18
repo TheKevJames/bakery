@@ -28,15 +28,24 @@ def fixture_fake_llm() -> Iterator[harness.FakeLLM]:
     server.shutdown()
 
 
+@pytest.fixture(name='short_tmp', scope='function')
+def fixture_short_tmp() -> Iterator[pathlib.Path]:
+    """
+    A temp dir for state holding pi's registry sockets: macOS caps unix socket
+    paths at 104 bytes, and pytest's tmp_path is longer.
+    """
+    path = pathlib.Path(tempfile.mkdtemp(prefix='bk', dir='/tmp'))
+    yield path
+    shutil.rmtree(path)
+
+
 @pytest.fixture(name='run_pi', scope='function')
 def fixture_run_pi(
-    tmp_path: pathlib.Path, fake_llm: harness.FakeLLM
-) -> Iterator[Callable[[pathlib.Path], harness.Pi]]:
+    tmp_path: pathlib.Path, short_tmp: pathlib.Path, fake_llm: harness.FakeLLM
+) -> Callable[[pathlib.Path], harness.Pi]:
     state = tmp_path / 'state'
     cwd = tmp_path / 'cwd'
     cwd.mkdir()
-    # macOS caps unix socket paths at 104 bytes; pytest's tmp_path is longer.
-    sockets = pathlib.Path(tempfile.mkdtemp(prefix='bk', dir='/tmp'))
 
     def make(profile: pathlib.Path) -> harness.Pi:
         env = os.environ | {
@@ -48,14 +57,13 @@ def fixture_run_pi(
             'OPENAI_API_KEY': 'fake',
             'BAKERY_FAKE_LLM_URL': fake_llm.url,
             'PI_CODING_AGENT_DIR': str(profile),
-            'PI_CODING_AGENT_BAKERY_DIR': str(sockets),
+            'PI_CODING_AGENT_STATE_DIR': str(short_tmp),
             'PI_CODING_AGENT_SESSION_DIR': str(state / 'sessions'),
             'XDG_STATE_HOME': str(state),
         }
         return harness.Pi(profile, env, cwd)
 
-    yield make
-    shutil.rmtree(sockets)
+    return make
 
 
 @pytest.fixture(name='logs', scope='function')
@@ -93,14 +101,13 @@ def fixture_task_folder(
 def fixture_root(
     fake_llm: harness.FakeLLM,
     keychain: dict[str, str],
+    short_tmp: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
-) -> Iterator[pathlib.Path]:
+) -> pathlib.Path:
     """A gateway's world: state dir, fake model, and the repo's extensions."""
-    # Short, because the state dir holds unix sockets (104-byte path cap).
-    root = pathlib.Path(tempfile.mkdtemp(prefix='bk', dir='/tmp'))
+    root = short_tmp
     monkeypatch.setenv('XDG_STATE_HOME', str(root / 'state'))
     monkeypatch.setenv('TASK_FOLDER', str(root / 'tasks'))
     keychain['BAKERY_FAKE_LLM_URL'] = fake_llm.url
     monkeypatch.setenv('BAKERY_REPO', str(harness.REPO))
-    yield root
-    shutil.rmtree(root)
+    return root

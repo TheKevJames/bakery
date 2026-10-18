@@ -15,12 +15,19 @@ def test_bakery_cli_sees_claw_sessions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     claws = testing_gateway.make_claws(
-        root, {'scout': ''}, extensions={'scout': ['pi/extensions/bakery.ts']}
+        root,
+        {'scout': ''},
+        extensions={
+            'scout': [
+                'pi/extensions/bakery.ts',
+                'pi/extensions/session-registry',
+            ]
+        },
     )
     fake = testing_gateway.FakeChannel()
     fake_llm.queue(harness.Reply(text='claw reply'))
     # No interactive sessions in the way.
-    monkeypatch.setenv('PI_CODING_AGENT_BAKERY_DIR', str(root / 'mine'))
+    monkeypatch.setenv('PI_CODING_AGENT_STATE_DIR', str(root / 'mine'))
 
     def bakery(*args: str) -> str:
         result = commands.bakery(*args)

@@ -99,7 +99,7 @@ def child_env(
             'BAKERY_TASK_TAG': claw.tasks.tag,
             'BAKERY_TASK_NAMESPACE': store.NAMESPACE,
             'PI_CODING_AGENT_DIR': str(claw.profile),
-            'PI_CODING_AGENT_BAKERY_DIR': str(sandbox.sockets(claw)),
+            'PI_CODING_AGENT_STATE_DIR': str(claw.pi_state_dir),
             'BAKERY_ASK_POLICY': job.ask
             if job and job.ask
             else claw.ask.policy,

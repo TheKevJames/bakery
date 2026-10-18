@@ -136,6 +136,10 @@ def test_default_jobs_apply_to_every_claw(tmp_path: pathlib.Path) -> None:
             'ask = "maybe"',
             'ask: must be one of',
         ),
+        (
+            f'[[job]]\nname = "{"x" * 80}"\ncron = "* * * * *"\nprompt = "p"',
+            'sockets need .* bytes, over the 103-byte limit',
+        ),
     ],
 )
 def test_invalid_config_is_rejected(
@@ -174,10 +178,12 @@ def test_job_queue_options(tmp_path: pathlib.Path) -> None:
 
 
 def test_repo_claws_load(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: pathlib.Path,
+    short_tmp: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv('TASK_FOLDER', str(tmp_path))  # triage watches it
-    monkeypatch.setenv('XDG_STATE_HOME', str(tmp_path))  # baker reads it
+    monkeypatch.setenv('XDG_STATE_HOME', str(short_tmp))  # baker reads it
     loaded = config.load(harness.REPO / 'claws')
     claw = loaded.claw('scout')
     settings = scout_repos.load_settings(claw.profile)
