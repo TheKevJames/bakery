@@ -418,7 +418,9 @@ Routing:
 - The operator's top-level message in `#bakery-<claw>` starts a thread on it;
   the work key is `<claw>/thread-<thread-id>` and the message is the prompt.
 - Gateway-started work (cron, manual, queues) gets a thread named after its
-  work key. Work-key ↔ thread mappings are kept in `runs.db`.
+  work key. Work-key ↔ thread mappings are kept in `runs.db`. A unit whose
+  thread was deleted gets a new one, announced in `#bakery`; a run whose
+  status message was deleted posts a new one.
 - The operator's reply in a thread answers a pending `input` dialog if there
   is one, else steers the in-flight run, else queues a run with the reply as
   its prompt. Replies are acknowledged with a reaction.

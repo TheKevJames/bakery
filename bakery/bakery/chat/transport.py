@@ -14,6 +14,14 @@ from typing import Protocol
 Style = Literal['primary', 'secondary', 'success', 'danger']
 
 
+class ThreadGone(Exception):
+    """The thread posted to no longer exists (eg. deleted in Discord)."""
+
+
+class MessageGone(Exception):
+    """The message edited no longer exists."""
+
+
 @dataclasses.dataclass(frozen=True)
 class Button:
     custom_id: str

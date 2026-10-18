@@ -1,5 +1,6 @@
 import asyncio
 import pathlib
+import threading
 from collections.abc import Awaitable
 from collections.abc import Callable
 
@@ -65,6 +66,45 @@ def test_gateway_runs_get_a_thread_with_status_and_reply(
         assert attachment.data.decode() == long_reply
         # Both runs of the unit share its one thread.
         assert len(fake.threads) == 1
+
+    run(claws, scenario)
+
+
+def test_deleted_threads_and_status_messages_are_replaced(
+    root: pathlib.Path, fake_llm: harness.FakeLLM
+) -> None:
+    claws = testing_gateway.make_claws(root, {'scout': ''})
+    release = threading.Event()
+    fake_llm.queue(
+        harness.Reply(text='first', hold=release), harness.Reply(text='second')
+    )
+
+    async def scenario(
+        gateway: core.Gateway, bot: relay.Relay, fake: chat.FakeTransport
+    ) -> None:
+        del bot
+        key = gateway.trigger('scout', None, 'go')
+        await asyncio.to_thread(fake_llm.wait_requests, 1)
+        first = fake.thread_named(key)
+        status = await fake.message(first, '⏳')
+        [status_id] = [i for i, m in fake.messages.items() if m is status]
+        fake.delete_message(status_id)
+        release.set()
+        await fake.message(first, '✅')
+
+        fake.delete_thread(first)
+        gateway.message('scout', key, 'again')
+        await fake.until(lambda: gateway.runs.thread_of(key) != first)
+        second = gateway.runs.thread_of(key)
+        assert second is not None
+        await fake.message(second, 'second')
+        await fake.message(second, '✅')
+        await fake.until(
+            lambda: any('thread was gone' in n for n in fake.notices())
+        )
+        print(fake.notices())
+        renewed = [n for n in fake.notices() if 'thread was gone' in n]
+        assert renewed == [f'{key}: its thread was gone; started a new one']
 
     run(claws, scenario)
 

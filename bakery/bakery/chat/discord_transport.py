@@ -16,6 +16,7 @@ import io
 import logging
 import pathlib
 import re
+from collections.abc import Generator
 from collections.abc import Sequence
 from typing import Any
 
@@ -37,10 +38,26 @@ STYLES = {
     'success': discord.ButtonStyle.success,
     'danger': discord.ButtonStyle.danger,
 }
+# Discord's JSON error codes.
+UNKNOWN_CHANNEL = 10003
+UNKNOWN_MESSAGE = 10008
 
 
 def channel_name(claw: str) -> str:
     return f'{CONTROL_CHANNEL}-{claw}'
+
+
+@contextlib.contextmanager
+def _gone() -> Generator[None]:
+    """Translate a webhook's NotFound for a thread or message."""
+    try:
+        yield
+    except discord.NotFound as e:
+        if e.code == UNKNOWN_CHANNEL:
+            raise transport.ThreadGone(str(e)) from e
+        if e.code == UNKNOWN_MESSAGE:
+            raise transport.MessageGone(str(e)) from e
+        raise
 
 
 def _items(handler: transport.Handler) -> tuple[type[Any], type[Any]]:
@@ -375,13 +392,14 @@ class DiscordTransport:
             message_id: int = message.id
             return message_id
         assert where.thread_id is not None
-        sent = await self.webhooks[where.claw].send(
-            text,
-            username=where.claw,
-            thread=discord.Object(where.thread_id),
-            wait=True,
-            **kwargs,
-        )
+        with _gone():
+            sent = await self.webhooks[where.claw].send(
+                text,
+                username=where.claw,
+                thread=discord.Object(where.thread_id),
+                wait=True,
+                **kwargs,
+            )
         sent_id: int = sent.id
         return sent_id
 
@@ -402,12 +420,13 @@ class DiscordTransport:
             await partial.edit(content=text, **kwargs)
             return
         assert where.thread_id is not None
-        await self.webhooks[where.claw].edit_message(
-            message_id,
-            content=text,
-            thread=discord.Object(where.thread_id),
-            **kwargs,
-        )
+        with _gone():
+            await self.webhooks[where.claw].edit_message(
+                message_id,
+                content=text,
+                thread=discord.Object(where.thread_id),
+                **kwargs,
+            )
 
     async def react(
         self, where: transport.Where, message_id: int, emoji: str
