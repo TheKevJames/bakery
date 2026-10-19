@@ -439,6 +439,11 @@ In each thread:
   say so and lose their buttons. Buttons survive restarts (discord.py
   `DynamicItem`s); clicking one whose request is gone says it expired.
 
+A run never fails because Discord did: if a status message, outcome, or
+reply cannot be posted (eg. a deleted thread or webhook), the error is
+logged, the run carries on, and its first failed report is announced in
+`#bakery`. Dialogs are the exception, as the run needs their answer.
+
 Slash commands (guild-scoped): `/status`, `/budget`, `/trigger claw [job]
 [prompt]`, `/pause target [abort]`, `/resume target`, `/reload`.
 
