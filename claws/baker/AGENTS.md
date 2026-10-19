@@ -28,8 +28,8 @@ failing in a way nothing will fix. File one task per gap for the operator.
     cost_usd, turns) and `_gateway/gateway.log`.
 - **The bakery repository** (your clone of `TheKevJames/bakery`): each claw's
   `claws/<name>/` (`claw.toml` policy and jobs, `AGENTS.md`, `SOUL.md`,
-  `context.toml`), `claws/defaults.toml`, the claw tools in
-  `pi/claw-extensions/`, the dream prompt in `pi/claw-prompts/dream.md`, the
+  `context.toml`), `claws/defaults.toml` and `claws/gateway.toml`, the claw
+  tools in `pi/claw-extensions/`, the dream prompt in `pi/claw-prompts/dream.md`, the
   gateway and collectors in `bakery/bakery/`, and `docs/DESIGN.md`.
 - Dig with bash (`jq`, `rg`, `git`); most of `$HOME` is unreadable to it.
 

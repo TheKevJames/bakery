@@ -7,6 +7,7 @@ import json
 import logging
 import pathlib
 import re
+import shutil
 import textwrap
 import threading
 from collections.abc import Awaitable
@@ -15,6 +16,7 @@ from collections.abc import Mapping
 
 from bakery.chat import relay
 from bakery.gateway import channel
+from bakery.gateway import config
 from bakery.gateway import control
 from bakery.gateway import core
 
@@ -110,26 +112,31 @@ def make_claws(
     settings: dict[str, dict[str, object]] | None = None,
 ) -> pathlib.Path:
     """
-    A claws dir: the repo's real defaults.toml, plus one profile per claw.
+    A claws dir: the repo's real gateway.toml and defaults.toml, plus one
+    profile per claw.
 
     `claws` maps names to extra claw.toml text; every claw uses the fake
-    model and loads the claw prompts. `gateway` overrides values in
-    defaults.toml's [gateway] table; `settings` adds to a claw's settings.json.
+    model and loads the claw prompts. `gateway` overrides top-level values in
+    gateway.toml; `settings` adds to a claw's settings.json.
     """
     claws_dir = root / 'claws'
     claws_dir.mkdir()
-    defaults = (harness.REPO / 'claws' / 'defaults.toml').read_text()
+    gateway_toml = (harness.REPO / 'claws' / config.GATEWAY_NAME).read_text()
     for key, value in (gateway or {}).items():
-        # [gateway] comes first, so its key is the first match.
-        defaults, count = re.subn(
+        # Top-level keys come before any table, so are the first match.
+        gateway_toml, count = re.subn(
             rf'^{key} = \S+',
             f'{key} = {value}',
-            defaults,
+            gateway_toml,
             count=1,
             flags=re.MULTILINE,
         )
         assert count == 1, key
-    (claws_dir / 'defaults.toml').write_text(defaults)
+    (claws_dir / config.GATEWAY_NAME).write_text(gateway_toml)
+    shutil.copy(
+        harness.REPO / 'claws' / config.DEFAULTS_NAME,
+        claws_dir / config.DEFAULTS_NAME,
+    )
     for name, extra in claws.items():
         _make_profile(
             claws_dir / name,

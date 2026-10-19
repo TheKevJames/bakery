@@ -1,10 +1,11 @@
 """
 Gateway and claw configuration.
 
-`claws/defaults.toml` holds a `[gateway]` table and a `[claw]` table of
-defaults; each `claws/<name>/claw.toml` overrides any of those defaults and
-adds its jobs. The model and thinking level have no default: every claw sets
-both, and a job may override either. Loading is strict: unknown keys and bad
+`claws/gateway.toml` holds the gateway's own settings, which no claw can
+override; `claws/defaults.toml` holds every claw's defaults, and each
+`claws/<name>/claw.toml` overrides any of those and adds its jobs. The model
+and thinking level have no default: every claw sets both, and a job may
+override either. Loading is strict: unknown keys and bad
 values raise ConfigError, so a typo can never silently change a limit.
 """
 
@@ -26,6 +27,7 @@ from ..task_list import store
 from . import policy as policy_
 from . import toml
 
+GATEWAY_NAME = 'gateway.toml'
 DEFAULTS_NAME = 'defaults.toml'
 CLAW_NAME = 'claw.toml'
 ConfigError = toml.ConfigError
@@ -169,7 +171,7 @@ class Gateway:
     timezone: zoneinfo.ZoneInfo
     max_processes: int
     daily_cost_usd: float
-    # None without a [gateway.discord] table; only the gateway needs it.
+    # None without a [discord] table; only the gateway needs it.
     discord: Discord | None
 
 
@@ -432,19 +434,16 @@ def _merge_jobs(defaults: object, own: object) -> list[object]:
 
 
 def load(claws_dir: pathlib.Path) -> Config:
+    gateway = _gateway(_read(claws_dir / GATEWAY_NAME))
     defaults = _read(claws_dir / DEFAULTS_NAME)
-    unknown = set(defaults) - {'gateway', 'claw'}
-    if unknown:
-        raise ConfigError(f'{DEFAULTS_NAME}: unknown keys {sorted(unknown)}')
     claws: dict[str, Claw] = {}
     for path in sorted(claws_dir.glob(f'*/{CLAW_NAME}')):
         name = path.parent.name
         if not NAME_RE.fullmatch(name):
             raise ConfigError(f'{path}: invalid claw name {name!r}')
-        base = dict(defaults.get('claw', {}))
         own = _read(path)
-        data = _merge(base, own)
-        data['job'] = _merge_jobs(base.get('job', []), own.get('job', []))
+        data = _merge(defaults, own)
+        data['job'] = _merge_jobs(defaults.get('job', []), own.get('job', []))
         own_names = {
             job.get('name')
             for job in own.get('job', [])
@@ -452,8 +451,8 @@ def load(claws_dir: pathlib.Path) -> Config:
         }
         shared = {
             job.get('name')
-            for job in base.get('job', [])
+            for job in defaults.get('job', [])
             if isinstance(job, dict) and job.get('name') not in own_names
         }
         claws[name] = _claw(name, path.parent, data, shared)
-    return Config(gateway=_gateway(defaults.get('gateway', {})), claws=claws)
+    return Config(gateway=gateway, claws=claws)

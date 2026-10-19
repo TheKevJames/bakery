@@ -1,0 +1,10 @@
+# The gateway's own settings, which no claw can override; claw defaults are in
+# defaults.toml. Apply changes with `bakery gateway reload`.
+
+timezone = "Europe/Lisbon"  # cron schedules and the daily budget reset
+max_processes = 4           # live pi children across all claws
+daily_cost_usd = 50.0       # across all claws
+
+[discord]
+guild_id = 1465773145427280065     # the operator's private server
+operator_id = 523678345662300161   # the only user the bot acts on
