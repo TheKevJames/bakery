@@ -37,11 +37,9 @@ def test_repo_defaults_with_claw_overrides(tmp_path: pathlib.Path) -> None:
 
     loaded = config.load(claws)
 
-    defaults = tomllib.loads((claws / 'defaults.toml').read_text())
-    claw = defaults['claw']
-    assert loaded.gateway.timezone == zoneinfo.ZoneInfo(
-        defaults['gateway']['timezone']
-    )
+    gateway = tomllib.loads((claws / config.GATEWAY_NAME).read_text())
+    claw = tomllib.loads((claws / config.DEFAULTS_NAME).read_text())
+    assert loaded.gateway.timezone == zoneinfo.ZoneInfo(gateway['timezone'])
     build = loaded.claw('build')
     assert build.cwd == pathlib.Path.home() / 'src'
     # Overridden keys change; their siblings keep the repo defaults.
@@ -88,6 +86,9 @@ def test_default_jobs_apply_to_every_claw(tmp_path: pathlib.Path) -> None:
     ('claw_toml', 'error'),
     [
         ('modle = "x"', 'unknown keys modle'),
+        # The gateway's own settings are not a claw's to override.
+        ('max_processes = 8', 'unknown keys max_processes'),
+        ('[discord]\nguild_id = 1', 'unknown keys discord'),
         ('[limits]\nturns = 0', 'turns: must be >= 1'),
         ('[limits]\ncost_usd = -1', 'cost_usd: must be positive'),
         ('[limits]\nminutes = "30"', 'minutes: wrong type'),

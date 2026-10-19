@@ -241,10 +241,11 @@ and `channel` (the interface Discord implements).
 
 ### Configuration
 
-`claws/defaults.toml` holds a `[gateway]` table (timezone, global process
-cap, global daily budget) and a `[claw]` table of defaults. Each
-`claws/<name>/claw.toml` overrides any `[claw]` value (tables merge key by
-key) and declares its `[[job]]`s. Loading is strict: unknown keys and bad
+`claws/gateway.toml` holds the gateway's own settings (timezone, global
+process cap, global daily budget, Discord), which no claw can override.
+`claws/defaults.toml` holds every claw's defaults; each
+`claws/<name>/claw.toml` overrides any of them (tables merge key by key) and
+declares its `[[job]]`s. Loading is strict: unknown keys and bad
 values are errors. Changes apply on `bakery gateway reload`; an invalid
 config is rejected and the running one kept. In-flight runs keep the config
 they started with.
@@ -299,7 +300,7 @@ transcripts.
 - **cron**: 5-field expressions in `claw.toml`, Europe/Lisbon, optional
   `active_hours`. Missed runs (Mac asleep, gateway down) are skipped. A job
   without one runs only when triggered (eg. `learn`). Jobs in
-  `defaults.toml`'s `[claw]` table apply to every claw (a claw's job of the
+  `defaults.toml` apply to every claw (a claw's job of the
   same name replaces one); a job may override `model` and `thinking` for
   its units of work, which keep them on later runs (eg. replies).
   `bakery trigger <claw>` runs the claw's only own job; shared jobs (eg.
@@ -421,7 +422,7 @@ on connect:
 
 Only the operator's user ID is acted on (others' messages are ignored and
 their clicks and commands refused); bots, webhooks, and DMs are ignored.
-Settings live in `claws/defaults.toml` as `[gateway.discord]` (`guild_id`,
+Settings live in `claws/gateway.toml` as `[discord]` (`guild_id`,
 `operator_id`); the bot token is the `DISCORD_BOT_TOKEN` secret.
 
 Routing:
@@ -471,8 +472,8 @@ gateway's `Channel`), `transport` (the interface), `discord_transport`
    permissions to view, manage, and post in channels and public threads,
    manage webhooks, read history, attach files, and add reactions; its token
    stored as the `DISCORD_BOT_TOKEN` Keychain secret; and the server's and the
-   operator's IDs in `[gateway.discord]`. `bakery gateway check` verifies it
-   (connects, creates the layout, posts to `#bakery`), and reports
+   operator's IDs in `gateway.toml`'s `[discord]`. `bakery gateway check`
+   verifies it (connects, creates the layout, posts to `#bakery`), and reports
    collector settings only the outside world can show to be wrong (eg. a
    `scout.toml` override for a repo the claws cannot reach).
 2. `bakery service install|uninstall|restart` manages the launchd agent
@@ -590,7 +591,7 @@ Enforcement:
    opens PRs with `gh`; the operator reviews and merges. The gateway writes
    the claw's git config (`<state>/home/config/git/config`, its `GIT_CONFIG_GLOBAL`, so git never
    trips on an unreadable `~/.gitconfig`) at every start: the claws' GitHub
-   user's identity (`[claw.git]`), no signing, no hook templates (the
+   user's identity (`[git]`), no signing, no hook templates (the
    sandbox refuses writes to any `.git/hooks`, but allows `.git/config` in
    the claw's own clones), and `gh` as the only credential helper, answering
    with `GH_TOKEN`. GitHub's rulesets, not the claw, keep pushes off the

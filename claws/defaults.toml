@@ -1,18 +1,8 @@
-# Gateway settings, and defaults for every claw. Each claws/<name>/claw.toml
-# chooses its model and thinking (there is no default), may override any
-# [claw] value (tables merge key by key), and adds its jobs.
-# Apply changes with `bakery gateway reload`.
+# Defaults for every claw. Each claws/<name>/claw.toml chooses its model and
+# thinking (there is no default), may override any value here (tables merge
+# key by key), and adds its jobs. The gateway's own settings are in
+# gateway.toml. Apply changes with `bakery gateway reload`.
 
-[gateway]
-timezone = "Europe/Lisbon"  # cron schedules and the daily budget reset
-max_processes = 4           # live pi children across all claws
-daily_cost_usd = 50.0       # across all claws
-
-[gateway.discord]
-guild_id = 1465773145427280065     # the operator's private server
-operator_id = 523678345662300161   # the only user the bot acts on
-
-[claw]
 enabled = true
 # Environment variables passed to the claw; values come from the Keychain
 # (see bakery/bakery/secrets.py), never the gateway's environment. Nothing
@@ -41,7 +31,7 @@ bash_secrets = ["GH_TOKEN"]
 # Relative paths are relative to the claw's profile (claws/<name>/); ~ and
 # ${VAR} expand.
 # A claw's value for a key replaces the default list; repeat what it keeps.
-[claw.policy]
+[policy]
 # The only readable paths under $HOME, besides what pi needs to run (its
 # install, the bakery repo, the claw's profile, own state, and _shared).
 # Outside $HOME everything is readable but per-user temp and the claw state
@@ -61,33 +51,33 @@ deny_read = [
 # the claws' namespace: the rest is the operator's.
 write_paths = ["${TASK_FOLDER}/bakery"]
 
-[claw.tasks]
+[tasks]
 # The tag task_add files into, in the claws' namespace of the task list.
 tag = "triage"
 
 # The identity of the claw's commits (the claws' GitHub user), in the git
 # config the gateway writes into the claw's home at every start.
-[claw.git]
+[git]
 user_name = "thekevjames-bakery"
 user_email = "341569114+thekevjames-bakery@users.noreply.github.com"
 
-[claw.limits]
+[limits]
 cost_usd = 5.0        # per run
 minutes = 30          # per run, excluding time waiting on the operator
 turns = 50            # per run
 daily_cost_usd = 20.0
 
-[claw.concurrency]
+[concurrency]
 max_active = 1         # concurrent new units of work
 max_resumes = 0        # extra slots for resumed units (eg. PR feedback)
 idle_exit_minutes = 15 # idle pi children exit; resume reloads the session
 
-[claw.memory]
+[memory]
 flush_margin_tokens = 8000  # flush memory this close to compaction
 max_chars = 20000           # MEMORY.md's cap; match its context.toml budget
 
 # Jobs here apply to every claw; a claw's job of the same name replaces one.
-[[claw.job]]
+[[job]]
 name = "dream"
 cron = "0 3 * * *"
 prompt = "/dream"  # pi/claw-prompts/dream.md
@@ -102,7 +92,7 @@ skip_empty = false
 # Run only by `bakery teach <claw|all> "<lesson>"`, which waits for the reply
 # and the MEMORY.md diff: the claw checks the operator's lesson and corrects
 # its memory.
-[[claw.job]]
+[[job]]
 name = "learn"
 prompt = "/learn"  # pi/claw-prompts/learn.md
 model = "anthropic/claude-opus-5-5"

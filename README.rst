@@ -11,7 +11,8 @@ Layout
 - ``pi/``: shared extensions, skills, prompts, agents, and rules
 - ``interactive/``: the interactive pi profile (``PI_CODING_AGENT_DIR``)
 - ``bakery/``: the ``bakery`` CLI (Python, ``uv``)
-- ``claws/``: claw profiles and gateway configuration (``defaults.toml``)
+- ``claws/``: claw profiles, their defaults (``defaults.toml``), and gateway
+  configuration (``gateway.toml``)
 - ``bin/vendor``: refresh vendored skills under ``pi/skills/vendor``
 
 Setup
