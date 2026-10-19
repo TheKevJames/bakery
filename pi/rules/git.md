@@ -5,4 +5,5 @@
 - Never force-push to master/main -- force-pushing to a branch is OK, as is pushing to master/main
 - Naming: when creating branches, prefix them with "kjames/"
 - Fetch and branch from the latest default branch before code changes
-- Use stacked PRs where appropriate
+- PRs will be squash-merged, so subsequent PRs need to be based off the HEAD of their parent and be rebased by you -- create a watch polling for the parent PR's merge to do this automatically
+- Only stack PRs when the child genuinely needs the parent's code
