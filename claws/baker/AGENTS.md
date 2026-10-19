@@ -22,8 +22,8 @@ failing in a way nothing will fix. File one task per gap for the operator.
     sandbox blocked (`time`, `line`), whether a tool result showed it or
     not. A write pi itself needs (eg. a new file in the claw's profile) is a
     `tool-gap`: propose widening the sandbox's allowlist.
-  - `_shared/OPERATOR.md`: facts about the operator every claw sees; claws
-    propose changes as tasks, and the operator applies them by hand.
+  - `_shared/OPERATOR.md`: facts about the operator every claw sees and
+    edits (`operator_edit`); the gateway commits and posts each change.
   - `_gateway/runs.db` (SQLite `runs`: claw, work_key, job, status, reason,
     cost_usd, turns) and `_gateway/gateway.log`.
 - **The bakery repository** (your clone of `TheKevJames/bakery`): each claw's

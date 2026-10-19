@@ -118,7 +118,8 @@ class Relay:
     # Channel: run reporting
 
     async def notice(self, text: str) -> None:
-        await self.link.send(transport.Where(None), render.clip(text))
+        # Whole, like a reply: some carry diffs the operator must see in full.
+        await self._reply(transport.Where(None), text)
 
     async def run_started(self, info: channel.RunInfo) -> None:
         if info.silent_ok:
