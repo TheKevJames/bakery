@@ -74,6 +74,7 @@ class FakeTransport:
         attachment: transport.Attachment | None = None,
     ) -> int:
         assert len(text) <= 2000, len(text)
+        self._check_thread(where)
         message_id = self._new_id()
         self.messages[message_id] = Message(
             where, text, tuple(components), attachment
@@ -91,7 +92,10 @@ class FakeTransport:
         components: Sequence[transport.Component] | None = None,
     ) -> None:
         assert len(text) <= 2000, len(text)
-        message = self.messages[message_id]
+        self._check_thread(where)
+        message = self.messages.get(message_id)
+        if message is None:
+            raise transport.MessageGone(message_id)
         assert message.where == where
         message.text = text
         if components is not None:
@@ -107,7 +111,23 @@ class FakeTransport:
         ).reactions.append(emoji)
         self.changed.set()
 
+    def _check_thread(self, where: transport.Where) -> None:
+        if where.thread_id is not None and where.thread_id not in self.threads:
+            raise transport.ThreadGone(where.thread_id)
+
     # Test helpers
+
+    def delete_thread(self, thread_id: int) -> None:
+        """Delete a thread and its messages, as the operator can."""
+        del self.threads[thread_id]
+        self.messages = {
+            i: m
+            for i, m in self.messages.items()
+            if m.where.thread_id != thread_id
+        }
+
+    def delete_message(self, message_id: int) -> None:
+        del self.messages[message_id]
 
     def thread_named(self, name: str) -> int:
         matches = [i for i, th in self.threads.items() if th.name == name]

@@ -14,6 +14,7 @@ import logging
 import time
 from collections.abc import Callable
 from collections.abc import Mapping
+from collections.abc import Sequence
 
 from ..gateway import channel
 from ..gateway import config
@@ -87,6 +88,52 @@ class Relay:
                 self.gateway.runs.set_thread(work_key, thread_id)
         return transport.Where(claw, thread_id)
 
+    async def _renew_thread(
+        self, claw: str, work_key: str, gone: transport.Where
+    ) -> transport.Where:
+        """A new thread for the unit, in place of `gone`."""
+        lock = self._threads.setdefault(work_key, asyncio.Lock())
+        async with lock:
+            # Another report may have replaced it already.
+            if self.gateway.runs.thread_of(work_key) == gone.thread_id:
+                thread_id = await self.link.create_thread(claw, work_key)
+                self.gateway.runs.set_thread(work_key, thread_id)
+                self.gateway.notify(
+                    f'{work_key}: its thread was gone; started a new one'
+                )
+        return await self._thread(claw, work_key)
+
+    async def _send(
+        self,
+        claw: str,
+        work_key: str,
+        text: str,
+        *,
+        components: Sequence[transport.Component] = (),
+    ) -> tuple[transport.Where, int]:
+        """Post to the unit's thread, replacing it if it is gone."""
+        where = await self._thread(claw, work_key)
+        try:
+            return where, await self.link.send(
+                where, text, components=components
+            )
+        except transport.ThreadGone:
+            where = await self._renew_thread(claw, work_key, where)
+            return where, await self.link.send(
+                where, text, components=components
+            )
+
+    async def _edit_status(
+        self, info: channel.RunInfo, status: _Status, text: str
+    ) -> None:
+        """Edit a run's status message, or post a new one if it is gone."""
+        try:
+            await self.link.edit(status.where, status.message_id, text)
+        except (transport.ThreadGone, transport.MessageGone):
+            status.where, status.message_id = await self._send(
+                info.claw, info.work_key, text
+            )
+
     # Channel: run reporting
 
     async def notice(self, text: str) -> None:
@@ -95,8 +142,9 @@ class Relay:
     async def run_started(self, info: channel.RunInfo) -> None:
         if info.silent_ok:
             return
-        where = await self._thread(info.claw, info.work_key)
-        message_id = await self.link.send(where, render.progress(info))
+        where, message_id = await self._send(
+            info.claw, info.work_key, render.progress(info)
+        )
         self._status[info.run_id] = _Status(
             where, message_id, time.monotonic()
         )
@@ -107,9 +155,7 @@ class Relay:
         if status is None or now - status.edited_at < PROGRESS_INTERVAL:
             return
         status.edited_at = now
-        await self.link.edit(
-            status.where, status.message_id, render.progress(info)
-        )
+        await self._edit_status(info, status, render.progress(info))
 
     async def run_finished(self, info: channel.RunInfo) -> None:
         attention = info.status in render.NEEDS_ATTENTION
@@ -120,17 +166,13 @@ class Relay:
             and not (info.final_text or attention)
         ):
             return
-        where = (
-            status.where
-            if status
-            else (await self._thread(info.claw, info.work_key))
-        )
         if status is not None:
-            await self.link.edit(
-                where, status.message_id, render.outcome(info)
-            )
+            await self._edit_status(info, status, render.outcome(info))
+            where = status.where
         else:
-            await self.link.send(where, render.outcome(info))
+            where, _ = await self._send(
+                info.claw, info.work_key, render.outcome(info)
+            )
         if info.final_text and info.final_text.strip():
             await self._reply(where, info.final_text)
         if attention:
@@ -212,7 +254,6 @@ class Relay:
     ) -> tuple[_Dialog, transport.Where, int, str]:
         """Post a dialog's question; returns it with where it was posted."""
         request_id = str(request['id'])
-        where = await self._thread(info.claw, info.work_key)
         text, options, components = self._render_dialog(request_id, request)
         text = render.clip(text)
         pending = _Dialog(
@@ -224,8 +265,8 @@ class Relay:
         # Before sending: the message is clickable before send() returns.
         self._dialogs[request_id] = pending
         try:
-            message_id = await self.link.send(
-                where, text, components=components
+            where, message_id = await self._send(
+                info.claw, info.work_key, text, components=components
             )
         except BaseException:
             self._dialogs.pop(request_id, None)

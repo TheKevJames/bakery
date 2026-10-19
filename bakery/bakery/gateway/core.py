@@ -69,7 +69,7 @@ class Gateway:
         self.watcher = watcher.Watcher(
             lambda claw, job: self.jobs.start(claw, job, 'watch')
         )
-        self.jobs = jobs.Jobs(self.submit, self._notify, self._busy)
+        self.jobs = jobs.Jobs(self.submit, self.notify, self._busy)
         self.queue: list[Request] = []
         self.active: dict[str, Active] = {}
         self.paused: set[str] = set()
@@ -94,7 +94,7 @@ class Gateway:
         self.scheduler.start(self.config.claws.values(), self.tz)
         self.watcher.start(self.config.claws.values())
         self._dispatcher = asyncio.create_task(self._dispatch_loop())
-        self._notify('gateway started')
+        self.notify('gateway started')
 
     async def stop(self) -> None:
         self.scheduler.stop()
@@ -114,7 +114,7 @@ class Gateway:
         self.runs.mark_interrupted()
         self.runs.close()
 
-    def _notify(self, text: str) -> None:
+    def notify(self, text: str) -> None:
         log.info('notice: %s', text)
         task = asyncio.create_task(self.channel.notice(text))
         self._notices.add(task)
@@ -306,7 +306,7 @@ class Gateway:
         key = (datetime.datetime.now(self.tz).date(), claw)
         if key not in self._broke:
             self._broke.add(key)
-            self._notify(f'{claw} has exhausted its daily budget')
+            self.notify(f'{claw} has exhausted its daily budget')
 
     def _abort(
         self, active: Active, status: ledger.Status, reason: str
@@ -390,7 +390,7 @@ class Gateway:
         try:
             self.config = config.load(self.claws_dir)
         except config.ConfigError as e:
-            self._notify(f'config reload rejected: {e}')
+            self.notify(f'config reload rejected: {e}')
             raise
         self.scheduler.start(self.config.claws.values(), self.tz)
         self.watcher.start(self.config.claws.values())
