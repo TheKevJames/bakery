@@ -2,8 +2,9 @@
  * tmux-window-name
  *
  * Mirrors the pi session's status and name onto the tmux window it lives in,
- * eg. `● b-build-12` while working, `○ b-build-12` once idle, and
- * `? b-build-12` while a dialog is waiting on the user.
+ * eg. `● b-build-12` while working, `○ b-build-12` once idle, `◐ b-build-12`
+ * while idle with watches still active, and `? b-build-12` while a dialog is
+ * waiting on the user.
  *
  * The name is rendered from the session name: known prefixes are abbreviated
  * (`bakery-` becomes `b-`), the rest is normalized to lowercase hyphen-case,
@@ -24,12 +25,14 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import { STATUS_CHANNEL, type Status, type StatusEvent } from "./session-registry/api.ts";
+import { WATCH_ACTIVE_CHANNEL, type WatchActiveEvent } from "./watch/api.ts";
 
 const MAX_NAME_LENGTH = 20;
 const ELLIPSIS = "...";
 // Matched against the raw session name, case-sensitively.
 const ABBREVIATIONS: ReadonlyArray<readonly [string, string]> = [["bakery-", "b-"]];
 const GLYPHS: Record<Status, string> = { idle: "○", working: "●", blocked: "?" };
+const IDLE_WATCHING_GLYPH = "◐";
 
 // Captured at session_start; the pane that owns this pi process. tmux keeps
 // $TMUX_PANE stable for the process lifetime, so reading it once is correct. A
@@ -42,10 +45,11 @@ let tmuxPane: string | undefined;
 let lastSetName: string | undefined;
 
 let status: Status = "idle";
+let activeWatches = 0;
 
-// Status and name changes arrive concurrently; unserialized, two renames can
-// land out of order, leaving a window name that no longer matches lastSetName
-// and so looks like a manual rename pi must back off from.
+// Status, watch, and name changes arrive concurrently; unserialized, two
+// renames can land out of order, leaving a window name that no longer matches
+// lastSetName and so looks like a manual rename pi must back off from.
 let pending: Promise<void> = Promise.resolve();
 function serialized(update: () => Promise<void>): Promise<void> {
   pending = pending.then(update, update);
@@ -58,8 +62,16 @@ export default function (pi: ExtensionAPI) {
     await serialized(() => setWindowName(pi));
   });
 
+  pi.events.on(WATCH_ACTIVE_CHANNEL, async (data) => {
+    activeWatches = (data as WatchActiveEvent).count;
+    await serialized(() => setWindowName(pi));
+  });
+
   pi.on("session_start", async (_event, ctx) => {
     if (ctx.mode !== "tui") return;
+    // Watches never outlive their session, so any count left from the
+    // previous one is stale.
+    activeWatches = 0;
     await serialized(() => adoptWindow(pi));
   });
 
@@ -98,7 +110,7 @@ async function setWindowName(pi: ExtensionAPI): Promise<void> {
     await restoreAutomaticRename(pi);
     return;
   }
-  const windowName = `${GLYPHS[status]} ${formatName(name)}`;
+  const windowName = `${currentGlyph()} ${formatName(name)}`;
   if (windowName === lastSetName) return;
   // Respect a name the user set manually: only touch windows pi owns.
   if (!(await weOwnWindow(pi))) return;
@@ -153,8 +165,12 @@ async function getWindowState(
   }
 }
 
+function currentGlyph(): string {
+  return status === "idle" && activeWatches > 0 ? IDLE_WATCHING_GLYPH : GLYPHS[status];
+}
+
 function withoutGlyph(windowName: string): string {
-  for (const glyph of Object.values(GLYPHS)) {
+  for (const glyph of [...Object.values(GLYPHS), IDLE_WATCHING_GLYPH]) {
     if (windowName.startsWith(`${glyph} `)) return windowName.slice(glyph.length + 1);
   }
   return windowName;
