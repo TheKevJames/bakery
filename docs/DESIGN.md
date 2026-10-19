@@ -786,7 +786,9 @@ Finds things in the operator's repos that belong on the task list. Profile:
       dropped: they come from the action's bundled dependencies, which Node
       does not treat as `node_modules`, so only its maintainers can fix
       them. Node's pid prefix is stripped before fingerprinting, as it
-      differs every run. Link: the workflow URL with
+      differs every run, and so are hex runs of 7+ characters with a digit
+      and dotted versions (eg. setup-uv's cache key embeds a lockfile hash
+      and the OS and python versions). Link: the workflow URL with
       `?warning=<fingerprint>`.
   - **Issues and PRs**: all open issues, and PRs not by bots, except those
     labelled `ready-for-human`. Link: their URL.

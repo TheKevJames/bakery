@@ -2,7 +2,9 @@ import json
 import pathlib
 from collections.abc import Iterator
 
+import hypothesis
 import pytest
+from hypothesis import strategies as st
 
 from bakery.chat import render
 from bakery.collectors import base as collectors_base
@@ -360,6 +362,65 @@ def test_shipped_ignore_ci_lines_drop_only_noise(
         ('error', f'##[error]{problem}'),
         ('warning', f'##[warning]{problem}'),
     ]
+
+
+VERSIONS = st.lists(st.integers(0, 99), min_size=2, max_size=3).map(
+    lambda parts: '.'.join(map(str, parts))
+)
+# A real digest without a digit is vanishingly rare; hypothesis would find it.
+HASHES = (
+    st.binary(min_size=32, max_size=32)
+    .map(bytes.hex)
+    .filter(lambda digest: any(c.isdigit() for c in digest))
+)
+
+
+def cache_warnings(digest: str, python: str, ubuntu: str) -> list[str]:
+    """Real setup-uv and prek cache warnings, as of 2026-10."""
+    return [
+        '##[warning]Failed to save: Unable to reserve cache with key'
+        f' setup-uv-2-x86_64-unknown-linux-gnu-ubuntu-{ubuntu}-{python}'
+        f'-{digest}, another job may be creating this cache.',
+        '##[warning]Failed to save: Unable to reserve cache with key'
+        f' prek-v1|Linux|X64||{digest}, another job may be creating this'
+        ' cache.',
+    ]
+
+
+@hypothesis.given(digest=HASHES, python=VERSIONS, ubuntu=VERSIONS)
+def test_warning_key_ignores_volatile_tokens(
+    digest: str, python: str, ubuntu: str
+) -> None:
+    reference = cache_warnings('0' * 64, '3.14.4', '26.04')
+    variant = cache_warnings(digest, python, ubuntu)
+    print(variant)
+
+    assert [scout.warning_key(m) for m in variant] == [
+        scout.warning_key(m) for m in reference
+    ]
+
+
+def test_volatile_warnings_are_one_candidate(
+    root: pathlib.Path, github: fake_github.FakeGitHub
+) -> None:
+    claw = config.load(scout_claws(root, github.url, 50)).claw('scout')
+    old = cache_warnings('a1' * 32, '3.14.4', '26.04')
+    new = cache_warnings('b2' * 32, '3.15.0', '26.10')
+    # Exactly fills the per-repo cap only if each pair counts once.
+    plain = [
+        f'DeprecationWarning: old api {i}'
+        for i in range(scout.WARNINGS_PER_REPO - len(old))
+    ]
+    github.routes['/blob/logs.zip'] = fake_github.logs_zip(
+        {'1_test.txt': '\n'.join([*old, *new, *plain]) + '\n'}
+    )
+
+    found = candidates(scout.collect(claw, 'test/run').text)
+
+    workflow = f'https://github.com/{REPO}/actions/workflows/w2.yml'
+    assert [c['link'] for c in found if c['kind'] == 'warning'] == [
+        f'{workflow}?warning={scout.warning_key(m)}' for m in old
+    ] + [f'{workflow}?warning={scout.fingerprint(m)}' for m in plain]
 
 
 def test_caps_candidates_per_run(

@@ -55,6 +55,13 @@ WARNINGS_PER_REPO = 20
 ERRORS_PER_REPO = 20
 BODY_CHARS = 1500
 WORKERS = 8
+# Tokens in warnings that change run to run without the warning changing, eg.
+# setup-uv's cache key embeds a lockfile hash and the OS and python versions.
+# Hex needs a digit, so words like "defaced" are kept.
+VOLATILE_TOKENS = (
+    (re.compile(r'\b(?=[0-9a-f]*\d)[0-9a-f]{7,}\b'), '<hex>'),
+    (re.compile(r'\bv?\d+(?:\.\d+)+(?:_\d+)?\b'), '<version>'),
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -70,6 +77,16 @@ def fingerprint(text: str) -> str:
     """A stable key for text, ignoring whitespace differences."""
     normal = ' '.join(text.split())
     return hashlib.sha256(normal.encode()).hexdigest()[:10]
+
+
+def warning_key(message: str) -> str:
+    """
+    A warning's fingerprint, ignoring volatile tokens. A message without any
+    keeps its plain fingerprint, so its existing tasks' links still match.
+    """
+    for pattern, placeholder in VOLATILE_TOKENS:
+        message = pattern.sub(placeholder, message)
+    return fingerprint(message)
 
 
 def _clip(text: str | None, limit: int = BODY_CHARS) -> str:
@@ -191,7 +208,7 @@ def _warning_candidates(
 ) -> Iterator[Candidate]:
     """Warnings not yet in `seen`, which spans the repo's runs."""
     for finding in found:
-        key = fingerprint(finding.message)
+        key = warning_key(finding.message)
         if finding.kind != 'warning' or key in seen:
             continue
         if len(seen) >= WARNINGS_PER_REPO:
