@@ -14,12 +14,14 @@
  *
  * Before spawning, the environment is emitted on `pi.events` channel
  * `watch:env` as `{ env }`; listeners may edit it in place (eg. the claws'
- * policy strips secrets).
+ * policy strips secrets). Each change in the number of active watches is
+ * emitted on `pi.events` (see ./api.ts).
  */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { statSync } from "node:fs";
 import { resolve } from "node:path";
 import { Type } from "typebox";
+import { WATCH_ACTIVE_CHANNEL, type WatchActiveEvent } from "./api.ts";
 import { registerGuard } from "./guard.ts";
 import { completionMessage, duration, registerRenderer } from "./render.ts";
 import { type Completion, type Spec, Watch } from "./watcher.ts";
@@ -61,6 +63,12 @@ export default function watchExtension(pi: ExtensionAPI) {
     ctx.ui.setStatus(STATUS_KEY, watches.size ? `⏱ ${watches.size}` : undefined);
   }
 
+  function watchesChanged() {
+    const event: WatchActiveEvent = { count: watches.size };
+    pi.events.emit(WATCH_ACTIVE_CHANNEL, event);
+    updateStatus();
+  }
+
   function deliver(completion: Completion) {
     if (settle) {
       settle(completion);
@@ -75,7 +83,7 @@ export default function watchExtension(pi: ExtensionAPI) {
   function onDone(watch: Watch, completion: Completion) {
     if (watches.get(watch.id) !== watch) return;
     watches.delete(watch.id);
-    updateStatus();
+    watchesChanged();
     const by = cancelledBy.get(watch.id);
     cancelledBy.delete(watch.id);
     if (by === "agent" || by === "shutdown") return;
@@ -119,7 +127,7 @@ export default function watchExtension(pi: ExtensionAPI) {
       },
     });
     watches.set(id, watch);
-    updateStatus();
+    watchesChanged();
     void watch.done.then((completion) => onDone(watch, completion));
     return (
       `Started ${describe(watch)}; full output goes to ${watch.logPath}. ` +
