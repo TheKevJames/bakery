@@ -95,7 +95,6 @@ def add_run(
 def fixture_world(
     root: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> config.Claw:
-    testing_tasks.create(root / 'tasks')
     claws = testing_gateway.make_claws(root, {'baker': REVIEW, 'scout': ''})
     base = state.root()
     scout = base / 'scout'

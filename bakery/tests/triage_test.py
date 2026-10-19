@@ -45,7 +45,6 @@ def task_set(**args: object) -> harness.Reply:
 @pytest.fixture(name='tasks', scope='function')
 def fixture_tasks(root: pathlib.Path) -> pathlib.Path:
     folder = root / 'tasks'
-    testing_tasks.create(folder)
     testing_tasks.task('add', 'from scout', '-n', 'bakery', '--tag', 'triage')
     testing_tasks.task(
         'add', 'recurring', '-n', 'bakery', '--tag', 'triage',

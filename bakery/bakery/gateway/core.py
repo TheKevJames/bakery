@@ -19,6 +19,7 @@ import zoneinfo
 from .. import paths
 from .. import state
 from ..collectors import changes
+from ..task_list import claims
 from . import channel as channel_
 from . import config
 from . import jobs
@@ -80,6 +81,9 @@ class Gateway:
         self._broke: set[tuple[datetime.date, str]] = set()
         # Work key -> futures for its next finished run (see `finished`).
         self._finished: dict[str, list[asyncio.Future[channel_.RunInfo]]] = {}
+        # Claws whose claims are being released: none of their runs may start
+        # (and claim a task) meanwhile.
+        self._releasing: set[str] = set()
 
     @property
     def tz(self) -> zoneinfo.ZoneInfo:
@@ -90,6 +94,8 @@ class Gateway:
         interrupted = self.runs.mark_interrupted()
         if interrupted:
             log.warning('marked %d unfinished runs interrupted', interrupted)
+        for claw in self.config.claws:
+            await self._release_claims(claw, 'when the gateway started')
         self.pool.start()
         self.scheduler.start(self.config.claws.values(), self.tz)
         self.watcher.start(self.config.claws.values())
@@ -157,7 +163,7 @@ class Gateway:
     def _slot(self, request: Request) -> str | None:
         """The slot `request` can start in now, if any."""
         claw = self.config.claws.get(request.claw)
-        if claw is None or not claw.enabled:
+        if claw is None or not claw.enabled or claw.name in self._releasing:
             return None
         if {'all', request.claw} & self.paused:
             return None
@@ -273,6 +279,10 @@ class Gateway:
         self.runs.finish(info.run_id, info.status, info.reason)
         self.pool.release(info.work_key)
         del self.active[info.work_key]
+        if not any(a.request.claw == info.claw for a in self.active.values()):
+            await self._release_claims(
+                info.claw, f'after {info.work_key} {info.status}'
+            )
         self._wake.set()
         log.info(
             'run %s %s%s',
@@ -290,6 +300,21 @@ class Gateway:
         for future in self._finished.pop(info.work_key, []):
             if not future.done():
                 future.set_result(info)
+
+    async def _release_claims(self, claw: str, when: str) -> None:
+        """Release what `claw` still claims; it has no run in flight."""
+        self._releasing.add(claw)
+        try:
+            released, errors = await asyncio.to_thread(claims.release, claw)
+        except Exception as e:
+            log.exception('releasing what %s claims failed', claw)
+            released, errors = [], [str(e)]
+        finally:
+            self._releasing.discard(claw)
+        for address in released:
+            self.notify(f'released {address}: {claw} still claimed it {when}')
+        for error in errors:
+            self.notify(f'cannot release what {claw} claims {when}: {error}')
 
     def finished(self, work_key: str) -> asyncio.Future[channel_.RunInfo]:
         """

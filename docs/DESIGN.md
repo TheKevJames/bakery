@@ -656,6 +656,13 @@ through `bakery task add` (see below). Which claw uses which tool is a rule
 in its `AGENTS.md`; no claw completes or deletes tasks (a deleted task's
 source would be filed again).
 
+A claw's claims never outlive its runs: whenever a claw has no run in
+flight (after each run, and when the gateway starts), the gateway releases
+any `bakery` task it still owns and says so in `#bakery`
+(`bakery/bakery/task_list/claims.py`). Its runs wait meanwhile, so none
+claims a task as it is released. Claws still release their own claims; a
+notice means a run failed, was interrupted, or forgot.
+
 Claws read every namespace but write only `bakery`: the sandbox grants
 `$TASK_FOLDER` for reading and only `$TASK_FOLDER/bakery` for writing (see
 the `[policy]` defaults), so the operator's tasks are out of their reach.
@@ -844,8 +851,10 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
 - Ask policy `ask`, falling back to `assume`; every question's assumption is
   "route this task to human", so an unanswered question routes it
   there and the reply says triage could not finish.
-- A task left claimed by a failed or parked run is not picked up again;
-  its thread's Resume button continues it.
+- A task left claimed by a failed, parked, or interrupted run is released
+  (see [Shared task list](#shared-task-list)), so the queue hands it over
+  again, to the same unit and session; its thread's Resume button also
+  continues it.
 
 ### build - clones + PRs
 

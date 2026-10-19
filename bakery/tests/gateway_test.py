@@ -11,6 +11,7 @@ from bakery.gateway import core
 from bakery.gateway import ledger
 from testing import gateway as testing_gateway
 from testing import harness
+from testing import tasks as testing_tasks
 
 
 def active_keys(claw_status: dict[str, object]) -> list[object]:
@@ -266,6 +267,52 @@ def test_pause_abort_parks_in_flight_runs(
         assert (run.status, run.reason) == ('parked', 'paused')
 
     testing_gateway.run_gateway(claws, fake, scenario)
+
+
+def test_claims_do_not_outlive_runs(
+    root: pathlib.Path, fake_llm: harness.FakeLLM
+) -> None:
+    # Left behind by a run the gateway never saw finish (eg. a crash).
+    testing_tasks.task(
+        'add', 'stranded', '-n', 'bakery', '--tag', 'triage',
+        '--owner', 'triage',
+    )  # fmt: skip
+    testing_tasks.task('add', 'next', '-n', 'bakery', '--tag', 'triage')
+    testing_tasks.task('add', 'theirs', '-n', 'bakery', '--owner', 'kevin')
+    claws = testing_gateway.make_claws(
+        root,
+        {'triage': ''},
+        extensions={'triage': ['pi/claw-extensions/task.ts']},
+    )
+    fake = testing_gateway.FakeChannel()
+    fake_llm.queue(
+        harness.call('task_set', id=2, claim=True),
+        harness.Reply(hold=threading.Event()),
+    )
+
+    async def scenario(gateway: core.Gateway) -> None:
+        await fake.until(lambda: 'gateway started' in fake.notices)
+        assert testing_tasks.show('bakery:1')['owner'] is None
+
+        key = gateway.trigger('triage', None, 'go')
+        await asyncio.to_thread(fake_llm.wait_requests, 2)  # claimed
+        assert testing_tasks.show('bakery:2')['owner'] == 'triage'
+        gateway.pause('triage', abort=True)
+        assert (await fake.wait(key)).status == 'parked'
+        released = f'released bakery:2: triage still claimed it after {key}'
+        await fake.until(
+            lambda: any(n.startswith(released) for n in fake.notices)
+        )
+        assert testing_tasks.show('bakery:2')['owner'] is None
+
+    testing_gateway.run_gateway(claws, fake, scenario)
+    print(fake.notices)
+    assert (
+        'released bakery:1: triage still claimed it when the gateway started'
+        in fake.notices
+    )
+    assert testing_tasks.show('bakery:3')['owner'] == 'kevin'
+    assert not [n for n in fake.notices if 'cannot release' in n]
 
 
 def test_silent_jobs_report_no_text(

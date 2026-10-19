@@ -13,6 +13,7 @@ from bakery import secrets
 from testing import gateway as testing_gateway
 from testing import harness
 from testing import servers
+from testing import tasks as testing_tasks
 
 
 @pytest.fixture(name='fake_llm', scope='function')
@@ -116,10 +117,14 @@ def fixture_root(
     short_tmp: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> pathlib.Path:
-    """A gateway's world: state dir, fake model, and the repo's extensions."""
+    """
+    A gateway's world: state dir, task list, fake model, and the repo's
+    extensions.
+    """
     root = short_tmp
     monkeypatch.setenv('XDG_STATE_HOME', str(root / 'state'))
     monkeypatch.setenv('TASK_FOLDER', str(root / 'tasks'))
+    testing_tasks.create(root / 'tasks')
     keychain['BAKERY_FAKE_LLM_URL'] = fake_llm.url
     monkeypatch.setenv('BAKERY_REPO', str(harness.REPO))
     return root

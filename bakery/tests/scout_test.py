@@ -192,7 +192,6 @@ def fixture_github(
 ) -> Iterator[fake_github.FakeGitHub]:
     keychain[collectors_base.GITHUB_TOKEN] = COLLECTOR_TOKEN
     keychain['BAKERY_TEST_GH'] = MODEL_TOKEN
-    testing_tasks.create(root / 'tasks')
     initial = commands.git(make_upstream(root), 'rev-parse', 'HEAD~').strip()
     with fake_github.serve() as fake:
         serve_repo(fake, initial)
