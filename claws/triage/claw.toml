@@ -10,10 +10,6 @@ thinking = "high"
 [limits]
 cost_usd = 3.0  # per task, or per unblock or recheck
 
-[ask]
-policy = "ask"
-on_timeout = "assume"  # AGENTS.md: the assumption is always "route to human"
-
 # One task per run, working through the queue. Also runs within two minutes
 # of the task list changing (eg. scout or the operator adds tasks).
 [[job]]

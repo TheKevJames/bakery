@@ -8,10 +8,7 @@ discord_transport.py is the real Transport; tests use a fake one.
 
 import dataclasses
 from collections.abc import Sequence
-from typing import Literal
 from typing import Protocol
-
-Style = Literal['primary', 'secondary', 'success', 'danger']
 
 
 class ThreadGone(Exception):
@@ -26,19 +23,6 @@ class MessageGone(Exception):
 class Button:
     custom_id: str
     label: str
-    style: Style = 'secondary'
-
-
-@dataclasses.dataclass(frozen=True)
-class Select:
-    """Option values are their indices, as strings."""
-
-    custom_id: str
-    options: tuple[str, ...]
-    placeholder: str = ''
-
-
-Component = Button | Select
 
 
 @dataclasses.dataclass(frozen=True)
@@ -72,10 +56,8 @@ class Handler(Protocol):
     ) -> None:
         """A message in a claw's channel (thread_id None) or thread."""
 
-    async def on_component(
-        self, author_id: int, custom_id: str, value: str | None
-    ) -> str:
-        """A button or select; returns a private reply. Must be quick."""
+    async def on_component(self, author_id: int, custom_id: str) -> str:
+        """A button; returns a private reply. Must be quick."""
         ...
 
     async def on_command(
@@ -98,7 +80,7 @@ class Transport(Protocol):
         where: Where,
         text: str,
         *,
-        components: Sequence[Component] = (),
+        components: Sequence[Button] = (),
         attachment: Attachment | None = None,
     ) -> int:
         """Returns the message id. Only the operator can be mentioned."""
@@ -110,7 +92,7 @@ class Transport(Protocol):
         message_id: int,
         text: str,
         *,
-        components: Sequence[Component] | None = None,
+        components: Sequence[Button] | None = None,
     ) -> None:
         """`components=None` keeps the message's components."""
 

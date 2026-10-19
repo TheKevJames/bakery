@@ -23,25 +23,12 @@ from . import harness
 TESTING = pathlib.Path(__file__).parent
 RUN_TIMEOUT = 60.0
 
-Dialog = Callable[
-    [channel.RunInfo, dict[str, object]], Awaitable[dict[str, object]]
-]
-
-
-async def _deny(
-    info: channel.RunInfo, request: dict[str, object]
-) -> dict[str, object]:
-    del info, request
-    return {'cancelled': True}
-
 
 @dataclasses.dataclass
 class FakeChannel:
-    """Records what the gateway reports; `dialogs` answers dialogs."""
+    """Records what the gateway reports."""
 
-    dialogs: Dialog = _deny
     finished: list[channel.RunInfo] = dataclasses.field(default_factory=list)
-    asked: list[dict[str, object]] = dataclasses.field(default_factory=list)
     notices: list[str] = dataclasses.field(default_factory=list)
     _done: collections.defaultdict[str, asyncio.Queue[channel.RunInfo]] = (
         dataclasses.field(
@@ -64,12 +51,6 @@ class FakeChannel:
         self.finished.append(info)
         self._done[info.work_key].put_nowait(info)
         self._changed.set()
-
-    async def dialog(
-        self, info: channel.RunInfo, request: dict[str, object]
-    ) -> dict[str, object]:
-        self.asked.append(request)
-        return await self.dialogs(info, request)
 
     async def wait(self, work_key: str) -> channel.RunInfo:
         """The next finished run of `work_key`."""

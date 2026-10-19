@@ -11,9 +11,6 @@ cost_usd = 5.0
 minutes = 45
 turns = 100
 
-[ask]
-policy = "assume"  # its tasks are its questions for the operator
-
 [policy]
 # Every claw's state, and the gateway's runs, logs, and sandbox violations.
 read_paths = ["${TASK_FOLDER}", "${XDG_STATE_HOME}/claws"]

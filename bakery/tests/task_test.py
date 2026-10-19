@@ -34,6 +34,7 @@ def test_task_claims_and_adds(
         harness.call('task_set', id=1, claim=True, tag='build'),
         harness.call('task_set', id=2, claim=True),
         harness.call('task_set', id=2, release=True),
+        harness.call('task_set', id=1, tag='human'),
         harness.call('task_set', id=1, release=True, description_append='n'),
         harness.call(
             'task_add',
@@ -68,12 +69,13 @@ def test_task_claims_and_adds(
     assert '"owner": "triage"' in results[0]
     assert 'owned by operator' in results[1]
     assert 'not claimed by triage' in results[2]
-    assert '"owner": null' in results[3]
-    assert '"id":3,' in results[4]
-    assert 'open task #bakery:3 already has' in results[5]
-    assert 'the operator rejected' in results[6] and 'not ours' in results[6]
-    assert "1: the operator's" in results[7]
-    assert 'attempt to write a readonly database' in results[8]
+    assert 'use ask_operator to move a task to human' in results[3]
+    assert '"owner": null' in results[4]
+    assert '"id":3,' in results[5]
+    assert 'open task #bakery:3 already has' in results[6]
+    assert 'the operator rejected' in results[7] and 'not ours' in results[7]
+    assert "1: the operator's" in results[8]
+    assert 'attempt to write a readonly database' in results[9]
     assert testing_tasks.show('1')['summary'] == "the operator's"
     final = testing_tasks.show('bakery:1')
     assert (final['owner'], final['tag'], final['description']) == (

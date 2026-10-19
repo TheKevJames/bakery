@@ -7,10 +7,14 @@ errors and model errors fail it. Requests from elsewhere in the gateway (an
 abort from `pause --abort`, a steering message from Discord) arrive as
 synthetic records on the child's event queue, so they are handled in order
 with pi's own events.
+
+Nothing in a run waits on the operator: claws ask on the task list
+(`ask_operator`), so extension dialogs are cancelled as soon as they open.
 """
 
 import asyncio
 import dataclasses
+import logging
 import time
 from collections.abc import Awaitable
 from collections.abc import Callable
@@ -19,11 +23,16 @@ from . import channel as channel_
 from . import ledger
 from . import rpc
 
+log = logging.getLogger(__name__)
+
 ABORT_EVENT = 'bakery_abort'
 STEER_EVENT = 'bakery_steer'
-# A claw-only tool (pi/claw-extensions/ask-operator.ts) that parks the run when
-# its question cannot be answered now.
+# A claw-only tool (pi/claw-extensions/ask-operator.ts) that hands the run's
+# task to the operator and ends the run, leaving its reply in its details.
 ASK_TOOL = 'ask_operator'
+# Extension UI methods that block pi until answered; the rest
+# (notify, setStatus, ...) are fire-and-forget.
+DIALOG_METHODS = frozenset({'select', 'confirm', 'input', 'editor'})
 # How long an aborted run may take to settle before it is given up on.
 ABORT_SETTLE_TIMEOUT = 30.0
 SILENT_REPLY = 'NO_REPLY'
@@ -103,21 +112,12 @@ class _Run:
         # A steer that lands just after pi settled starts a new pi run, which
         # settles separately; wait for every one of them.
         self.unsettled = 1
-        # Dialogs are answered off the event loop so aborts and progress
-        # still flow while a question waits, possibly for hours.
-        self.dialogs: set[asyncio.Task[None]] = set()
-        self.waiting_since: float | None = None
 
     async def _halt(self, status: ledger.Status, reason: str) -> None:
         if self.stop is not None:
             return
         self.stop = (status, reason)
-        self.cancel_dialogs()
         await self.proc.command({'type': 'abort'})
-
-    def cancel_dialogs(self) -> None:
-        for task in self.dialogs:
-            task.cancel()
 
     async def _on_assistant(self, message: dict[str, object]) -> None:
         # A NO_REPLY message (eg. after a memory flush, or a quiet heartbeat)
@@ -161,33 +161,6 @@ class _Run:
                 ledger.Status.parked,
                 f'turn limit reached ({self.budget.turns})',
             )
-
-    def _on_dialog(self, event: dict[str, object]) -> None:
-        if not self.dialogs:
-            self.waiting_since = time.monotonic()
-        task = asyncio.create_task(self._answer(event))
-        self.dialogs.add(task)
-        task.add_done_callback(self._answered)
-
-    async def _answer(self, event: dict[str, object]) -> None:
-        answer = await self.channel.dialog(self.info, event)
-        if self.proc.alive:
-            await self.proc.respond_ui(str(event['id']), answer)
-
-    def _answered(self, task: asyncio.Task[None]) -> None:
-        self.dialogs.discard(task)
-        if not task.cancelled() and task.exception() is not None:
-            self.proc.events.put_nowait(
-                {
-                    'type': ABORT_EVENT,
-                    'status': ledger.Status.failed,
-                    'reason': f'answering a dialog failed: {task.exception()}',
-                }
-            )
-        if not self.dialogs and self.waiting_since is not None:
-            # Waiting on a human does not count against the time limit.
-            self.deadline += time.monotonic() - self.waiting_since
-            self.waiting_since = None
 
     async def handle(self, event: dict[str, object]) -> bool:
         """Handle one event; True once the run has settled."""
@@ -237,8 +210,16 @@ class _Run:
         )
 
     async def _on_ui_request(self, event: dict[str, object]) -> None:
-        if event.get('method') in channel_.DIALOG_METHODS:
-            self._on_dialog(event)
+        method = event.get('method')
+        if method not in DIALOG_METHODS:
+            return
+        await self.proc.respond_ui(str(event['id']), {'cancelled': True})
+        warning = (
+            f'{self.info.work_key}: cancelled a {method} dialog'
+            f' ({event.get("title")!r}); claws ask on the task list'
+        )
+        log.warning(warning)
+        await self.channel.notice(warning)
 
     async def _on_abort(self, event: dict[str, object]) -> None:
         await self._halt(
@@ -252,10 +233,14 @@ class _Run:
         result = event.get('result')
         details = result.get('details') if isinstance(result, dict) else None
         if event.get('toolName') == ASK_TOOL and isinstance(details, dict):
-            if details.get('park'):
+            reply = details.get('reply')
+            if isinstance(reply, str):
+                self.info.final_text = reply
+                # The task is the operator's now: a sibling tool call must
+                # not carry the run on.
                 await self._halt(
-                    ledger.Status.parked,
-                    f'waiting for an answer: {details.get("question")}',
+                    ledger.Status.settled,
+                    f'asked the operator on {details.get("task")}',
                 )
 
     async def _steer(self, text: str) -> None:
@@ -269,11 +254,8 @@ class _Run:
 
     async def follow(self) -> None:
         while True:
-            timeout: float | None
             if self.stop is not None:
                 timeout = ABORT_SETTLE_TIMEOUT
-            elif self.dialogs:
-                timeout = None
             else:
                 timeout = max(self.deadline - time.monotonic(), 0)
             try:
@@ -311,14 +293,11 @@ async def execute(
     The caller must drain events left over from earlier runs first.
     """
     run = _Run(proc, info, budget, channel, runs, await session_cost(proc))
-    try:
-        data = await proc.command({'type': 'prompt', 'message': prompt})
-        if data.get('disposition') != 'handled':
-            await run.follow()
-        # Settled runs are not stopped retroactively; their full cost still
-        # counts towards the daily budgets.
-        await run.reconcile_cost(enforce=False)
-    finally:
-        run.cancel_dialogs()
+    data = await proc.command({'type': 'prompt', 'message': prompt})
+    if data.get('disposition') != 'handled':
+        await run.follow()
+    # Settled runs are not stopped retroactively; their full cost still
+    # counts towards the daily budgets.
+    await run.reconcile_cost(enforce=False)
     info.status, info.reason = run.outcome()
     info.current_tool = None

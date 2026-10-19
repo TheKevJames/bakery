@@ -1,8 +1,8 @@
 """
 The gateway's view of the human-facing channel (Discord).
 
-The gateway reports run progress and forwards pi's extension dialogs through
-this interface; it never talks to Discord directly.
+The gateway reports runs through this interface; it never talks to Discord
+directly.
 """
 
 import dataclasses
@@ -15,10 +15,6 @@ from typing import Protocol
 from . import ledger
 
 log = logging.getLogger(__name__)
-
-# Extension UI methods that block pi until answered; the rest
-# (notify, setStatus, ...) are fire-and-forget.
-DIALOG_METHODS = frozenset({'select', 'confirm', 'input', 'editor'})
 
 
 @dataclasses.dataclass
@@ -58,25 +54,12 @@ class Channel(Protocol):
 
     async def run_finished(self, info: RunInfo) -> None: ...
 
-    async def dialog(
-        self, info: RunInfo, request: dict[str, object]
-    ) -> dict[str, object]:
-        """
-        Answer one pi `extension_ui_request` dialog.
-
-        Returns the response fields, eg. `{"confirmed": True}`,
-        `{"value": "..."}`, or `{"cancelled": True}`. Time spent here does
-        not count against the run's time limit.
-        """
-        ...
-
 
 class Reporting:
     """
     A channel whose reports never fail a run: a broken thread or webhook
     costs the operator the run's trail, not the run. Failures are logged, and
-    the first of each run is announced in a notice. Dialogs still raise, as a
-    run cannot carry on without its answer.
+    the first of each run is announced in a notice.
     """
 
     def __init__(self, channel: Channel) -> None:
@@ -101,11 +84,6 @@ class Reporting:
             await self._report(self.channel.run_finished, info)
         finally:
             self._announced.discard(info.run_id)
-
-    async def dialog(
-        self, info: RunInfo, request: dict[str, object]
-    ) -> dict[str, object]:
-        return await self.channel.dialog(info, request)
 
     async def _report(
         self, report: Callable[[RunInfo], Awaitable[None]], info: RunInfo

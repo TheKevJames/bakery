@@ -17,7 +17,7 @@ STRANGER = 2002
 class Message:
     where: transport.Where
     text: str
-    components: tuple[transport.Component, ...]
+    components: tuple[transport.Button, ...]
     attachment: transport.Attachment | None
     reactions: list[str] = dataclasses.field(default_factory=list)
 
@@ -39,9 +39,7 @@ class Thread:
 
 
 class FakeTransport:
-    def __init__(self, latency: float = 0.0) -> None:
-        # Seconds before each send returns, like a round trip to Discord.
-        self.latency = latency
+    def __init__(self) -> None:
         self.ids = itertools.count(1)
         self.threads: dict[int, Thread] = {}
         self.messages: dict[int, Message] = {}
@@ -70,7 +68,7 @@ class FakeTransport:
         where: transport.Where,
         text: str,
         *,
-        components: Sequence[transport.Component] = (),
+        components: Sequence[transport.Button] = (),
         attachment: transport.Attachment | None = None,
     ) -> int:
         assert len(text) <= 2000, len(text)
@@ -80,7 +78,6 @@ class FakeTransport:
             where, text, tuple(components), attachment
         )
         self.changed.set()
-        await asyncio.sleep(self.latency)
         return message_id
 
     async def edit(
@@ -89,7 +86,7 @@ class FakeTransport:
         message_id: int,
         text: str,
         *,
-        components: Sequence[transport.Component] | None = None,
+        components: Sequence[transport.Button] | None = None,
     ) -> None:
         assert len(text) <= 2000, len(text)
         self._check_thread(where)

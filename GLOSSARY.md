@@ -9,8 +9,8 @@ shared task list.
 ### Actors
 
 **Operator**:
-The one human who configures the claws, answers their questions, and reviews
-their work.
+The one human who configures the claws, answers their questions on the task
+list, and reviews their work.
 _Avoid_: owner, user, Kevin
 
 **Claw**:
@@ -76,7 +76,7 @@ The outcome of a run that finished normally.
 
 **Parked**:
 The outcome of a run stopped to wait for the operator: by a limit, an
-exhausted budget, a pause, or an unanswered question. It can be resumed.
+exhausted budget, or a pause. It can be resumed.
 
 **Failed**:
 The outcome of a run ended by an extension error, a model error, or pi
@@ -133,20 +133,6 @@ _Avoid_: permissions, tier
 **Sandbox**:
 The OS-level confinement a claw's whole process runs in, enforcing the path
 and network parts of its policy.
-
-**Ask policy**:
-What a claw does when it needs the operator's input: ask, assume, or park.
-_Avoid_: policy
-
-**Ask**:
-The ask policy of posting the question to the operator and waiting, falling
-back to assume or park on timeout.
-
-**Assume**:
-The ask policy of recording an assumption and continuing.
-
-**Park**:
-The ask policy of stopping the run until the operator replies.
 
 ### Memory
 
@@ -232,7 +218,13 @@ The route for tasks awaiting triage.
 The route for tasks build can implement and verify on its own.
 
 **`bakery > human`**:
-The route for tasks that need the operator.
+The route for tasks waiting on the operator: a claw's questions, or changes
+only the operator may approve.
+
+**Question**:
+Something a claw needs from the operator to finish a task, recorded on the
+task as it is routed to `bakery > human`.
+_Avoid_: ask, prompt
 
 **`bakery > blocked`**:
 The route for valid, scoped tasks waiting on their blockers.

@@ -1,5 +1,4 @@
 import asyncio
-import json
 import pathlib
 import subprocess
 
@@ -14,12 +13,8 @@ LEARN = """
 [[job]]
 name = "learn"
 prompt = "/learn"
-ask = "assume"
 """
-EXTENSIONS = [
-    'pi/claw-extensions/memory',
-    'pi/claw-extensions/ask-operator.ts',
-]
+EXTENSIONS = ['pi/claw-extensions/memory']
 # Quotes and spacing pi's template arguments would have mangled.
 LESSON = 'Your sandbox now allows heredocs; check "/tmp" too.\n  It\'s fine.'
 
@@ -36,7 +31,6 @@ def test_teaching_reports_the_reply_and_memory_diff(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     fake_llm.queue(
-        harness.call('ask_operator', question='Both?', assumption='both'),
         harness.call('memory_edit', content='# scout\n\n- heredocs work\n'),
         harness.Reply(text='Verified heredocs; updated memory.'),
     )
@@ -71,9 +65,7 @@ def test_teaching_reports_the_reply_and_memory_diff(
     assert user_prompt(fake_llm, 0) == (
         f'{prompts.expand("/learn")}\n\n<lesson>\n{LESSON}\n</lesson>'
     )
-    # The job's ask policy, not the claw's: nothing waits on the operator.
-    assert json.dumps('Policy is to not ask.')[1:-1] in fake_llm.transcript(1)
-    assert len(fake_llm.requests) == 3
+    assert len(fake_llm.requests) == 2
 
 
 def test_teaching_refuses_what_cannot_run(root: pathlib.Path) -> None:

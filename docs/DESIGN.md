@@ -117,8 +117,9 @@ Typical claw order: shared rule fragments from `pi/rules/` → `SOUL.md` →
 then `MEMORY.md` and the two most recent daily notes (session start only).
 
 Every profile uses the same rule fragments, including the "ask me" rules in
-`pi/rules/workflow.md`. Each claw's `AGENTS.md` defines what asking means
-for it (see [Ask policy](#ask-policy)).
+`pi/rules/workflow.md`. For the claws, `pi/claw-rules/tasks.md` defines
+what asking means: never waiting on the operator (see
+[Asking the operator](#asking-the-operator)).
 
 Shared extensions' npm dependencies are declared in `pi/package.json` and
 locked in `pi/bun.lock`; run `bun install --frozen-lockfile --cwd pi` after
@@ -157,8 +158,8 @@ Curation:
   daily notes into `MEMORY.md` and never promotes `external` notes, which
   stay in the daily notes as evidence; its report lists what it held back.
 - **Teach**: `bakery teach <claw|all> "<lesson>"` runs each claw's `learn`
-  job (`claws/defaults.toml`: no cron, Opus with xhigh thinking, `ask =
-  "assume"`; `pi/claw-prompts/learn.md`) with the operator's lesson
+  job (`claws/defaults.toml`: no cron, Opus with xhigh thinking;
+  `pi/claw-prompts/learn.md`) with the operator's lesson
   appended. The claw verifies the lesson where it can, rechecks the memory
   it bears on, corrects `MEMORY.md`, and appends an `operator` note so its
   next dream keeps the correction; it never asks, since the operator is
@@ -223,7 +224,8 @@ A single Python daemon (launchd agent, installed with
 Each unit of work is a `pi --mode rpc` child with a persisted session, run
 with the claw's profile as `PI_CODING_AGENT_DIR`. The gateway speaks pi's
 JSONL RPC protocol directly, waits for `agent_settled` to detect completion,
-and forwards `extension_ui_request` dialogs to Discord as buttons. The bakery
+and cancels any `extension_ui_request` dialog (see
+[Asking the operator](#asking-the-operator)). The bakery
 and session-registry extensions still load (sockets under
 `$XDG_STATE_HOME/claws/_gateway/pi/<claw>/registry`); a claw whose socket
 paths could exceed macOS's 104-byte limit fails config loading. The child runs through the
@@ -298,9 +300,8 @@ transcripts.
   `active_hours`. Missed runs (Mac asleep, gateway down) are skipped. A job
   without one runs only when triggered (eg. `learn`). Jobs in
   `defaults.toml`'s `[claw]` table apply to every claw (a claw's job of the
-  same name replaces one); a job may override `model`, `thinking`, and the
-  claw's ask policy (`ask`) for its units of work, which keep them on later
-  runs (eg. replies).
+  same name replaces one); a job may override `model` and `thinking` for
+  its units of work, which keep them on later runs (eg. replies).
   `bakery trigger <claw>` runs the claw's only own job; shared jobs (eg.
   `dream`) must be named.
 - **heartbeat**: a cron job flagged `silent_ok` (eg. every claw's dream,
@@ -339,28 +340,38 @@ the claw's and the global daily budgets. Cost is the change in pi's session
 stats (`get_session_stats`) over the run, reconciled after every turn and
 compaction, so compaction summaries count too; each assistant message is also
 charged provisionally so a costly reply stops the run before its tool calls
-execute. The time limit excludes time spent waiting on the operator in a
-dialog.
+execute.
 
 A run ends `settled`, `parked`, `failed`, or `interrupted`. `bakery resume
 <work-key>` continues a parked run. A model error fails a run only after
 pi's own retries.
 
-### Ask policy
+### Asking the operator
 
-Each claw sets its ask policy: `ask`, `assume`, or `park`. With `ask`, the
-question is posted to the thread (the `ask_operator` tool); its timeout
-(default 4h) and its fallback, `assume` or `park`, are also set per claw.
+Nothing in a run waits on the operator: claws put their questions on the
+task list. `ask_operator` (`pi/claw-extensions/ask-operator.ts`, loaded by
+triage, and by build once it exists) takes a task the claw has claimed and
+its questions, each with its context and the default the claw would pick.
+It appends them as a numbered `## Questions (<date>)` section, moves the
+task to `bakery > human`, releases it, and ends the run without another
+model call (`terminate`). Its result's `details.reply` becomes the run's
+reply, and the runner settles the run (`asked the operator on
+bakery:<id>`), aborting it if a sibling tool call in the same batch would
+carry it on. The questions show in the unit's thread without an @mention:
+the operator finds them in `bakery > human`.
 
-`ask_operator` (`pi/claw-extensions/ask-operator.ts`) reads the policy from
-`BAKERY_ASK_*` variables the gateway sets per child. It asks through a pi
-`input` dialog with the timeout attached; cancelling counts as no answer.
-Parking ends the run without another model call (`terminate`) and returns
-`details.park`, which the runner turns into a parked run (`waiting for an
-answer: …`); replying in the thread then resumes the unit with the
-operator's reply as the prompt. A question that times out is labelled `timed
-out` in Discord even when pi's own dialog timeout, which starts earlier, ends
-the run first.
+The operator answers under `## Answers`, by number (an unanswered question
+takes its default), and moves the task to `bakery > triage`, which re-routes
+it to its next claw's per-task unit of work (see [Task flow](#task-flow)).
+Questions from a later run go in a new `## Questions` section; the open ones
+are the last section's with no `## Answers` after it.
+
+Claws without `ask_operator` decide, and state their assumptions in their
+reply; in a conversation the operator started in Discord, a claw ends its
+reply with its questions, and the operator's reply continues the unit
+(`pi/claw-rules/tasks.md`). The runner answers any extension dialog
+(`select`, `confirm`, `input`, `editor`) with a cancel as soon as it opens,
+and warns in `#bakery` and `gateway.log`.
 
 ### Claw environment
 
@@ -421,9 +432,9 @@ Routing:
   work key. Work-key ↔ thread mappings are kept in `runs.db`. A unit whose
   thread was deleted gets a new one, announced in `#bakery`; a run whose
   status message was deleted posts a new one.
-- The operator's reply in a thread answers a pending `input` dialog if there
-  is one, else steers the in-flight run, else queues a run with the reply as
-  its prompt. Replies are acknowledged with a reaction.
+- The operator's reply in a thread steers the in-flight run, if there is
+  one, else queues a run with the reply as its prompt. Replies are
+  acknowledged with a reaction.
 - `silent_ok` runs create no thread unless they produce something other than
   `NO_REPLY` or need attention.
 
@@ -434,17 +445,16 @@ In each thread:
 - the final reply, in ≤2000-character chunks, or attached as `reply.md` if it
   would take more than 4 messages;
 - for parked, failed, or interrupted runs, an @mention with the reason and a
-  **Resume** button;
-- dialogs, @mentioning the operator: `confirm` as Approve/Deny; `select` as
-  buttons (up to 5 options) or a select menu; `input`/`editor` as "reply in
-  this thread", each with Cancel. Answered, timed-out, and cancelled dialogs are edited to
-  say so and lose their buttons. Buttons survive restarts (discord.py
-  `DynamicItem`s); clicking one whose request is gone says it expired.
+  **Resume** button. Buttons survive restarts (discord.py `DynamicItem`s);
+  clicking one whose run is gone says it expired.
+
+Nothing else @mentions the operator: claws never wait on them (see
+[Asking the operator](#asking-the-operator)).
 
 A run never fails because Discord did: if a status message, outcome, or
 reply cannot be posted (eg. a deleted thread or webhook), the error is
 logged, the run carries on, and its first failed report is announced in
-`#bakery`. Dialogs are the exception, as the run needs their answer.
+`#bakery`.
 
 Slash commands (guild-scoped): `/status`, `/budget`, `/trigger claw [job]
 [prompt]`, `/pause target [abort]`, `/resume target`, `/reload`.
@@ -650,9 +660,12 @@ optional priority and size) and `task_set` (tag, claim, release, append
 notes). Both address only the claws' namespace, `bakery` (`store.NAMESPACE`,
 passed as `BAKERY_TASK_NAMESPACE`): `task_set` takes a bare id there.
 `task_set` refuses to move a task to `blocked` unless `bakery blocked check`
-accepts its blockers (see triage). Claims are always made as the claw itself
-(`BAKERY_CLAW`), and `task_add` always files into the claw's `[tasks] tag`,
-through `bakery task add` (see below). Which claw uses which tool is a rule
+accepts its blockers (see triage), and refuses `human` altogether: only
+`ask_operator` (`pi/claw-extensions/ask-operator.ts`, sharing
+`lib/task-list.ts`) moves a task there, with its questions (see
+[Asking the operator](#asking-the-operator)). Claims are always made as the
+claw itself (`BAKERY_CLAW`), and `task_add` always files into the claw's
+`[tasks] tag`, through `bakery task add` (see below). Which claw uses which tool is a rule
 in its `AGENTS.md`; no claw completes or deletes tasks (a deleted task's
 source would be filed again).
 
@@ -679,15 +692,18 @@ Tags here are sections of the `bakery` namespace.
    their own (`task <id> set -n bakery --tag triage`), usually without a
    `link`.
 2. `triage` claims those (lowest id first), researches, appends notes, sets
-   `priority` and `size`, then re-tags to `build`, `human`, `blocked`, or
-   `wontfix` and releases.
-3. The operator answers a `human` task by appending their answer to its
-   description and moving it to `triage`, where triage re-routes it.
+   `priority` and `size`, then re-tags to `build`, `blocked`, or `wontfix`
+   and releases, or puts its questions to the operator with `ask_operator`,
+   which moves it to `human`.
+3. The operator answers a `human` task's `## Questions` by appending
+   `## Answers` to its description and moving it to `triage`, where triage
+   re-routes it.
 4. `triage` moves a `blocked` task back to `triage` once what it waits on
    clears (another task decided or done, or an upstream change), to be
    re-routed.
 5. `build` claims `build` tasks (high priority first), moves them to
-   `review` once a PR is open, and runs `done` after merge.
+   `review` once a PR is open, and runs `done` after merge; its questions go
+   through `ask_operator` to `human`, and back through triage.
 6. `baker` adds tasks about the claws themselves straight to `human`, with
    their priority and size; the operator moves them on.
 
@@ -716,7 +732,7 @@ open, so its link is not filed again either, and its source stays as it is.
 
 ## Claws (v1)
 
-All configuration (models, limits, schedules, ask policy, concurrency) lives
+All configuration (models, limits, schedules, concurrency) lives
 in each claw's `claw.toml`. Models have no default: every claw sets `model`
 and `thinking` (one of pi's levels, `off` to `max`).
 
@@ -787,7 +803,7 @@ Finds things in the operator's repos that belong on the task list. Profile:
   uses the gateway's `BAKERY_GITHUB`: GitHub refuses Actions log downloads
   ("Must have admin rights to Repository") to a token with no scopes, even
   on public repos and despite its docs.
-- The model (Haiku, high thinking, $2 per run, ask policy `assume`) writes
+- The model (Haiku, high thinking, $2 per run) writes
   each candidate up with `task_add` (into `bakery > triage`) and reports what
   it added.
 
@@ -846,11 +862,10 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
   `bakery > triage` likewise. The collector also reports blocked tasks it
   cannot read (eg. moved by hand without a valid list) in `#bakery`; weekly,
   rather than hourly in `unblock`, so they do not flood it.
-- Task tools: `task_set` only; it never adds tasks, which would file them
-  into its own queue.
-- Ask policy `ask`, falling back to `assume`; every question's assumption is
-  "route this task to human", so an unanswered question routes it
-  there and the reply says triage could not finish.
+- Task tools: `task_set` and `ask_operator`; it never adds tasks, which
+  would file them into its own queue.
+- Every task it routes to `bakery > human` goes through `ask_operator`,
+  with its questions; never while unblocking or rechecking.
 - A task left claimed by a failed, parked, or interrupted run is released
   (see [Shared task list](#shared-task-list)), so the queue hands it over
   again, to the same unit and session; its thread's Resume button also
@@ -865,10 +880,10 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
 - Pushes `kjames/bakery-*` branches and opens PRs; never merges.
 - Polls its PRs every 10 minutes; new review comments or failing CI resume
   that task's unit of work in the same thread.
-- Merged → `done`. Closed unmerged → `bakery > human` with a note, released.
+- Merged → `done`. Closed unmerged → `ask_operator`, asking what next.
 - Task tools: triage's, plus `task_link` and `task_done`, to be added back
   to `task.ts` with build.
-- Ask policy: `ask`, falling back to `park`.
+- Asks through `ask_operator`, like triage.
 
 ### baker - reads every claw, files for the operator
 
@@ -909,8 +924,8 @@ Reviews how the claws learn and files a task for each gap. Profile:
   tasks are steps in a task's **Fix**, for the operator.
 - It keeps its own memory (the slugs it filed). `task_add` refuses a link
   already on an open task or a rejection, and says which.
-- Ask policy `assume`; `silent_ok`, replying `NO_REPLY` when it filed
-  nothing and none of its tasks is still open.
+- Never asks: its tasks are its questions. `silent_ok`, replying
+  `NO_REPLY` when it filed nothing and none of its tasks is still open.
 
 ### Models
 

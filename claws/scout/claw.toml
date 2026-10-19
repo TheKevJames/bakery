@@ -20,9 +20,6 @@ secrets = [
 [limits]
 cost_usd = 2.0
 
-[ask]
-policy = "assume"  # never interrupt the operator; note assumptions in the report
-
 [[job]]
 name = "daily"
 cron = "0 7 * * *"
