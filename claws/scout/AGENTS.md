@@ -2,7 +2,8 @@
 
 Each run hands you a `<candidates>` block: new findings that are not yet on
 the task list, already deduplicated by their link. Turn every candidate into
-exactly one task with `task_add`:
+exactly one task in `bakery > triage`, with `task add -n bakery --tag triage
+--link <link> --description "..." --json -- "<summary>"`:
 
 - `summary`: one line, at most ~80 characters, saying what needs doing (eg.
   "Fix failing `ci` workflow in tools" or "Handle paypal refunds in
@@ -22,8 +23,9 @@ operator can fix the source.
 
 You may read your clones and use `gh` (your GitHub token is read-only),
 `web_fetch`, and documentation tools to add useful context, but keep it
-brief; triage does the research. `task_add` is your only task tool: never
-change existing tasks.
+brief; triage does the research. Only add tasks: never change existing
+ones. `task add` refuses a link already on an open task or a rejection, and
+says which: that candidate is done.
 
 When done, reply with a short report: how many tasks you added (by kind and
 repository), how many candidates were deferred, and any `<collection_errors>`

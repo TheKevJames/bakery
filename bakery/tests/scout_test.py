@@ -216,7 +216,7 @@ def scout_claws(
                 collector = "scout"
             """
         },
-        extensions={'scout': ['pi/claw-extensions/task.ts']},
+        rules={'scout': 'scout'},
     )
     (claws / 'scout' / scout_repos.SETTINGS_NAME).write_text(
         scout_toml(root, api, max_candidates, ignore_ci_lines)
@@ -264,7 +264,7 @@ def test_collects_new_candidates_in_priority_order(
     wontfix.add('bakery:1', 'not ours')
     testing_tasks.task('bakery:1', 'done')
     testing_tasks.task('bakery:2', 'done')
-    collection = scout.collect(claw)
+    collection = scout.collect(claw, 'test/run')
 
     warning = scout.fingerprint('DeprecationWarning: old api')
     node = scout.fingerprint('[DEP0040] DeprecationWarning: punycode')
@@ -308,7 +308,7 @@ def test_collects_new_candidates_in_priority_order(
     commands.git(clone, 'fetch', '-q')
     commands.git(clone, 'checkout', '-q', '--detach', 'origin/HEAD')
     assert 'TODO: handle errors' in (clone / 'app.py').read_text()
-    assert candidates(scout.collect(claw).text) == found
+    assert candidates(scout.collect(claw, 'test/run').text) == found
 
 
 def test_shipped_ignore_ci_lines_drop_only_noise(
@@ -349,7 +349,7 @@ def test_shipped_ignore_ci_lines_drop_only_noise(
         {'0_test-bot.txt': '\n'.join([*noise, *audit]) + '\n'}
     )
 
-    found = candidates(scout.collect(claw).text)
+    found = candidates(scout.collect(claw, 'test/run').text)
 
     messages = [
         (c['kind'], c['detail'].split('\n')[1])
@@ -367,7 +367,7 @@ def test_caps_candidates_per_run(
 ) -> None:
     claw = config.load(scout_claws(root, github.url, 2)).claw('scout')
 
-    text = scout.collect(claw).text
+    text = scout.collect(claw, 'test/run').text
 
     assert text is not None
     assert '<candidates count="2" deferred="7">' in text
@@ -382,9 +382,10 @@ def test_scout_adds_tasks_then_finds_nothing_new(
     claws = scout_claws(root, github.url, 1)
     ci_link = f'https://github.com/{REPO}/actions/runs/7'
     fake_llm.queue(
-        harness.Reply(
-            tool='task_add',
-            args={'summary': 'Fix CI', 'description': 'd', 'link': ci_link},
+        harness.call(
+            'bash',
+            command='task add -n bakery --tag triage --description d'
+            f" --link {ci_link} 'Fix CI'",
         ),
         harness.Reply(text='added 1'),
     )

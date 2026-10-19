@@ -27,7 +27,7 @@ bash_secrets = ["GH_TOKEN"]
 # extension tool its profile loads, and its instructions say which to use.
 # The sandbox also lets every claw reach any host, except by a name other
 # than localhost resolving to this machine (loopback, link-local, its own
-# addresses), and no unix socket but its own.
+# addresses), and no unix socket but its own and its task server's.
 # Relative paths are relative to the claw's profile (claws/<name>/); ~ and
 # ${VAR} expand.
 # A claw's value for a key replaces the default list; repeat what it keeps.
@@ -47,13 +47,9 @@ deny_read = [
 ]
 # Writable, besides the claw's own state, pi's files in its profile, and its
 # $TMPDIR; the rest of the repo is read-only. The memory tools are the
-# intended writers of memory, but bash could write it. Of the task list, only
-# the claws' namespace: the rest is the operator's.
-write_paths = ["${TASK_FOLDER}/bakery"]
-
-[tasks]
-# The tag task_add files into, in the claws' namespace of the task list.
-tag = "triage"
+# intended writers of memory, but bash could write it. None of the task list:
+# the gateway writes it for the claw, under its rules (see gateway.toml).
+write_paths = []
 
 # The identity of the claw's commits (the claws' GitHub user), in the git
 # config the gateway writes into the claw's home at every start.

@@ -19,7 +19,9 @@ from . import triage
 if TYPE_CHECKING:
     from ..gateway import config
 
-Collector = Callable[['config.Claw'], base.Collection]
+# Gathers input for a run of the unit with the given work key; a collector
+# claiming tasks for the run claims them as that unit, or the one it names.
+Collector = Callable[['config.Claw', str], base.Collection]
 # Problems with a claw's collector settings that only the outside world can
 # show (eg. a repo override the claws cannot reach); `bakery gateway check`
 # reports them.

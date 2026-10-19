@@ -153,7 +153,9 @@ def _claw(args: argparse.Namespace) -> config.Claw:
 
 
 def do_sandbox_show(args: argparse.Namespace) -> int:
-    settings = sandbox.settings(_claw(args), os.environ.get('PATH', ''))
+    claw = _claw(args)
+    path_env = os.environ.get('PATH', '')
+    settings = sandbox.settings(claw, path_env, f'{claw.name}-show')
     print(json.dumps(settings, indent=2))
     return 0
 

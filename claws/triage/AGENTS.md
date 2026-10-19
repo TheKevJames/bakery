@@ -6,19 +6,17 @@ Each run hands you one of three inputs:
 - `<unblocked>` tasks (the `unblock` job): see "Unblocked tasks";
 - `<blocked>` tasks (the `recheck` job): see "Rechecking blocked tasks".
 
-Every task you handle is in your namespace, `bakery`, so `task_set` takes
-its id alone and tags below (`triage`, `build`, ...) are sections of it.
-Tasks in `triage` without a `link` were handed over by the operator, often
-tersely. The rest were added by scout, or came back to you: the operator
-answered one you routed to `human`, what blocked it cleared, or it was sent
-back to be re-routed.
+Every task you handle is in your namespace, `bakery` (`bakery:<id>`), and
+tags below (`triage`, `build`, ...) are sections of it. Tasks in `triage`
+without a `link` were handed over by the operator, often tersely. The rest
+were added by scout, or came back to you: the operator answered one you
+routed to `human`, what blocked it cleared, or it was sent back to be
+re-routed.
 
-## 1. Claim it
+The gateway claimed the tasks you are handed for this run before it
+started: they are yours until it ends, when it releases them.
 
-`task_set(id, claim=true)`. If that fails, someone else has it: reply with
-exactly NO_REPLY.
-
-## 2. Research
+## 1. Research
 
 - If the task has your earlier `## Triage` notes, read them: anything after
   the latest one (the operator's `## Answers` to your `## Questions`, an
@@ -55,9 +53,10 @@ exactly NO_REPLY.
   own clones. If a task needs reproduction to understand, route it to the
   operator.
 
-## 3. Record
+## 2. Record
 
-Append notes with `task_set(id, description_append=...)`, as markdown:
+Append notes with `task bakery:<id> set --description-append "..."`, as
+markdown:
 
 ```
 ## Triage (YYYY-MM-DD)
@@ -94,7 +93,8 @@ The task clears once all of its blockers have. Never list a blocker which
 has already cleared; if none remain, route the task on its merits.
 
 Always set `priority` (`low`, `medium`, `high`) and `size` (`small`,
-`medium`, `large`) with `task_set`, whatever the route. `**Priority:**` is
+`medium`, `large`) with `task bakery:<id> set --priority ... --size ...`,
+whatever the route. `**Priority:**` is
 required on every task and must match the `priority` you set:
 
 - **priority**, by what the source shows now, not by the route (a `human`
@@ -119,10 +119,10 @@ required on every task and must match the `priority` you set:
 - **size**: small = under an hour, a file or two; medium = a few hours or
   several files; large = a day or more, or design work.
 
-## 4. Route
+## 3. Route
 
-Move it with `task_set(id, tag=...)`, then `task_set(id, release=true)`;
-only `ask_operator` moves a task to `human` (see "Asking the operator"):
+Move it with `task bakery:<id> set --tag <route>`; only `ask_operator`
+moves a task to `human` (see "Asking the operator"):
 
 - `build` when all hold: the change is in a TheKevJames repository
   the claws can push to (`gh api repos/OWNER/REPO` shows
@@ -162,13 +162,18 @@ recorded in **Duplicates:**. If earlier notes on this task have no
   notes.
 
 You may read any task, but only change tasks in `bakery`: the operator's own
-tasks are theirs, and the sandbox refuses any change to them. Never add
-tasks: `task_add` would file them into your own queue.
+tasks are theirs, and `task` refuses any change to them. Add a task only for
+separate work your research finds which no open task covers, routed as you
+would route it (`task add -n bakery --tag <route> --description "..."
+--priority ... --size ... -- "<summary>"`); otherwise keep findings in your
+notes. A new task in `human` ends its description with its questions, as
+`ask_operator` writes them (`## Questions (YYYY-MM-DD)`, then each numbered,
+with its **Context:** and **Default:**), or `task add` refuses it.
 
 ## Unblocked tasks
 
 `<unblocked>` lists blocked tasks whose blockers (all tasks) have cleared.
-For each: claim it; append
+For each, append
 
 ```
 ## Unblocked (YYYY-MM-DD)
@@ -176,8 +181,9 @@ For each: claim it; append
 Cleared: #bakery:184 decided (now build)
 ```
 
-and move it to `triage` and release it, in one `task_set`. Do not
-re-triage it here: the `queue` job does that next.
+and move it to `triage`, in one `task bakery:<id> set --tag triage
+--description-append "..."`. Do not re-triage it here: the `queue` job
+does that next.
 
 ## Rechecking blocked tasks
 
@@ -193,11 +199,11 @@ holds, leave its tasks blocked and say so in your reply.
 
 Nothing you do waits on the operator. When a task belongs in `human`,
 record your notes, `priority`, and `size` as for any route, then call
-`ask_operator(id, questions)` with every question at once: each answerable
-cold, with what you found and the **Default** you would pick. For a task
-which needs reproduction, credentials, or outside systems, ask for exactly
-that. It moves the task to `human`, releases it, and ends your run, so call
-it last. The operator answers under `## Answers` and sends the task back to
+`ask_operator(id, questions)` with every question at once (`id` is the
+number in `bakery:<id>`): each answerable cold, with what you found and the
+**Default** you would pick. For a task which needs reproduction,
+credentials, or outside systems, ask for exactly that. It moves the task to
+`human`, releases it, and ends your run, so call it last. The operator answers under `## Answers` and sends the task back to
 `triage`. Never ask while unblocking or rechecking.
 
 ## Reply

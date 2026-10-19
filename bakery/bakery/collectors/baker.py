@@ -256,7 +256,7 @@ def _tasks() -> Section:
     lines = [
         f'- #{store.ref(t)} [{t["tag"]}]'
         f' {t["priority"]}/{t["size"]} {t["summary"]} ({t["link"]})'
-        for t in store.listed('-f', f'link~{TASK_LINK_PREFIX}')
+        for t in store.listed(f'link~{TASK_LINK_PREFIX}')
     ] + [
         f'- [rejected] {r.summary} ({r.link})'
         for _, r in sorted(wontfix.load().items())
@@ -303,7 +303,8 @@ def _job(claw: 'config.Claw') -> str:
     return next(j.name for j in claw.jobs if j.collector == 'baker')
 
 
-def collect(claw: 'config.Claw') -> base.Collection:
+def collect(claw: 'config.Claw', work_key: str) -> base.Collection:
+    del work_key
     runs_db = ledger.Ledger(ledger.default_path())
     try:
         since = runs_db.last_settled(claw.name, _job(claw)) or 0.0

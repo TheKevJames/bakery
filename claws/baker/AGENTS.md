@@ -28,17 +28,17 @@ failing in a way nothing will fix. File one task per gap for the operator.
     cost_usd, turns) and `_gateway/gateway.log`.
 - **The bakery repository** (your clone of `TheKevJames/bakery`): each claw's
   `claws/<name>/` (`claw.toml` policy and jobs, `AGENTS.md`, `SOUL.md`,
-  `context.toml`), `claws/defaults.toml` and `claws/gateway.toml`, the claw
-  tools in `pi/claw-extensions/`, the dream prompt in `pi/claw-prompts/dream.md`, the
-  gateway and collectors in `bakery/bakery/`, and `docs/DESIGN.md`.
+  `context.toml`), `claws/defaults.toml` and `claws/gateway.toml` (with
+  every claw's task list rules), the claw tools in `pi/claw-extensions/`,
+  the dream prompt in `pi/claw-prompts/dream.md`, the gateway and
+  collectors in `bakery/bakery/`, and `docs/DESIGN.md`.
 - Dig with bash (`jq`, `rg`, `git`); most of `$HOME` is unreadable to it.
 
 ## 1. Recheck your open tasks
 
 The digest lists every task whose link starts with `baker:`. For each one
 in `bakery > human`, recheck its **Acceptance** line: is the gap still
-present, or fixed? Never change tasks (no `task_set`); report what you
-found.
+present, or fixed? Never change tasks; report what you found.
 
 ## 2. Look for gaps
 
@@ -75,11 +75,13 @@ the code that explains the behaviour. Say how you verified, or mark the gap unve
 
 ## 3. File
 
-One task per gap, with `task_add` (it files into `bakery > human`):
+One task per gap, in `bakery > human`, with `task add -n bakery --tag human
+--link <link> --priority ... --size ... --description "..." --json --
+"<summary>"`:
 
 - `summary`: one line, at most ~80 characters, saying what to fix.
 - `link`: `baker:<type>/<slug>`, the slug lowercase-kebab and naming the
-  gap rather than one instance of it. `task_add` refuses a link that is
+  gap rather than one instance of it. `task add` refuses a link that is
   already on an open task, in any section, or on a rejection, and says which;
   check the digest's tasks (or `task list --json -f 'link~baker:'`) and your
   memory for the same gap under another slug first. Rejections are permanent. Other tasks
@@ -101,7 +103,17 @@ One task per gap, with `task_add` (it files into `bakery > human`):
 closing a task, or a ready-to-run `bakery teach <claw> "<lesson>"` line
 for a claw's memory
 **Acceptance:** what you will check on later runs to call it fixed
+
+## Questions (YYYY-MM-DD)
+
+1. Accept this proposal as is?
+   **Context:** the gap and its fix, in a sentence
+   **Default:** accept
 ```
+
+Every task waiting on the operator ends with its questions, numbered, so
+they answer each the same way; `task add` refuses a task in `human` without
+them.
 
 Never change other claws' memory or tasks yourself, and never run `bakery
 teach`; put those changes in **Fix**. A lesson is what the claw should

@@ -188,7 +188,7 @@ A flat name that places a task in a section of its namespace, eg. `build`.
 **Namespace**:
 A part of the task list in its own directory, so access is granted per
 namespace. `default` is the operator's; `bakery` is the claws', the only one
-their sandbox lets them change. Written `bakery > build` for a tag within
+their task rules let them change. Written `bakery > build` for a tag within
 one.
 
 **Task id**:
@@ -196,13 +196,15 @@ A task's address, `<namespace>:<id>`, eg. `bakery:12`; ids are unique only
 within a namespace, and a bare id means `default`.
 
 **Claim**:
-To become a task's owner, so that no one else works on it. A claw's claim
-never outlives its runs: the gateway releases it once the claw has no run in
-flight.
+An exclusive hold on a task, so that no one else changes it: the operator's,
+or a claw's unit of work's. A claw claims every task it adds or changes, and
+its claims end with the run that holds them.
+_Avoid_: owner, claimant, assignee
 
-**Owner**:
-Whoever has claimed a task: a claw or the operator.
-_Avoid_: claimant, assignee
+**Task rules**:
+What a claw may create, claim, and change on the task list, enforced by the
+gateway; whatever they do not grant is denied.
+_Avoid_: permissions, policy
 
 **Link**:
 The identity of a task's source, such as an issue URL or a fingerprinted

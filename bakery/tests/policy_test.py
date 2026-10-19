@@ -89,7 +89,7 @@ def test_file_access_follows_the_policy(
     tool.mkdir()
     (tool / 'code.py').write_text('editable')
     (tool.parent / 'other').write_text('hunter5')
-    install_editable(root / 'venv', 'task', tool)
+    install_editable(root / 'venv', 'fd', tool)
     monkeypatch.setenv('PATH', f'{root / "venv" / "bin"}:{os.environ["PATH"]}')
     out = root / 'out'
     out.mkdir()
@@ -128,7 +128,7 @@ def test_file_access_follows_the_policy(
         ),
         harness.call('bash', command=f'echo b > {root}/b.txt'),
         # A runtime tool reads its editable source, but nothing beside it.
-        harness.call('bash', command='task'),
+        harness.call('bash', command='fd'),
         harness.call('bash', command=f'cat {home}/src/personal/other'),
     ]
 

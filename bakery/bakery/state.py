@@ -39,6 +39,14 @@ def claw_pi_states() -> pathlib.Path:
     return root() / '_gateway' / 'pi'
 
 
+def task_socket(session_id: str) -> pathlib.Path:
+    """
+    Where the gateway serves a unit's task list writes. Its dir is the only
+    unix socket path the unit's sandbox may reach, and it may not write there.
+    """
+    return root() / '_gateway' / 'task' / session_id / 'task.sock'
+
+
 def operator_file() -> pathlib.Path:
     return root() / SHARED / 'OPERATOR.md'
 

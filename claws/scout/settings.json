@@ -10,7 +10,6 @@
     "../../pi/extensions/read-mutation-queue.ts",
     "../../pi/extensions/watch",
     "../../pi/claw-extensions/memory",
-    "../../pi/claw-extensions/task.ts",
     "-builtin:codemode",
     "-builtin:llama.cpp",
     "-builtin:mcp",

@@ -3,6 +3,7 @@
 import asyncio
 import collections
 import dataclasses
+import itertools
 import json
 import logging
 import pathlib
@@ -103,6 +104,35 @@ async def claw_status(claw: str) -> dict[str, object]:
     return entry
 
 
+RULES_RE = re.compile(r'^\[tasks\.(?P<claw>[a-z][a-z0-9-]*)\.', re.MULTILINE)
+
+
+def _without_rules(gateway_toml: str, rules: dict[str, str]) -> str:
+    """
+    `gateway_toml` with only the rules `rules` maps test claws to, from the
+    repo's claw each names.
+    """
+    first = RULES_RE.search(gateway_toml)
+    if first is None:
+        return gateway_toml
+    settings, tables = (
+        gateway_toml[: first.start()],
+        gateway_toml[first.start() :],
+    )
+    kept: list[str] = []
+    starts = [m.start() for m in RULES_RE.finditer(tables)] + [len(tables)]
+    for start, end in itertools.pairwise(starts):
+        table = tables[start:end]
+        match = RULES_RE.match(table)
+        assert match
+        for claw, repo_claw in rules.items():
+            if match['claw'] == repo_claw:
+                kept.append(
+                    table.replace(f'[tasks.{repo_claw}.', f'[tasks.{claw}.', 1)
+                )
+    return settings + ''.join(kept)
+
+
 def make_claws(
     root: pathlib.Path,
     claws: dict[str, str],
@@ -110,6 +140,7 @@ def make_claws(
     extensions: dict[str, list[str]] | None = None,
     gateway: dict[str, object] | None = None,
     settings: dict[str, dict[str, object]] | None = None,
+    rules: dict[str, str] | None = None,
 ) -> pathlib.Path:
     """
     A claws dir: the repo's real gateway.toml and defaults.toml, plus one
@@ -117,11 +148,15 @@ def make_claws(
 
     `claws` maps names to extra claw.toml text; every claw uses the fake
     model and loads the claw prompts. `gateway` overrides top-level values in
-    gateway.toml; `settings` adds to a claw's settings.json.
+    gateway.toml; `settings` adds to a claw's settings.json. The repo's task
+    list rules name its own claws, so `rules` names a claw whose rules are
+    the repo's claw's of that name; any other claw may only read.
     """
     claws_dir = root / 'claws'
     claws_dir.mkdir()
-    gateway_toml = (harness.REPO / 'claws' / config.GATEWAY_NAME).read_text()
+    gateway_toml = _without_rules(
+        (harness.REPO / 'claws' / config.GATEWAY_NAME).read_text(), rules or {}
+    )
     for key, value in (gateway or {}).items():
         # Top-level keys come before any table, so are the first match.
         gateway_toml, count = re.subn(

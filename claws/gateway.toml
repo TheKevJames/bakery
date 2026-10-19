@@ -8,3 +8,38 @@ daily_cost_usd = 50.0       # across all claws
 [discord]
 guild_id = 1465773145427280065     # the operator's private server
 operator_id = 523678345662300161   # the only user the bot acts on
+
+# What each claw may do to the task list (task's `task.rules` format; see
+# bakery/bakery/task_list/claims.py). Whatever no rule grants is denied: a
+# claw without a table may only read. Every claw writes only the claws'
+# namespace, `bakery`, and never completes or deletes a task (its source
+# would be filed again). Each claim belongs to one run, and ends with it.
+# bakery/bakery/task_list/hooks.py adds checks rules cannot express: filing
+# only new links, blocking only on valid blockers, and asking the operator
+# only with questions.
+
+[tasks.scout.create]
+namespaces = ["bakery"]
+tags = ["triage"]
+require = ["link"]
+fields = ["description", "priority", "size"]
+
+[tasks.triage.create]
+namespaces = ["bakery"]
+tags = ["build", "blocked", "human", "triage", "wontfix"]
+fields = ["description", "priority", "size"]
+
+[tasks.triage.claim]
+namespaces = ["bakery"]
+tags = ["blocked", "triage"]
+
+[tasks.triage.change]
+fields = ["description_append", "priority", "size"]
+tags = ["build", "blocked", "human", "triage", "wontfix"]
+
+# Never build: fixes change the claws themselves, so the operator approves.
+[tasks.baker.create]
+namespaces = ["bakery"]
+tags = ["human"]
+require = ["link"]
+fields = ["description", "priority", "size"]
