@@ -15,10 +15,6 @@ turns = 100
 # Every claw's state, and the gateway's runs, logs, and sandbox violations.
 read_paths = ["${TASK_FOLDER}", "${XDG_STATE_HOME}/claws"]
 
-[tasks]
-# Never build: fixes change the claws themselves, so the operator approves.
-tag = "human"
-
 # After the 03:00 dreams, so it sees what they promoted.
 [[job]]
 name = "review"

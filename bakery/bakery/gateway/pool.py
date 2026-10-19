@@ -13,7 +13,10 @@ import json
 import logging
 import os
 import pathlib
+import sysconfig
 import time
+
+from task import client
 
 from .. import paths
 from .. import secrets
@@ -60,6 +63,22 @@ async def _check_startup(proc: rpc.PiProcess) -> None:
         raise rpc.RpcError('; '.join(errors))
 
 
+def _task_bin() -> pathlib.Path:
+    """
+    A dir holding only the gateway's own `task`, first on every claw's PATH
+    so it speaks the task server's protocol whatever the operator installed.
+    The rest of the gateway's scripts (its python among them) stay out.
+    """
+    path = state.root() / '_gateway' / 'bin'
+    link = path / 'task'
+    target = pathlib.Path(sysconfig.get_path('scripts')) / 'task'
+    if not link.is_symlink() or link.readlink() != target:
+        path.mkdir(parents=True, exist_ok=True)
+        link.unlink(missing_ok=True)
+        link.symlink_to(target)
+    return path
+
+
 def child_env(claw: config.Claw, sid: str) -> dict[str, str]:
     """Raises secrets.SecretError if a configured secret is missing."""
     env = {
@@ -67,6 +86,9 @@ def child_env(claw: config.Claw, sid: str) -> dict[str, str]:
         for name, value in os.environ.items()
         if name in INHERITED_ENV or name.startswith(INHERITED_ENV_PREFIXES)
     }
+    env['PATH'] = os.pathsep.join(
+        filter(None, (str(_task_bin()), env.get('PATH')))
+    )
     env.update(
         {name: secrets.get(item) for name, item in claw.secrets.items()}
     )
@@ -79,7 +101,7 @@ def child_env(claw: config.Claw, sid: str) -> dict[str, str]:
     env.update(
         {
             'BAKERY_SANDBOX': json.dumps(
-                sandbox.settings(claw, env.get('PATH', ''))
+                sandbox.settings(claw, env.get('PATH', ''), sid)
             ),
             'BAKERY_SANDBOX_VIOLATIONS': str(sandbox.violations(claw, sid)),
             'BAKERY_SANDBOX_TMP': str(sandbox.tmp(claw)),
@@ -91,8 +113,9 @@ def child_env(claw: config.Claw, sid: str) -> dict[str, str]:
                 secret_names=set(claw.secrets) - set(claw.bash_secrets)
             ),
             'BAKERY_CLAW': claw.name,
-            'BAKERY_TASK_TAG': claw.tasks.tag,
             'BAKERY_TASK_NAMESPACE': store.NAMESPACE,
+            # Where its `task` sends every command (see task_server).
+            client.ADDRESS: str(state.task_socket(sid)),
             'PI_CODING_AGENT_DIR': str(claw.profile),
             'PI_CODING_AGENT_STATE_DIR': str(claw.pi_state_dir),
             'BAKERY_MEMORY_DIR': str(claw.state_dir),

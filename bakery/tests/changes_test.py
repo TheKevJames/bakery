@@ -94,7 +94,7 @@ def test_feeds_recent_commits_without_an_earlier_dream(
     )  # fmt: skip
     commit(repo, RENOVATE, 'chore(deps): bump x', 'uv.lock', days_ago=2)
 
-    text = changes.collect(claw).text
+    text = changes.collect(claw, 'test/run').text
 
     assert text is not None
     assert text.startswith(f'<changes checkout="{repo}">\n')
@@ -116,7 +116,7 @@ def test_feeds_commits_since_the_last_settled_dream(
     # A dream that did not settle never moves the base.
     dreamed(claw, newest, ledger.Status.parked)
 
-    text = changes.collect(claw).text
+    text = changes.collect(claw, 'test/run').text
 
     assert text is not None
     assert f'since {covered[:12]}, the HEAD your last dream covered' in text
@@ -131,7 +131,7 @@ def test_nothing_new_since_the_last_dream(
     newest = commit(repo, KEVIN, 'feat: covered', 'a.py', days_ago=1)
     dreamed(claw, newest, ledger.Status.settled)
 
-    assert changes.collect(claw).text is None
+    assert changes.collect(claw, 'test/run').text is None
 
 
 def user_prompt(fake_llm: harness.FakeLLM, index: int) -> str:
@@ -186,7 +186,7 @@ def test_a_base_rewritten_away_falls_back_to_recent_commits(
     commit(repo, KEVIN, 'feat: recent', 'a.py', days_ago=1)
     dreamed(claw, 'f' * 40, ledger.Status.settled)
 
-    text = changes.collect(claw).text
+    text = changes.collect(claw, 'test/run').text
 
     assert text is not None
     assert 'in the last 14 days' in text and 'feat: recent' in text

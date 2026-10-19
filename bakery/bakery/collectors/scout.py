@@ -437,7 +437,8 @@ def _gather(
     return found, errors
 
 
-def collect(claw: 'config.Claw') -> base.Collection:
+def collect(claw: 'config.Claw', work_key: str) -> base.Collection:
+    del work_key
     settings = scout_repos.load_settings(claw.profile)
     token = secrets.get(base.GITHUB_TOKEN)
     gh = github.GitHub(settings.api, token)

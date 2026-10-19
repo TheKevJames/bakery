@@ -44,10 +44,7 @@ def test_rejections_are_recorded_by_lineage_and_committed(tasks: None) -> None:
         ),
         (('bakery:2', '--reason', 'x'), 'task bakery:2 has no link'),
         (('1', '--reason', ' '), 'the reason is empty'),
-        (
-            ('99', '--reason', 'x'),
-            'cannot reject 99: error: task 99 not found',
-        ),
+        (('99', '--reason', 'x'), 'cannot reject 99: task 99 not found'),
     ):
         refused = bakery('add', *args)
         assert refused.returncode and error in refused.stderr, args

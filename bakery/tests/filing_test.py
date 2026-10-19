@@ -1,15 +1,14 @@
 import datetime
-import json
 import pathlib
-import subprocess
 
 import hypothesis
 import pytest
 from hypothesis import strategies as st
 
+from bakery.task_list import filing
 from bakery.task_list import lineage
+from bakery.task_list import store
 from bakery.task_list import wontfix
-from testing import commands
 from testing import tasks as testing_tasks
 
 REPO = 'https://github.com/Owner/repo'
@@ -33,17 +32,6 @@ def test_lineage_ignores_only_anchors_and_case(
     assert (lineage.of(other) == key) == (other.lower() == source.lower())
 
 
-def file(*args: str) -> subprocess.CompletedProcess[str]:
-    return commands.bakery('task', 'add', *args)
-
-
-def filed(*args: str) -> dict[str, object]:
-    result = file('--json', *args)
-    print(result.stderr)
-    outcome: dict[str, object] = json.loads(result.stdout)
-    return outcome
-
-
 @pytest.fixture(name='tasks', scope='function')
 def fixture_tasks(
     tmp_path: pathlib.Path,
@@ -62,44 +50,32 @@ def fixture_tasks(
     testing_tasks.task('bakery:1', 'done')
 
 
+def refusal(link: str) -> str | None:
+    try:
+        filing.check(link)
+    except store.TaskError as e:
+        return str(e)
+    return None
+
+
 def test_tasks_are_filed_unless_their_lineage_is_tracked(tasks: None) -> None:
     del tasks
-    claws = ('-n', 'bakery', '--tag', 'triage')
-    twelve = filed(*claws, '--link', f'{REPO}/issues/12', '--', '-twelve')
-    assert twelve['filed'] == testing_tasks.show('bakery:2')
-    # `…/issues/12` holds `…/issues/1`, but is another source.
-    one = filed(*claws, '--description', 'd', '--link', f'{REPO}/issues/1',
-                '--', 'one')  # fmt: skip
-    assert one['filed'] == testing_tasks.show('bakery:3')
-    again = filed('--link', f'{REPO.lower()}/issues/1#issuecomment-1', 'x')
-    assert again == {'open': testing_tasks.show('bakery:3')}
-    # Open in any namespace, whatever the anchor.
-    assert file('--link', f'{REPO}/blob/main/a.py?todo=f#L9', 'x').stdout == (
-        'open as default:1: theirs\n'
+    testing_tasks.task(
+        'add', '-n', 'bakery', '--link', f'{REPO}/issues/12', 'x'
     )
+    # `…/issues/12` holds `…/issues/1`, but is another source.
+    assert refusal(f'{REPO}/issues/1') is None
+    assert refusal(f'{REPO.lower()}/issues/12#issuecomment-1') == (
+        'not filed: open task bakery:2 already has this link\'s lineage ("x")'
+    )
+    # Open in any namespace, whatever the anchor.
+    theirs = refusal(f'{REPO}/blob/main/a.py?todo=f#L9')
+    assert theirs is not None and 'open task default:1' in theirs
 
     today = datetime.datetime.now(datetime.UTC).date().isoformat()
-    assert filed('--link', f'{REPO}/issues/5#top', 'x') == {
-        'rejected': {
-            'link': f'{REPO}/issues/5',
-            'summary': 'not ours',
-            'reason': 'upstream',
-            'date': today,
-        }
-    }
-    assert file('--link', f'{REPO}/issues/5', 'x').stdout == (
-        f'rejected on {today} ({REPO}/issues/5): upstream\n'
+    assert refusal(f'{REPO}/issues/5#top') == (
+        "not filed: the operator rejected this link's lineage on"
+        f' {today}, so it is never filed again: upstream'
     )
-
-    comma = file('--link', f'{REPO}/issues/6,7', 'x')
-    assert comma.returncode and 'cannot hold a comma' in comma.stderr
-    bad = file('--priority', 'urgent', '--link', f'{REPO}/issues/8', 'x')
-    assert bad.returncode and 'urgent' in bad.stderr
-    unlinked = file('-n', 'bakery', '--', 'no link')
-    assert unlinked.stdout == 'added task bakery:4: no link\n'
-    assert filed('no link')['filed'] == testing_tasks.show('default:2')
-    assert len(json.loads(testing_tasks.task('list', '--json'))) == 5
-
-    # Only `task add` passes on arguments bakery does not know.
-    refused = commands.bakery('wontfix', 'list', '--link', 'x')
-    assert refused.returncode and 'unrecognized arguments' in refused.stderr
+    comma = refusal(f'{REPO}/issues/6,7')
+    assert comma is not None and 'cannot hold a comma' in comma

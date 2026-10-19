@@ -13,7 +13,6 @@ from testing import harness
 from testing import tasks as testing_tasks
 
 ASK = 'pi/claw-extensions/ask-operator.ts'
-TASKS = 'pi/claw-extensions/task.ts'
 
 
 def run(
@@ -175,14 +174,16 @@ def test_ask_operator_hands_the_task_over_without_a_mention(
 ) -> None:
     testing_tasks.task('add', '-n', 'bakery', '--tag', 'triage', 'a task')
     claws = testing_gateway.make_claws(
-        root, {'triage': ''}, extensions={'triage': [TASKS, ASK]}
+        root,
+        {'triage': ''},
+        extensions={'triage': [ASK]},
+        rules={'triage': 'triage'},
     )
     questions = [
         {'question': 'Which repo?', 'context': 'Two match.', 'default': 'all'},
         {'question': 'Now?', 'context': 'It is\nlate.', 'default': 'later'},
     ]
     fake_llm.queue(
-        harness.call('task_set', id=1, claim=True),
         harness.call('ask_operator', id=1, questions=questions),
         harness.Reply(text='kept going'),
     )
@@ -204,11 +205,11 @@ def test_ask_operator_hands_the_task_over_without_a_mention(
         texts = [m.text for m in fake.in_thread(thread)]
         assert not [t for t in texts if f'<@{chat.OPERATOR}>' in t], texts
         # The tool ends the run: no model call after it.
-        assert len(fake_llm.requests) == 2
+        assert len(fake_llm.requests) == 1
 
     run(claws, scenario)
     task = testing_tasks.show('bakery:1')
-    assert (task['tag'], task['owner']) == ('human', None)
+    assert (task['tag'], task['claim']) == ('human', None)
     description = str(task['description'])
     assert description.startswith('## Questions (')
     assert '1. Which repo?' in description

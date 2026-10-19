@@ -9,7 +9,7 @@ daemon and controlled over Discord. Its terms are defined in
 
 | Path | Contents |
 | --- | --- |
-| `pi/` | Shared pi resources: `extensions/`, `claw-extensions/` (claws only: `policy/`, `memory/`, `task.ts`, `ask-operator.ts`, and `lib/` for what they share), `claw-sandbox/` (the claws' sandbox launcher), `claw-prompts/` (claws only, eg. `/dream`), `skills/` (incl. vendored), `prompts/`, `agents/`, `rules/` (instruction fragments). |
+| `pi/` | Shared pi resources: `extensions/`, `claw-extensions/` (claws only: `policy/`, `memory/`, `ask-operator.ts`), `claw-sandbox/` (the claws' sandbox launcher), `claw-prompts/` (claws only, eg. `/dream`), `skills/` (incl. vendored), `prompts/`, `agents/`, `rules/` (instruction fragments). |
 | `interactive/` | The interactive profile; used directly as `PI_CODING_AGENT_DIR`. |
 | `claws/<name>/` | One profile per claw: `claw.toml`, `context.toml`, `settings.json`, `SOUL.md`, `IDENTITY.md`, `AGENTS.md`. |
 | `bakery/` | Python project: the `bakery` CLI, the gateway, and collectors. |
@@ -354,12 +354,17 @@ pi's own retries.
 
 Nothing in a run waits on the operator: claws put their questions on the
 task list. `ask_operator` (`pi/claw-extensions/ask-operator.ts`, loaded by
-triage, and by build once it exists) takes a task the claw has claimed and
-its questions, each with its context and the default the claw would pick.
-It appends them as a numbered `## Questions (<date>)` section, moves the
-task to `bakery > human`, releases it, and ends the run without another
-model call (`terminate`). Its result's `details.reply` becomes the run's
-reply, and the runner settles the run (`asked the operator on
+triage, and by build once it exists) takes a task and its questions, each
+with its context and the default the claw would pick. It appends them as a
+numbered `## Questions (<date>)` section and moves the task to
+`bakery > human` (one `task set`, which claims it if it was not already the
+run's), releases it, and ends the run without another model call
+(`terminate`). The task server refuses any task entering `human`,
+created or moved there, without such a new section, with every question's
+**Context:** and **Default:** (`bakery/bakery/task_list/hooks.py`), so
+everything waiting on the operator is answered the same way: baker ends each
+gap report with "Accept this proposal as is?". Its result's
+`details.reply` becomes the run's reply, and the runner settles the run (`asked the operator on
 bakery:<id>`), aborting it if a sibling tool call in the same batch would
 carry it on. The questions show in the unit's thread without an @mention:
 the operator finds them in `bakery > human`.
@@ -388,6 +393,11 @@ password, account `bakery`, service = ITEM), never the gateway's environment,
 which holds all of the operator's shell's secrets when the gateway is
 started from a shell. A missing secret fails the run. Secrets are handed to
 pi and its extension tools, not to bash (see [Safety](#safety)).
+
+`PATH` starts with `_gateway/bin/` in the claw state root, which holds only
+a link to the gateway's own `task`, so a claw's `task` always speaks its
+task server's protocol (see [Shared task list](#shared-task-list)), and
+`TASK_SERVER` names the unit's socket.
 
 The gateway also reads secrets of its own from the Keychain, by fixed item
 names, and never hands them to a claw: `DISCORD_BOT_TOKEN`, and
@@ -493,17 +503,17 @@ Prompt-level rules are not enforcement. Each claw's `[policy]` (defaults in
 `claws/defaults.toml`, overridable per claw; there are no named tiers; a
 claw's value for a key replaces the default list) is enforced by the OS
 sandbox the claw's whole pi runs in, and its GitHub token limits what it can
-do there. Nothing else is a boundary: bash shares pi's sandbox, so anything
-pi's process could refuse, bash could do anyway. So:
+do there; the task list is written for it by the gateway, under its rules.
+Nothing else is a boundary: bash shares pi's sandbox, so anything pi's
+process could refuse, bash could do anyway. So:
 
 - Every claw has pi's default tools (`read`, `bash`, `edit`, `write`) and
   every extension tool its profile loads. Which to use, and how, are rules
   in its instructions.
-- Which tasks a claw may change is the sandbox's: it writes only the claws'
-  namespace of the task list. The task tools' checks within it (claims,
-  `[tasks] tag`, blocked lists) are guard rails on the easy path;
-  `pi/claw-rules/tasks.md` tells every claw to change tasks only through
-  them.
+- What a claw may do to the task list is the gateway's: the sandbox makes
+  the task list read-only to it, and the gateway's task server makes every
+  change it asks for, under its rules in `claws/gateway.toml` (see
+  [Shared task list](#shared-task-list)), however it asks.
 - `memory_edit` is meant only for the dream job, by its description.
 
 `pi/claw-extensions/policy/`, which the gateway always loads with
@@ -525,13 +535,9 @@ The `[policy]` keys:
   (`~/**/id_rsa*` etc.), `interactive/auth.json`, and other claws' pi
   credentials (`claws/*/auth.json`; the gateway re-allows the claw's own).
 - `write_paths`: writable besides the claw's own state dir, pi's files in its
-  profile, and its `$TMPDIR`. Default `$TASK_FOLDER/bakery`, the claws'
-  namespace of the task list (see "Shared task list"). The memory tools are
-  the intended writers of memory, but bash could write it too.
-
-A claw's `[tasks] tag` is the section of the claws' namespace (`bakery`,
-`store.NAMESPACE`) that `task_add` files into (default `triage`); the tool
-does not let the model choose another.
+  profile, and its `$TMPDIR`. Default none: nothing of the task list (see
+  "Shared task list"). The memory tools are the intended writers of memory,
+  but bash could write it too.
 
 Enforcement:
 
@@ -545,8 +551,8 @@ Enforcement:
      sandbox-runtime's shared `/tmp/claude` are denied; `read_paths` and
      what pi needs to run are re-allowed; `deny_read` applies within them.
      What pi needs: the bakery repo, the claw's profile and its own pi
-     credentials, its state dir, `_shared`, its socket dir, macOS's global
-     preferences, and the tools pi and the claw extensions run (`pi`,
+     credentials, its state dir, `_shared`, its socket dir, its unit's task
+     server socket dir, macOS's global preferences, and the tools pi and the claw extensions run (`pi`,
      `node`, `rg`, `fd`, `gh`, `git`, `task`, `bakery`), each through its
      link on `PATH` and the installation it resolves into (a venv's base
      interpreter and the source of its editable installs included).
@@ -567,7 +573,9 @@ Enforcement:
      it too rather than around it. The sandbox needs a network config to
      keep the proxy at all: without one, sandbox-runtime allows all
      network, unix sockets included. Unix sockets are blocked except the
-     claw's own socket dir (so no ssh-agent or gateway control socket).
+     claw's own socket dir and its unit's task server socket dir, which it
+     cannot write (so no ssh-agent or gateway control socket, no other
+     unit's task server, and no replacing its own).
    - Go programs (`gh`, `ketch`) verify TLS through macOS's trust service,
      `com.apple.trustd.agent`, which `enableWeakerNetworkIsolation` makes
      reachable. That opens no Keychain access: `gh` sees only the claw's
@@ -628,9 +636,10 @@ replace the former skills in every profile.
 
 ## Shared task list
 
-Claws share the operator's existing `task` tool
-(`~/src/personal/task`, data in `$TASK_FOLDER`) with the operator.
-What claws rely on:
+Claws share the operator's `task` tool (`TheKevJames/task`, data in
+`$TASK_FOLDER`) with the operator, as its agents: see its `GLOSSARY.md` and
+`docs/adr/0001-agents-write-through-a-server.md`, and this repo's
+`docs/adr/0001-claws-write-tasks-through-the-gateway.md`. What claws rely on:
 
 - tasks live in namespaces, one directory each: `$TASK_FOLDER/<ns>/tasks.db`
   (SQLite, rollback journal so the Syncthing backup only ever sees
@@ -638,54 +647,55 @@ What claws rely on:
   editable by hand. `default` is the operator's; `bakery` is the claws';
 - a task is addressed as `<ns>:<id>` (ids are unique within a namespace, and
   never reused); a bare id means `default`. `set -n <ns>` moves a task under
-  a new id, keeping its tag, and refuses an owned task;
+  a new id, keeping its tag and its claim;
 - writers take `BEGIN IMMEDIATE` on the namespaces they write, so the
   operator and claws serialize and lose nothing; readers take no lock;
 - tags are flat lowercase names (`--tag build`), sections of a namespace;
   `list` covers every namespace, and `-f namespace=bakery,tag=build`
   narrows it;
-- `owner`, `link`, `priority` (low, medium, high), and `size` (small, medium,
-  large) fields; `set --owner X` is a compare-and-set (fails if owned by
-  someone else unless `--force`); `unset owner` releases;
+- `claim`, `link`, `priority` (low, medium, high), and `size` (small, medium,
+  large) fields. A claim names who holds the task: `operator`, or a claw's
+  unit of work by its work key (eg. `triage/task-151`);
 - `done` deletes a one-off task, with its description, and advances a
   recurring one;
 - `created` and `updated` timestamps, owned by the store: every change to a
   task bumps `updated`;
-- `set --description-append`, `add --link`, `owner`/`link`/`priority`/`size`
-  filters, `--json` on `list` and `show`;
-- `--json` on every write, printing the task as it stands after the command
-  (`null` once `done` deletes it), so tools need no follow-up read;
-- property tests (DB round-trip, SQL filters against a reference; concurrent
-  writers and moves lose nothing).
+- `--json` on every command, printing the task as it stands after a write
+  (`null` once `done` deletes it), so callers need no follow-up read.
 
-Claws read it with `task list --json` and `task show --json` in bash, and
-change it through tools in `pi/claw-extensions/task.ts`: `task_add` (with an
-optional priority and size) and `task_set` (tag, claim, release, append
-notes). Both address only the claws' namespace, `bakery` (`store.NAMESPACE`,
-passed as `BAKERY_TASK_NAMESPACE`): `task_set` takes a bare id there.
-`task_set` refuses to move a task to `blocked` unless `bakery blocked check`
-accepts its blockers (see triage), and refuses `human` altogether: only
-`ask_operator` (`pi/claw-extensions/ask-operator.ts`, sharing
-`lib/task-list.ts`) moves a task there, with its questions (see
-[Asking the operator](#asking-the-operator)). Claims are always made as the
-claw itself (`BAKERY_CLAW`), and `task_add` always files into the claw's
-`[tasks] tag`, through `bakery task add` (see below). Which claw uses which tool is a rule
-in its `AGENTS.md`; no claw completes or deletes tasks (a deleted task's
-source would be filed again).
+Claws read the task list directly, but the sandbox lets them write none of
+it. Instead, while a run is in flight, the gateway serves its unit's `task`
+commands (`bakery/bakery/gateway/task_server.py`, embedding task's server):
+`$TASK_SERVER` names a socket in `_gateway/task/<session>/` of the claw
+state root, which only that unit's sandbox may reach and none may write, so
+the socket's path is who the caller is. The claw's `task` (the gateway's
+own, first on its `PATH`) runs every command there, and the server runs it
+as the unit, under its claw's rules, as the operator's `task` would; bash
+and the claw tools alike get the same answers.
 
-A claw's claims never outlive its runs: whenever a claw has no run in
-flight (after each run, and when the gateway starts), the gateway releases
-any `bakery` task it still owns and says so in `#bakery`
-(`bakery/bakery/task_list/claims.py`). Its runs wait meanwhile, so none
-claims a task as it is released. Claws still release their own claims; a
-notice means a run failed, was interrupted, or forgot.
+Each claw's rules are its `[tasks.<claw>]` table in `claws/gateway.toml`,
+in task's format: the namespaces and tags it may create tasks in (and the
+fields they need, and may have), the tasks it may claim, and what it may
+change on a task it holds. Whatever no rule grants is denied: no claw may
+write outside `bakery`, or complete or delete a task. Bakery's own checks
+(`bakery/bakery/task_list/hooks.py`) refuse a task with a tracked link (see
+below), a task entering `blocked` without valid blockers, and one entering
+`human` without questions (see [Asking the operator](#asking-the-operator)).
+Each applies however the task enters: created there, or moved.
 
-Claws read every namespace but write only `bakery`: the sandbox grants
-`$TASK_FOLDER` for reading and only `$TASK_FOLDER/bakery` for writing (see
-the `[policy]` defaults), so the operator's tasks are out of their reach.
-Within `bakery`, the tools' checks are guard rails: bash could still change
-those tasks directly. To take over a task a claw owns, the operator
-unsets its owner first.
+A claim belongs to a run: a claw claims every task it adds or changes, and
+holds it until the run ends, however it ends, when the gateway releases it
+silently (`bakery/bakery/task_list/claims.py`); meanwhile no one else may
+change it. Collectors claim what they hand a run before it starts: triage's
+queue claims its task as the unit it starts (`triage/task-<id>`), skipping
+any taken meanwhile, and `unblock` and `recheck` claim their tasks as their
+run. When the gateway starts, it releases whatever claws' units still hold,
+and says so in `#bakery`: it stopped without releasing them.
+
+The operator writes the files directly, under no rules, and claims as
+`operator`. They change only tasks unclaimed or their own unless they
+`--force` it: `task <id> claim --force` takes a task from a run, and
+`task <id> release --force` frees it.
 
 ### Task flow
 
@@ -695,10 +705,10 @@ Tags here are sections of the `bakery` namespace.
    over by adding it there too (`task add -n bakery`), or moving one of
    their own (`task <id> set -n bakery --tag triage`), usually without a
    `link`.
-2. `triage` claims those (lowest id first), researches, appends notes, sets
-   `priority` and `size`, then re-tags to `build`, `blocked`, or `wontfix`
-   and releases, or puts its questions to the operator with `ask_operator`,
-   which moves it to `human`.
+2. `triage` gets those (lowest id first, claimed for it), researches,
+   appends notes, sets `priority` and `size`, then re-tags to `build`,
+   `blocked`, or `wontfix`, or puts its questions to the operator with
+   `ask_operator`, which moves it to `human`.
 3. The operator answers a `human` task's `## Questions` by appending
    `## Answers` to its description and moving it to `triage`, where triage
    re-routes it.
@@ -721,15 +731,11 @@ summary, the reason, and the date, in
 rejected, whatever its namespace or tag; `rm` takes any link with its
 lineage.
 
-Every claw tool that adds a task (`task_add`)
-files through `bakery task add` (`bakery/bakery/task_list/filing.py`, via
-`pi/claw-extensions/lib/file-task.ts`): `task add`, with any of its
-arguments, unless an open task (in any namespace) or a rejection already
-has the link's lineage, the link without its `#…` anchor, ignoring case.
-With `--json` it prints `{"filed": task}`, `{"open": task}`, or
-`{"rejected": rejection}`, and exits 0 for all three, so the tools report
-why nothing was added rather than fail. Links holding a comma are refused,
-as `task` splits filters on commas. Scout's collector drops tracked
+A claw's `task add` is refused if an open task (in any namespace) or a
+rejection already has the link's lineage, the link without its `#…` anchor,
+ignoring case, saying which (`bakery/bakery/task_list/filing.py`, run by the
+task server as a hook). Links holding a comma are refused, as `task` splits
+filters on commas. Scout's collector drops tracked
 candidates up front, with the same rule. Done tasks free their link: a gap
 which comes back after it was fixed is filed again. A `blocked` task is
 open, so its link is not filed again either, and its source stays as it is.
@@ -808,7 +814,7 @@ Finds things in the operator's repos that belong on the task list. Profile:
   ("Must have admin rights to Repository") to a token with no scopes, even
   on public repos and despite its docs.
 - The model (Haiku, high thinking, $2 per run) writes
-  each candidate up with `task_add` (into `bakery > triage`) and reports what
+  each candidate up with `task add` (into `bakery > triage`) and reports what
   it added.
 
 ### triage - read-only + web
@@ -817,20 +823,21 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
 `unblock`), $3 per task (and per `unblock` or `recheck` run).
 
 - The `queue` job's `triage` collector (`bakery/bakery/collectors/triage.py`)
-  hands over the lowest-numbered unowned task tagged `bakery > triage`
-  (scout's, the operator's handed over, and tasks sent back), skipping
-  scheduled (recurring) ones, as the unit `triage/task-<id>`. It runs hourly,
+  claims and hands over the lowest-numbered unclaimed task tagged
+  `bakery > triage` (scout's, the operator's handed over, and tasks sent
+  back), skipping scheduled (recurring) ones, as the unit
+  `triage/task-<id>`. It runs hourly,
   within two minutes of `$TASK_FOLDER` changing (scout or the operator adds
   tasks), manually
   (`bakery trigger triage queue`), and on repeat until the queue is empty.
-- Per task: claim it, check the source still exists, research (code,
+- Per task (claimed for it): check the source still exists, research (code,
   history in its clones, issues, docs, web; no reproduction, tests, or
   edits), append notes
   (route and reason, priority and reason, source check, code locations,
   hypothesis, the duplicate search and its result (required on every
   task), approach, acceptance criteria, open questions), always set
-  `priority` (by a rubric of examples per level) and `size`, then re-tag
-  and release:
+  `priority` (by a rubric of examples per level) and `size`, then
+  re-tag:
   - `bakery > build`: a TheKevJames repo the claws can push to, clear
     scope, checkable by tests, lint, or CI;
   - `bakery > human`: needs a decision on this task, reproduction,
@@ -847,33 +854,36 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
   `bakery`, which record no decisions), `#<ns>:<id> done`, or
   `<url>: <condition>`. The last list
   counts; the task clears once all of its blockers have.
-  `bakery/bakery/task_list/blocked.py` parses and checks it, for `bakery
-  blocked check` (run by `task_set` before it moves a task to
-  `bakery > blocked`) and for the collectors below. Done tasks are deleted,
+  `bakery/bakery/task_list/blocked.py` parses and checks it, for the task
+  server (whenever a task enters `bakery > blocked`) and for the collectors
+  below. Done tasks are deleted,
   so a task which does not exist counts as done. A list is refused if it is
   malformed, names the task itself, or names a task blocker which has
   already cleared, including one which does not exist (triage routes on the
   merits instead).
 - The `unblock` job's `triage-unblock` collector hands over, in one run,
-  every unowned blocked task whose blockers are all tasks and have all
+  every unclaimed blocked task whose blockers are all tasks and have all
   cleared; triage appends an `## Unblocked` note and moves each to
   `bakery > triage`. It runs hourly and within two minutes of `$TASK_FOLDER`
   changing, so a task clears soon after its blocker is decided.
 - The `recheck` job (Mondays at 06:00, silent when nothing clears) uses the
-  `triage-recheck` collector: unowned blocked tasks with an external
+  `triage-recheck` collector: unclaimed blocked tasks with an external
   blocker whose task blockers have cleared, grouped by URL so each is
   checked once, in one run. Triage moves those whose conditions all hold to
   `bakery > triage` likewise. The collector also reports blocked tasks it
   cannot read (eg. moved by hand without a valid list) in `#bakery`; weekly,
   rather than hourly in `unblock`, so they do not flood it.
-- Task tools: `task_set` and `ask_operator`; it never adds tasks, which
-  would file them into its own queue.
+- Both claim what they hand over, as their run.
+- Its rules let it change only what it holds (append notes, set priority and
+  size, route), claim only `triage` and `blocked` tasks, and add tasks in
+  any of its routes, which it does only for separate work its research finds
+  that no open task covers.
 - Every task it routes to `bakery > human` goes through `ask_operator`,
   with its questions; never while unblocking or rechecking.
-- A task left claimed by a failed, parked, or interrupted run is released
-  (see [Shared task list](#shared-task-list)), so the queue hands it over
-  again, to the same unit and session; its thread's Resume button also
-  continues it.
+- A run's claims end with it, however it ends (see
+  [Shared task list](#shared-task-list)), so a task a failed, parked, or
+  interrupted run left in `bakery > triage` is handed over again, to the
+  same unit and session; its thread's Resume button also continues it.
 
 ### build - clones + PRs
 
@@ -885,8 +895,8 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
 - Polls its PRs every 10 minutes; new review comments or failing CI resume
   that task's unit of work in the same thread.
 - Merged → `done`. Closed unmerged → `ask_operator`, asking what next.
-- Task tools: triage's, plus `task_link` and `task_done`, to be added back
-  to `task.ts` with build.
+- Rules: claims `bakery > build` tasks, and may set links and complete
+  them, in its `[tasks.build]` table once it exists.
 - Asks through `ask_operator`, like triage.
 
 ### baker - reads every claw, files for the operator
@@ -922,11 +932,11 @@ Reviews how the claws learn and files a task for each gap. Profile:
   cause, fix, and an acceptance check baker re-runs while the task is open.
 - Its policy's `read_paths` cover the whole state root (every claw's memory
   and transcripts, `runs.db`, `gateway.log`); unix sockets stay blocked.
-- `[tasks] tag = "human"`: fixes change the claws themselves, so they
-  never go straight to build.
-- Never `task_set`, by its `AGENTS.md`: changes to other claws' memory or to
-  tasks are steps in a task's **Fix**, for the operator.
-- It keeps its own memory (the slugs it filed). `task_add` refuses a link
+- Its rules let it add tasks only in `bakery > human`, with a link: fixes
+  change the claws themselves, so they never go straight to build. They
+  grant no claims or changes: changes to other claws' memory or to tasks are
+  steps in a task's **Fix**, for the operator.
+- It keeps its own memory (the slugs it filed). `task add` refuses a link
   already on an open task or a rejection, and says which.
 - Never asks: its tasks are its questions. `silent_ok`, replying
   `NO_REPLY` when it filed nothing and none of its tasks is still open.

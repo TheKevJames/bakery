@@ -5,6 +5,7 @@ import tomllib
 import zoneinfo
 
 import pytest
+from task import rules
 
 from bakery import state
 from bakery.collectors import scout_repos
@@ -109,8 +110,8 @@ def test_default_jobs_apply_to_every_claw(tmp_path: pathlib.Path) -> None:
         ('[policy]\nnetwork = []', 'unknown keys network'),
         ('[policy]\ntools = []', 'unknown keys tools'),
         ('[policy]\nallow_read = ["~/.ssh"]', 'unknown keys allow_read'),
-        ('[tasks]\ntag = "Human"', 'not a lowercase tag'),
-        ('[tasks]\ntag = "bakery/human"', 'not a lowercase tag'),
+        # Task list rules are the gateway's, not a claw's to set.
+        ('[tasks.a.claim]\nnamespaces = ["x"]', 'unknown keys tasks'),
         ('[memory]\nmax_chars = 0', 'max_chars: must be >= 1'),
         (
             '[[job]]\nname = "x"\ncron = "* * * * *"\nprompt = "p"\n'
@@ -196,8 +197,26 @@ def test_repo_claws_load(
     assert (queue.collector, queue.repeat) == ('triage', True)
     baker = loaded.claw('baker')
     assert baker.job('review').collector == 'baker'
-    assert baker.tasks.tag == 'human'
+    assert all(c.rules != rules.Rules() for c in loaded.claws.values())
     assert state.root() in baker.policy.read_paths
+
+
+@pytest.mark.parametrize(
+    ('text', 'error'),
+    [
+        ('[tasks.b.claim]\nnamespaces = ["x"]', r"unknown claws \['b'\]"),
+        ('[tasks.a.claim]\nnamspaces = ["x"]', 'a.claim: unknown keys'),
+    ],
+)
+def test_invalid_rules_are_rejected(
+    tmp_path: pathlib.Path, text: str, error: str
+) -> None:
+    claws = testing_gateway.make_claws(tmp_path, {'a': ''})
+    with (claws / config.GATEWAY_NAME).open('a') as f:
+        f.write(f'\n{text}\n')
+
+    with pytest.raises(config.ConfigError, match=error):
+        config.load(claws)
 
 
 def load_job(

@@ -187,8 +187,14 @@ def _runtime_reads(path_env: str) -> list[pathlib.Path]:
     return reads
 
 
-def settings(claw: config.Claw, path_env: str) -> dict[str, object]:
-    """The sandbox-runtime config for `claw`'s pi, run with PATH `path_env`."""
+def settings(
+    claw: config.Claw, path_env: str, session_id: str
+) -> dict[str, object]:
+    """
+    The sandbox-runtime config for `claw`'s pi in session `session_id`, run
+    with PATH `path_env`.
+    """
+    task_sockets = state.task_socket(session_id).parent
     policy = claw.policy
     root = state.root()
     user_home = pathlib.Path.home()
@@ -204,6 +210,7 @@ def settings(claw: config.Claw, path_env: str) -> dict[str, object]:
         claw.state_dir,
         root / state.SHARED,
         sockets(claw),
+        task_sockets,
         *(user_home / p for p in GLOBAL_PREFERENCES),
     ]
     writes = [
@@ -221,7 +228,9 @@ def settings(claw: config.Claw, path_env: str) -> dict[str, object]:
             # allowlist (without one, macOS gets a blanket allow network*).
             'allowedDomains': [],
             'deniedDomains': [],
-            'allowUnixSockets': _real([sockets(claw)]),
+            # Its task server's is not writable, so the claw cannot replace
+            # the socket with its own.
+            'allowUnixSockets': _real([sockets(claw), task_sockets]),
             # Loopback directly, not only through the proxy: Go never
             # proxies localhost.
             'allowLocalBinding': True,

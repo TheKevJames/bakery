@@ -199,7 +199,7 @@ def test_digest_covers_activity_since_the_last_review(
     for ident in ('bakery:1', 'bakery:2'):
         testing_tasks.task(ident, 'done')
 
-    text = baker.collect(world).text
+    text = baker.collect(world, 'test/run').text
 
     assert text is not None
     assert f'since="{iso(SINCE)[:19]}' in text
@@ -242,7 +242,7 @@ def test_digest_covers_activity_since_the_last_review(
     # Only baker itself ran since its last review: nothing to review.
     add_run(runs, monkeypatch, 'baker', 'review', SINCE + 120)
     add_run(runs, monkeypatch, 'baker', 'dream', SINCE + 130)
-    assert baker.collect(world).text is None
+    assert baker.collect(world, 'test/run').text is None
 
 
 def test_sections_say_how_to_read_what_they_cut() -> None:

@@ -2,20 +2,36 @@
  * Ask Operator Extension (claws only)
  *
  * An `ask_operator` tool which puts questions to the operator on the task
- * list: it appends them to a task the claw has claimed, moves the task to
- * `human`, releases it, and ends the run (`terminate`). Nothing waits on the
- * operator: they answer on the task and send it back through triage.
+ * list: it appends them to a task, moves the task to `human`, releases it,
+ * and ends the run (`terminate`). Nothing waits on the operator: they answer
+ * on the task and send it back through triage.
+ *
+ * It runs `task` like any other command the claw runs, so the gateway's task
+ * server applies the claw's rules to it; the server also refuses any move to
+ * `human` without a `## Questions` section as this tool writes it
+ * (bakery/bakery/task_list/hooks.py).
  *
  * The result's `details.reply` is what the gateway posts as the run's reply,
  * since a terminated run has no final message of its own.
  */
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { checkClaimed, Id, ref, task } from "./lib/task-list.ts";
 
 const HUMAN = "human";
 
 type Question = { question: string; context: string; default: string };
+
+function namespace(): string {
+  const ns = process.env.BAKERY_TASK_NAMESPACE;
+  if (!ns) throw new Error("BAKERY_TASK_NAMESPACE is not set");
+  return ns;
+}
+
+async function task(pi: ExtensionAPI, args: string[], signal?: AbortSignal): Promise<string> {
+  const result = await pi.exec("task", args, { signal });
+  if (result.code !== 0) throw new Error(result.stderr.trim() || `task exited with ${result.code}`);
+  return result.stdout.trim();
+}
 
 function indent(text: string): string {
   return text.trim().replaceAll("\n", "\n   ");
@@ -44,12 +60,12 @@ export default function (pi: ExtensionAPI) {
       name: "ask_operator",
       label: "Ask Operator",
       description:
-        "Put questions to the operator on a task you have claimed: appends them under `## Questions`, moves " +
-        `the task to \`${HUMAN}\`, releases it, and ends your run. Call it last, after recording everything ` +
-        "else on the task: you get no further turn. The operator answers under `## Answers`, by number; an " +
-        "unanswered question means they accept its default.",
+        `Put questions to the operator on a task in \`${process.env.BAKERY_TASK_NAMESPACE ?? "your namespace"}\`: ` +
+        `appends them under \`## Questions\`, moves the task to \`${HUMAN}\`, releases it, and ends your run. ` +
+        "Call it last, after recording everything else on the task: you get no further turn. The operator " +
+        "answers under `## Answers`, by number; an unanswered question means they accept its default.",
       parameters: Type.Object({
-        id: Id,
+        id: Type.Integer({ minimum: 1, description: "The task's id: the number in `<namespace>:<id>`" }),
         questions: Type.Array(
           Type.Object({
             question: Type.String({ description: "One question, answerable cold" }),
@@ -61,11 +77,10 @@ export default function (pi: ExtensionAPI) {
       }),
 
       async execute(_toolCallId, params, signal) {
-        await checkClaimed(pi, params.id, signal);
-        const id = ref(params.id);
+        const id = `${namespace()}:${params.id}`;
         const section = questionsSection(params.questions);
-        await task(pi, ["set", id, "--tag", HUMAN, "--description-append", section, "--json"], signal);
-        await task(pi, ["unset", id, "owner", "--json"], signal);
+        await task(pi, [id, "set", "--tag", HUMAN, "--description-append", section, "--json"], signal);
+        await task(pi, [id, "release", "--json"], signal);
         const count = params.questions.length;
         const noun = count === 1 ? "question" : "questions";
         return {

@@ -4,6 +4,8 @@ import sqlite3
 import threading
 
 import pytest
+from task import ops
+from task import schema
 
 from bakery.gateway import channel
 from bakery.gateway import control
@@ -268,46 +270,41 @@ def test_pause_abort_parks_in_flight_runs(
 def test_claims_do_not_outlive_runs(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
+    testing_tasks.task('add', 'stranded', '-n', 'bakery', '--tag', 'triage')
     # Left behind by a run the gateway never saw finish (eg. a crash).
-    testing_tasks.task(
-        'add', 'stranded', '-n', 'bakery', '--tag', 'triage',
-        '--owner', 'triage',
-    )  # fmt: skip
+    ops.Writer(schema.Actor.agent('triage/old')).claim(
+        schema.Ref.parse('bakery:1')
+    )
     testing_tasks.task('add', 'next', '-n', 'bakery', '--tag', 'triage')
-    testing_tasks.task('add', 'theirs', '-n', 'bakery', '--owner', 'kevin')
+    testing_tasks.task('add', 'theirs', '-n', 'bakery', '--tag', 'triage')
+    testing_tasks.task('bakery:3', 'claim')
     claws = testing_gateway.make_claws(
-        root,
-        {'triage': ''},
-        extensions={'triage': ['pi/claw-extensions/task.ts']},
+        root, {'triage': ''}, rules={'triage': 'triage'}
     )
     fake = testing_gateway.FakeChannel()
     fake_llm.queue(
-        harness.call('task_set', id=2, claim=True),
+        harness.call('bash', command='task bakery:2 claim'),
         harness.Reply(hold=threading.Event()),
     )
 
     async def scenario(gateway: core.Gateway) -> None:
         await fake.until(lambda: 'gateway started' in fake.notices)
-        assert testing_tasks.show('bakery:1')['owner'] is None
+        assert testing_tasks.show('bakery:1')['claim'] is None
 
         key = gateway.trigger('triage', None, 'go')
         await asyncio.to_thread(fake_llm.wait_requests, 2)  # claimed
-        assert testing_tasks.show('bakery:2')['owner'] == 'triage'
+        assert testing_tasks.show('bakery:2')['claim'] == key
         gateway.pause('triage', abort=True)
         assert (await fake.wait(key)).status == 'parked'
-        released = f'released bakery:2: triage still claimed it after {key}'
-        await fake.until(
-            lambda: any(n.startswith(released) for n in fake.notices)
-        )
-        assert testing_tasks.show('bakery:2')['owner'] is None
+        assert testing_tasks.show('bakery:2')['claim'] is None
 
     testing_gateway.run_gateway(claws, fake, scenario)
     print(fake.notices)
-    assert (
+    # Only a crash's leftovers are news: runs release their claims as they end.
+    assert [n for n in fake.notices if n.startswith('released')] == [
         'released bakery:1: triage still claimed it when the gateway started'
-        in fake.notices
-    )
-    assert testing_tasks.show('bakery:3')['owner'] == 'kevin'
+    ]
+    assert testing_tasks.show('bakery:3')['claim'] == 'operator'
     assert not [n for n in fake.notices if 'cannot release' in n]
 
 

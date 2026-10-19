@@ -2,11 +2,12 @@
 Gateway and claw configuration.
 
 `claws/gateway.toml` holds the gateway's own settings, which no claw can
-override; `claws/defaults.toml` holds every claw's defaults, and each
-`claws/<name>/claw.toml` overrides any of those and adds its jobs. The model
-and thinking level have no default: every claw sets both, and a job may
-override either. Loading is strict: unknown keys and bad
-values raise ConfigError, so a typo can never silently change a limit.
+override, among them every claw's task list rules (`[tasks.<claw>]`, in
+task's `task.rules` format); `claws/defaults.toml` holds every claw's
+defaults, and each `claws/<name>/claw.toml` overrides any of those and adds
+its jobs. The model and thinking level have no default: every claw sets both,
+and a job may override either. Loading is strict: unknown keys and bad values
+raise ConfigError, so a typo can never silently change a limit.
 """
 
 import dataclasses
@@ -19,11 +20,12 @@ from collections.abc import Mapping
 from typing import Any
 
 import croniter
+from task import rules as rules_
+from task import schema
 
 from .. import collectors
 from .. import paths
 from .. import state
-from ..task_list import store
 from . import policy as policy_
 from . import toml
 
@@ -107,12 +109,6 @@ class Memory:
 
 
 @dataclasses.dataclass(frozen=True)
-class Tasks:
-    # The tag `task_add` files into, in store.NAMESPACE.
-    tag: str
-
-
-@dataclasses.dataclass(frozen=True)
 class Git:
     # The identity the claw's commits carry: the claws' GitHub user's.
     user_name: str
@@ -137,7 +133,8 @@ class Claw:
     bash_secrets: tuple[str, ...]
     git: Git
     policy: policy_.Policy
-    tasks: Tasks
+    # What it may do to the task list, from gateway.toml; nothing if unset.
+    rules: rules_.Rules
     jobs: tuple[Job, ...]
 
     @property
@@ -310,19 +307,12 @@ def _git(table: toml.Table) -> Git:
     return git
 
 
-def _tasks(table: toml.Table) -> Tasks:
-    tag = table.string('tag')
-    if not store.TAG_RE.fullmatch(tag):
-        raise ConfigError(f'{table.where}.tag: {tag!r} is not a lowercase tag')
-    table.done()
-    return Tasks(tag=tag)
-
-
 def _claw(
     name: str,
     profile: pathlib.Path,
     data: Mapping[str, Any],
     shared_jobs: set[str],
+    rules: rules_.Rules,
 ) -> Claw:
     table = toml.Table(data, name)
     limits = table.table('limits')
@@ -357,7 +347,7 @@ def _claw(
         bash_secrets=_bash_secrets(table, secrets),
         git=_git(table.table('git')),
         policy=policy_.parse(table.table('policy'), profile),
-        tasks=_tasks(table.table('tasks')),
+        rules=rules,
         memory=Memory(
             flush_margin_tokens=memory.count('flush_margin_tokens', minimum=0),
             max_chars=memory.count('max_chars'),
@@ -371,13 +361,16 @@ def _claw(
 
 
 def _check_socket_paths(claw: Claw) -> None:
-    """Refuse a claw whose sessions' registry sockets pi could not bind."""
+    """
+    Refuse a claw whose sessions' sockets could not be bound: pi's registry
+    sockets, and the gateway's task list sockets.
+    """
     suffix = max(
         (len(job.name) + STAMP_LENGTH for job in claw.jobs), default=0
     )
-    session_id = len(claw.name) + 1 + max(suffix, LONGEST_FIXED_SUFFIX)
-    registry = str(paths.registry(claw.pi_state_dir))
-    length = len(f'{registry}/') + session_id + len('.sock')
+    session_id = 'x' * (len(claw.name) + 1 + max(suffix, LONGEST_FIXED_SUFFIX))
+    registry = paths.registry(claw.pi_state_dir) / f'{session_id}.sock'
+    length = max(len(str(registry)), len(str(state.task_socket(session_id))))
     if length > MAX_SOCKET_PATH:
         raise ConfigError(
             f'{claw.name}: its session sockets need {length} bytes, over the'
@@ -433,8 +426,19 @@ def _merge_jobs(defaults: object, own: object) -> list[object]:
     return [*kept, *own]
 
 
+def _rules(data: object) -> dict[str, rules_.Rules]:
+    if not isinstance(data, dict):
+        raise ConfigError('gateway.tasks: must be a table')
+    try:
+        return rules_.parse(data)
+    except schema.TaskError as e:
+        raise ConfigError(f'gateway.tasks: {e}') from None
+
+
 def load(claws_dir: pathlib.Path) -> Config:
-    gateway = _gateway(_read(claws_dir / GATEWAY_NAME))
+    settings = _read(claws_dir / GATEWAY_NAME)
+    rules = _rules(settings.pop('tasks', {}))
+    gateway = _gateway(settings)
     defaults = _read(claws_dir / DEFAULTS_NAME)
     claws: dict[str, Claw] = {}
     for path in sorted(claws_dir.glob(f'*/{CLAW_NAME}')):
@@ -454,5 +458,11 @@ def load(claws_dir: pathlib.Path) -> Config:
             for job in defaults.get('job', [])
             if isinstance(job, dict) and job.get('name') not in own_names
         }
-        claws[name] = _claw(name, path.parent, data, shared)
+        claws[name] = _claw(
+            name, path.parent, data, shared, rules.get(name, rules_.Rules())
+        )
+    if unknown := set(rules) - set(claws):
+        raise ConfigError(
+            f'gateway.tasks: rules for unknown claws {sorted(unknown)}'
+        )
     return Config(gateway=gateway, claws=claws)

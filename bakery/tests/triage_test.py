@@ -1,8 +1,11 @@
 import asyncio
 import json
 import pathlib
+import shlex
 
 import pytest
+from task import ops
+from task import schema
 
 from bakery.collectors import triage
 from bakery.gateway import core
@@ -38,8 +41,9 @@ collector = "triage-recheck"
 """
 
 
-def task_set(**args: object) -> harness.Reply:
-    return harness.call('task_set', **args)
+def task(*args: str) -> harness.Reply:
+    """The claw running `task` in bash."""
+    return harness.call('bash', command=shlex.join(('task', *args)))
 
 
 @pytest.fixture(name='tasks', scope='function')
@@ -67,9 +71,7 @@ def prompt(fake_llm: harness.FakeLLM, index: int) -> str:
 
 def triage_claws(root: pathlib.Path, claw_toml: str = QUEUE) -> pathlib.Path:
     return testing_gateway.make_claws(
-        root,
-        {'triage': claw_toml},
-        extensions={'triage': ['pi/claw-extensions/task.ts']},
+        root, {'triage': claw_toml}, rules={'triage': 'triage'}
     )
 
 
@@ -82,17 +84,13 @@ def test_works_through_the_queue_one_task_per_unit(
     del tasks
     testing_tasks.task('add', 'handed over by the operator', '-n', 'bakery')
     fake_llm.queue(
-        task_set(id=1, claim=True),
-        task_set(
-            id=1, priority='high', size='small', description_append='notes'
-        ),
-        task_set(id=1, tag='build', release=True),
+        task('bakery:1', 'set', '--priority', 'high', '--size', 'small',
+             '--description-append', 'notes'),
+        task('bakery:1', 'set', '--tag', 'build'),
         harness.Reply(text='1 to build'),
-        task_set(id=4, claim=True),
-        task_set(id=4, tag='wontfix', priority='low', size='small'),
-        task_set(id=4, release=True),
+        task('bakery:4', 'set', '--tag', 'wontfix', '--priority', 'low'),
         harness.Reply(text='4 to wontfix'),
-    )
+    )  # fmt: skip
     fake = testing_gateway.FakeChannel()
 
     async def scenario(gateway: core.Gateway) -> None:
@@ -116,14 +114,15 @@ def test_works_through_the_queue_one_task_per_unit(
         testing_tasks.show('bakery:1'),
         testing_tasks.show('bakery:4'),
     )
+    # Claimed for each run by the collector, and released when it ended.
     assert (
         first['tag'],
         first['priority'],
         first['size'],
-        first['owner'],
+        first['claim'],
     ) == ('build', 'high', 'small', None)
     assert first['description'] == 'notes'
-    assert (second['tag'], second['priority'], second['owner']) == (
+    assert (second['tag'], second['priority'], second['claim']) == (
         'wontfix',
         'low',
         None,
@@ -133,9 +132,9 @@ def test_works_through_the_queue_one_task_per_unit(
     )  # scheduled: not triaged
     assert (
         testing_tasks.show('1')['tag'],
-        testing_tasks.show('1')['owner'],
+        testing_tasks.show('1')['claim'],
     ) == ('dev', None)
-    assert len(fake_llm.requests) == 8
+    assert len(fake_llm.requests) == 5
 
 
 def test_a_task_left_waiting_is_not_repeated(
@@ -154,6 +153,8 @@ def test_a_task_left_waiting_is_not_repeated(
 
     testing_gateway.run_gateway(triage_claws(root), fake, scenario)
     assert len(fake_llm.requests) == 1
+    # The repeat claimed it again before seeing it was the same unit.
+    assert testing_tasks.show('bakery:1')['claim'] is None
 
 
 def test_blocking_a_task_needs_blockers_which_have_not_cleared(
@@ -167,21 +168,15 @@ def test_blocking_a_task_needs_blockers_which_have_not_cleared(
         '**Blocked on:**\n- #bakery:4 decided\n- #default:1 done\n'
         '- https://example.com/1: released'
     )
+    blocking = ('bakery:1', 'set', '--tag', 'blocked', '--description-append')
     fake_llm.queue(
-        task_set(id=1, claim=True),
-        task_set(
-            id=1,
-            tag='blocked',
-            description_append='**Blocked on:**\n- see upstream',
-        ),
-        task_set(
-            id=1,
-            tag='blocked',
-            description_append='**Blocked on:**\n- #bakery:3 decided'
+        task(*blocking, '**Blocked on:**\n- see upstream'),
+        task(
+            *blocking,
+            '**Blocked on:**\n- #bakery:3 decided'
             '\n- #bakery:99 done\n- #bakery:1 done\n- #default:1 decided',
         ),
-        task_set(id=1, tag='blocked', description_append=valid),
-        task_set(id=1, release=True),
+        task(*blocking, valid),
         harness.Reply(text='1 blocked'),
     )
     fake = testing_gateway.FakeChannel()
@@ -191,7 +186,7 @@ def test_blocking_a_task_needs_blockers_which_have_not_cleared(
         await fake.wait('triage/task-1')
 
     testing_gateway.run_gateway(triage_claws(root, BLOCKED), fake, scenario)
-    malformed, cleared = fake_llm.tool_results(3)[-2:]
+    malformed, cleared = fake_llm.tool_results(2)
     assert "'see upstream' is not `#<namespace>:<id> decided`" in malformed
     assert '#bakery:3 decided: already cleared (build)' in cleared
     assert (
@@ -204,7 +199,7 @@ def test_blocking_a_task_needs_blockers_which_have_not_cleared(
         ' so use `#default:1 done`' in cleared
     )
     blocked = testing_tasks.show('bakery:1')
-    assert (blocked['tag'], blocked['owner']) == ('blocked', None)
+    assert (blocked['tag'], blocked['claim']) == ('blocked', None)
     assert blocked['description'] == valid  # refused notes were not appended
 
 
@@ -242,11 +237,17 @@ def test_blocked_tasks_go_back_once_their_blockers_clear(
             '--description',
             notes,
         )
-    testing_tasks.task('set', 'bakery:11', '--owner', 'someone')
+    ops.Writer(schema.Actor.agent('someone/else')).claim(
+        schema.Ref.parse('bakery:11')
+    )
     fake_llm.queue(
-        task_set(id=5, claim=True),
-        task_set(
-            id=5, tag='triage', description_append='## Unblocked', release=True
+        task(
+            'bakery:5',
+            'set',
+            '--tag',
+            'triage',
+            '--description-append',
+            '## Unblocked',
         ),
         harness.Reply(text='moved 5'),
         harness.Reply(text='nothing cleared'),
@@ -264,7 +265,7 @@ def test_blocked_tasks_go_back_once_their_blockers_clear(
         f'<unblocked tasks="1">\n{triage.UNTRUSTED}\n'
         '- #bakery:5 "t5": cleared #bakery:3 decided\n</unblocked>'
     )
-    assert prompt(fake_llm, 3).endswith(
+    assert prompt(fake_llm, 2).endswith(
         f'<blocked tasks="2" urls="2">\n{triage.UNTRUSTED}\n'
         '## https://example.com/a\n'
         '- #bakery:7 "t7": released\n'
@@ -275,43 +276,15 @@ def test_blocked_tasks_go_back_once_their_blockers_clear(
     )
     assert (
         testing_tasks.show('bakery:5')['tag'],
-        testing_tasks.show('bakery:5')['owner'],
+        testing_tasks.show('bakery:5')['claim'],
     ) == ('triage', None)
+    # Rechecked, so claimed, then released when its run ended.
+    assert testing_tasks.show('bakery:7')['claim'] is None
     # Reported weekly by recheck, not hourly by unblock.
     assert [n for n in fake.notices if '#bakery:10' in n] == [
         'triage/recheck collection problems:\n'
         'blocked #bakery:10: no **Blocked on:** list'
     ]
-
-
-def test_task_tools_address_only_the_claws_namespace(
-    root: pathlib.Path, tasks: pathlib.Path, fake_llm: harness.FakeLLM
-) -> None:
-    del tasks
-    # The operator's default:1 shares its id with bakery:1.
-    fake_llm.queue(
-        task_set(id=1, claim=True, description_append='notes'),
-        task_set(id=1, tag='dev', release=True),
-        harness.Reply(text='done'),
-    )
-    fake = testing_gateway.FakeChannel()
-
-    async def scenario(gateway: core.Gateway) -> None:
-        gateway.trigger('triage', None, None)
-        await fake.wait('triage/task-1')
-
-    testing_gateway.run_gateway(triage_claws(root, QUEUE), fake, scenario)
-    claws, operators = testing_tasks.show('bakery:1'), testing_tasks.show('1')
-    assert (claws['tag'], claws['owner'], claws['description']) == (
-        'dev',
-        None,
-        'notes',
-    )
-    assert (
-        operators['summary'],
-        operators['owner'],
-        operators['description'],
-    ) == ('from the operator', None, None)
 
 
 def test_file_changes_trigger_after_a_quiet_period(

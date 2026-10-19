@@ -29,6 +29,7 @@ from . import prompts
 from . import rpc
 from . import runner
 from . import scheduler
+from . import task_server
 from . import watcher
 
 RESUME_PROMPT = 'Continue where you left off.'
@@ -54,6 +55,8 @@ class Active:
     proc: rpc.PiProcess | None = None
     # Set by pause --abort before the child exists; applied once it does.
     abort: tuple[ledger.Status, str] | None = None
+    # Runs the unit's task commands while its run is in flight.
+    task_server: asyncio.Server | None = None
 
 
 class Gateway:
@@ -81,9 +84,6 @@ class Gateway:
         self._broke: set[tuple[datetime.date, str]] = set()
         # Work key -> futures for its next finished run (see `finished`).
         self._finished: dict[str, list[asyncio.Future[channel_.RunInfo]]] = {}
-        # Claws whose claims are being released: none of their runs may start
-        # (and claim a task) meanwhile.
-        self._releasing: set[str] = set()
 
     @property
     def tz(self) -> zoneinfo.ZoneInfo:
@@ -95,7 +95,7 @@ class Gateway:
         if interrupted:
             log.warning('marked %d unfinished runs interrupted', interrupted)
         for claw in self.config.claws:
-            await self._release_claims(claw, 'when the gateway started')
+            await self._sweep_claims(claw)
         self.pool.start()
         self.scheduler.start(self.config.claws.values(), self.tz)
         self.watcher.start(self.config.claws.values())
@@ -163,7 +163,7 @@ class Gateway:
     def _slot(self, request: Request) -> str | None:
         """The slot `request` can start in now, if any."""
         claw = self.config.claws.get(request.claw)
-        if claw is None or not claw.enabled or claw.name in self._releasing:
+        if claw is None or not claw.enabled:
             return None
         if {'all', request.claw} & self.paused:
             return None
@@ -237,6 +237,9 @@ class Gateway:
                 info.reason = 'daily budget exhausted'
                 self._announce_broke(claw.name)
                 return
+            active.task_server = await task_server.serve(
+                claw, request.work_key
+            )
             proc = await self.pool.acquire(claw, request.work_key, job)
             # Events left over from this child's previous run must go before
             # any abort is queued, or the abort would be dropped with them.
@@ -278,11 +281,15 @@ class Gateway:
         self.runs.record(info.run_id, cost_usd=info.cost_usd, turns=info.turns)
         self.runs.finish(info.run_id, info.status, info.reason)
         self.pool.release(info.work_key)
-        del self.active[info.work_key]
-        if not any(a.request.claw == info.claw for a in self.active.values()):
-            await self._release_claims(
-                info.claw, f'after {info.work_key} {info.status}'
+        try:
+            # Before the unit can be dispatched again, and claim afresh.
+            await task_server.close(
+                self.active[info.work_key].task_server, info.work_key
             )
+        except Exception as e:
+            log.exception('releasing what %s claims failed', info.work_key)
+            self.notify(f'cannot release what {info.work_key} claims: {e}')
+        del self.active[info.work_key]
         self._wake.set()
         log.info(
             'run %s %s%s',
@@ -323,20 +330,22 @@ class Gateway:
             f' ({commit[:8]}):\n```diff\n{diff.stdout}```'
         )
 
-    async def _release_claims(self, claw: str, when: str) -> None:
-        """Release what `claw` still claims; it has no run in flight."""
-        self._releasing.add(claw)
+    async def _sweep_claims(self, claw: str) -> None:
+        """
+        Release what `claw`'s units still claim as the gateway starts: it
+        stopped without releasing them, as it does when each run ends.
+        """
         try:
-            released, errors = await asyncio.to_thread(claims.release, claw)
+            released = await asyncio.to_thread(claims.sweep, claw)
         except Exception as e:
             log.exception('releasing what %s claims failed', claw)
-            released, errors = [], [str(e)]
-        finally:
-            self._releasing.discard(claw)
+            self.notify(f'cannot release what {claw} claims at start: {e}')
+            return
         for address in released:
-            self.notify(f'released {address}: {claw} still claimed it {when}')
-        for error in errors:
-            self.notify(f'cannot release what {claw} claims {when}: {error}')
+            self.notify(
+                f'released {address}: {claw} still claimed it when the'
+                ' gateway started'
+            )
 
     def finished(self, work_key: str) -> asyncio.Future[channel_.RunInfo]:
         """

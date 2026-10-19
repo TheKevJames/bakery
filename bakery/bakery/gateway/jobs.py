@@ -16,6 +16,7 @@ from collections.abc import Callable
 from .. import collectors
 from .. import paths
 from ..collectors import changes
+from ..task_list import claims
 from . import config
 
 log = logging.getLogger(__name__)
@@ -130,7 +131,9 @@ class Jobs:
             # Before collecting: a commit landing meanwhile is fed again next
             # time, rather than never.
             commit = await asyncio.to_thread(changes.head, paths.repo())
-            collection = await asyncio.to_thread(collector, claw)
+            collection = await asyncio.to_thread(
+                collector, claw, request.work_key
+            )
         except Exception as e:
             log.exception('collecting for %s failed', name)
             self.notify(f'{name}: collecting failed: {e}')
@@ -149,6 +152,8 @@ class Jobs:
                 self.notify(f'{name}: nothing new')
             return
         if after is not None and collection.work_key == after:
+            # Not run, so nothing else will release what it claimed for it.
+            await asyncio.to_thread(claims.release, after)
             self.notify(
                 f'{name}: {after} settled but is still waiting; stopping'
                 ' here rather than repeating it'

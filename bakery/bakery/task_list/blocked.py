@@ -15,11 +15,8 @@ by a model, in triage's weekly recheck. A task clears once all its blockers
 have.
 """
 
-import argparse
 import dataclasses
 import re
-import sys
-from collections.abc import Callable
 from typing import Literal
 
 from . import store
@@ -123,10 +120,12 @@ class Board:
         return blocker.namespace != store.NAMESPACE or state not in UNDECIDED
 
 
-def problems(ident: int, description: str | None, board: Board) -> list[str]:
+def problems(
+    ref: str | None, description: str | None, board: Board
+) -> list[str]:
     """
-    Why the claws' task `ident` cannot be blocked by its description; [] if it
-    can.
+    Why a claws' task (`ref`, or None if it is new) cannot be blocked by its
+    description; [] if it can.
     """
     try:
         blockers = parse(description)
@@ -136,7 +135,7 @@ def problems(ident: int, description: str | None, board: Board) -> list[str]:
     for blocker in blockers:
         if not isinstance(blocker, TaskBlocker):
             continue
-        if blocker.ref == f'{store.NAMESPACE}:{ident}':
+        if blocker.ref == ref:
             found.append(f'{blocker}: a task cannot block itself')
             continue
         state = board.state(blocker)
@@ -156,41 +155,3 @@ def problems(ident: int, description: str | None, board: Board) -> list[str]:
                 ' route on its own merits instead'
             )
     return found
-
-
-def check(ident: int, append: str = '') -> list[str]:
-    """`problems` for task `ident` once `append` is appended to its notes."""
-    try:
-        shown = store.shown(f'{store.NAMESPACE}:{ident}')
-        description = str(shown['description'] or '')
-    except store.TaskError as e:
-        return [str(e)]
-    # Joined as `task set --description-append` joins it.
-    description = '\n\n'.join(p for p in (description, append.strip()) if p)
-    return problems(ident, description, Board.load())
-
-
-def do_check(args: argparse.Namespace) -> int:
-    if found := check(args.id, args.append):
-        sys.exit(
-            f'cannot block #{store.NAMESPACE}:{args.id}: ' + '; '.join(found)
-        )
-    return 0
-
-
-def add_parsers(add_parser: Callable[..., argparse.ArgumentParser]) -> None:
-    check_ = (
-        add_parser('blocked', help=f'{TAG} tasks')
-        .add_subparsers(dest='blocked_command')
-        .add_parser(
-            'check',
-            help=f"fail unless a task's {HEADING} list is valid, for task_set",
-        )
-    )
-    check_.add_argument(
-        'id', type=int, help=f'id of a task in {store.NAMESPACE}'
-    )
-    check_.add_argument(
-        '--append', default='', help='notes about to be appended to it'
-    )
-    check_.set_defaults(func=do_check)

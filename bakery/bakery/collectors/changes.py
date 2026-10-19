@@ -79,7 +79,8 @@ def _commits(repo: pathlib.Path, since: str | None) -> list[str]:
     return found
 
 
-def collect(claw: 'config.Claw') -> base.Collection:
+def collect(claw: 'config.Claw', work_key: str) -> base.Collection:
+    del work_key
     repo = paths.repo()
     runs_db = ledger.Ledger(ledger.default_path())
     try:
