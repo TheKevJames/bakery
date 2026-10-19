@@ -1,4 +1,4 @@
-/** Test-only: every bash call needs a confirm dialog answered by the client. */
+/** Test-only: a dialog before every bash call, which no claw extension may open. */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export default function (pi: ExtensionAPI) {

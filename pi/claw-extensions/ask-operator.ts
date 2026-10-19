@@ -1,78 +1,79 @@
 /**
  * Ask Operator Extension (claws only)
  *
- * An `ask_operator` tool whose behaviour follows the claw's ask policy, passed
- * by the gateway as BAKERY_ASK_POLICY (ask | assume | park),
- * BAKERY_ASK_TIMEOUT_HOURS, and BAKERY_ASK_ON_TIMEOUT (assume | park).
+ * An `ask_operator` tool which puts questions to the operator on the task
+ * list: it appends them to a task the claw has claimed, moves the task to
+ * `human`, releases it, and ends the run (`terminate`). Nothing waits on the
+ * operator: they answer on the task and send it back through triage.
  *
- * "Parking" ends the run (`terminate`) with `details.park` on the result; the
- * gateway marks the run parked and resumes it when the question is answered.
+ * The result's `details.reply` is what the gateway posts as the run's reply,
+ * since a terminated run has no final message of its own.
  */
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { checkClaimed, Id, ref, task } from "./lib/task-list.ts";
 
-type Policy = "ask" | "assume" | "park";
+const HUMAN = "human";
 
-function env(name: string, allowed: string[], fallback: string): string {
-  const value = process.env[name] ?? fallback;
-  if (!allowed.includes(value)) throw new Error(`${name} must be one of ${allowed.join(", ")}`);
-  return value;
+type Question = { question: string; context: string; default: string };
+
+function indent(text: string): string {
+  return text.trim().replaceAll("\n", "\n   ");
 }
 
-function text(message: string, details: Record<string, unknown>) {
-  return { content: [{ type: "text" as const, text: message }], details };
+function today(): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
-function assume(reason: string, assumption: string) {
-  return text(
-    `${reason} Proceed with your assumption (${assumption}) and state it clearly in your final report.`,
-    { answered: false },
+/** Numbered, so the operator can answer each under `## Answers` by number. */
+function questionsSection(questions: Question[]): string {
+  const items = questions.map(
+    (q, i) =>
+      `${i + 1}. ${indent(q.question)}\n` +
+      `   **Context:** ${indent(q.context)}\n` +
+      `   **Default:** ${indent(q.default)}`,
   );
+  return `## Questions (${today()})\n\n${items.join("\n")}\n`;
 }
-
-function park(question: string) {
-  // terminate ends the run without another model call (unless sibling tool
-  // calls in the same batch continue it; the gateway then aborts the run).
-  return {
-    ...text("Stopping until the operator answers. Do not continue working on this task.", {
-      park: true,
-      question,
-    }),
-    terminate: true,
-  };
-}
-
-const askOperator = defineTool({
-  name: "ask_operator",
-  label: "Ask Operator",
-  description:
-    "Ask the operator a question when you cannot proceed responsibly without their input. " +
-    "Always state the assumption you would otherwise make.",
-  parameters: Type.Object({
-    question: Type.String({ description: "The question, with enough context to answer it cold" }),
-    assumption: Type.String({ description: "What you will assume if no answer arrives" }),
-  }),
-
-  async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-    const policy = env("BAKERY_ASK_POLICY", ["ask", "assume", "park"], "ask") as Policy;
-    const onTimeout = env("BAKERY_ASK_ON_TIMEOUT", ["assume", "park"], "park");
-    const hours = Number(process.env.BAKERY_ASK_TIMEOUT_HOURS ?? "4");
-
-    if (policy === "assume") return assume("Policy is to not ask.", params.assumption);
-    if (policy === "park" || !ctx.hasUI) return park(params.question);
-
-    const answer = await ctx.ui.input(params.question, `if unanswered: ${params.assumption}`, {
-      signal,
-      timeout: hours * 3_600_000,
-    });
-    if (answer !== undefined && answer.trim()) {
-      return text(`The operator answered: ${answer.trim()}`, { answered: true });
-    }
-    if (onTimeout === "assume") return assume(`No answer within ${hours}h.`, params.assumption);
-    return park(params.question);
-  },
-});
 
 export default function (pi: ExtensionAPI) {
-  pi.registerTool(askOperator);
+  pi.registerTool(
+    defineTool({
+      name: "ask_operator",
+      label: "Ask Operator",
+      description:
+        "Put questions to the operator on a task you have claimed: appends them under `## Questions`, moves " +
+        `the task to \`${HUMAN}\`, releases it, and ends your run. Call it last, after recording everything ` +
+        "else on the task: you get no further turn. The operator answers under `## Answers`, by number; an " +
+        "unanswered question means they accept its default.",
+      parameters: Type.Object({
+        id: Id,
+        questions: Type.Array(
+          Type.Object({
+            question: Type.String({ description: "One question, answerable cold" }),
+            context: Type.String({ description: "What you found, and why you cannot decide it yourself" }),
+            default: Type.String({ description: 'What you would do if told "your call"' }),
+          }),
+          { minItems: 1 },
+        ),
+      }),
+
+      async execute(_toolCallId, params, signal) {
+        await checkClaimed(pi, params.id, signal);
+        const id = ref(params.id);
+        const section = questionsSection(params.questions);
+        await task(pi, ["set", id, "--tag", HUMAN, "--description-append", section, "--json"], signal);
+        await task(pi, ["unset", id, "owner", "--json"], signal);
+        const count = params.questions.length;
+        const noun = count === 1 ? "question" : "questions";
+        return {
+          content: [{ type: "text" as const, text: `Moved ${id} to ${HUMAN} with ${count} ${noun}. Stop here.` }],
+          details: { task: id, reply: `→ ${id} is in \`${HUMAN}\`.\n\n${section}` },
+          terminate: true,
+        };
+      },
+    }),
+  );
 }

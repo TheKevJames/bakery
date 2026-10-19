@@ -209,8 +209,6 @@ def scout_claws(
         {
             'scout': """
                 secrets = ["BAKERY_FAKE_LLM_URL", "GH_TOKEN=BAKERY_TEST_GH"]
-                [ask]
-                policy = "assume"
                 [[job]]
                 name = "daily"
                 cron = "0 7 * * *"

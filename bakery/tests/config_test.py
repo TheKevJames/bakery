@@ -53,7 +53,6 @@ def test_repo_defaults_with_claw_overrides(tmp_path: pathlib.Path) -> None:
         2,
         claw['concurrency']['max_active'],
     )
-    assert build.ask == config.Ask(**claw['ask'])
     assert build.job('nightly').active_hours == config.ActiveHours(
         datetime.time(22), datetime.time(6)
     )
@@ -77,7 +76,7 @@ def test_default_jobs_apply_to_every_claw(tmp_path: pathlib.Path) -> None:
     assert (dream.collector, dream.skip_empty) == ('changes', False)
     learn = loaded.claw('plain').job('learn')
     # Only `bakery teach` runs it, which waits on it.
-    assert (learn.shared, learn.cron, learn.ask) == (True, None, 'assume')
+    assert (learn.shared, learn.cron) == (True, None)
     own = loaded.claw('own')
     assert [j.name for j in own.jobs] == ['dream', 'learn', 'daily']
     assert (own.job('daily').model, own.job('daily').shared) == ('m', False)
@@ -93,7 +92,7 @@ def test_default_jobs_apply_to_every_claw(tmp_path: pathlib.Path) -> None:
         ('[limits]\ncost_usd = -1', 'cost_usd: must be positive'),
         ('[limits]\nminutes = "30"', 'minutes: wrong type'),
         ('enabled = 1', 'enabled: wrong type'),
-        ('[ask]\npolicy = "maybe"', 'policy: must be one of'),
+        ('[ask]\npolicy = "ask"', 'unknown keys ask'),
         ('[[job]]\nname = "x"\ncron = "nope"\nprompt = "p"', 'invalid expr'),
         (
             '[[job]]\nname = "x"\ncron = "* * * * *"\nprompt = "p"\n'
@@ -133,8 +132,8 @@ def test_default_jobs_apply_to_every_claw(tmp_path: pathlib.Path) -> None:
         ),
         (
             '[[job]]\nname = "x"\ncron = "* * * * *"\nprompt = "p"\n'
-            'ask = "maybe"',
-            'ask: must be one of',
+            'ask = "assume"',
+            'unknown keys ask',
         ),
         (
             f'[[job]]\nname = "{"x" * 80}"\ncron = "* * * * *"\nprompt = "p"',

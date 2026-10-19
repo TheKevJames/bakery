@@ -32,12 +32,6 @@ CATEGORY = 'bakery'
 CONTROL_CHANNEL = 'bakery'
 # 7 days: units of work (eg. a build task's PR review) can idle for days.
 ARCHIVE_MINUTES = 10080
-STYLES = {
-    'primary': discord.ButtonStyle.primary,
-    'secondary': discord.ButtonStyle.secondary,
-    'success': discord.ButtonStyle.success,
-    'danger': discord.ButtonStyle.danger,
-}
 # Discord's JSON error codes.
 UNKNOWN_CHANNEL = 10003
 UNKNOWN_MESSAGE = 10008
@@ -61,21 +55,11 @@ def _gone() -> Generator[None]:
         raise
 
 
-def _items(handler: transport.Handler) -> tuple[type[Any], type[Any]]:
-    """Component classes that dispatch to `handler`, even across restarts."""
+def _action(handler: transport.Handler) -> type[Any]:
+    """A button class that dispatches to `handler`, even across restarts."""
 
-    async def dispatch(
-        interaction: discord.Interaction, custom_id: str, value: str | None
-    ) -> None:
-        reply = await handler.on_component(
-            interaction.user.id, custom_id, value
-        )
-        await interaction.response.send_message(reply, ephemeral=True)
-
-    # Templates must not overlap: a match of the wrong item type fails.
     class Action(
-        ui.DynamicItem[ui.Button[Any]],
-        template=r'bakery:(?:dlg:[^:]+:(?:\d+|x)|resume:\d+)',
+        ui.DynamicItem[ui.Button[Any]], template=r'bakery:resume:\d+'
     ):
         def __init__(self, button: ui.Button[Any]) -> None:
             super().__init__(button)
@@ -93,31 +77,12 @@ def _items(handler: transport.Handler) -> tuple[type[Any], type[Any]]:
             return cls(item)
 
         async def callback(self, interaction: discord.Interaction) -> None:
-            await dispatch(interaction, str(self.item.custom_id), None)
+            reply = await handler.on_component(
+                interaction.user.id, str(self.item.custom_id)
+            )
+            await interaction.response.send_message(reply, ephemeral=True)
 
-    class Choice(
-        ui.DynamicItem[ui.Select[Any]], template=r'bakery:dlg:[^:]+:sel'
-    ):
-        def __init__(self, select: ui.Select[Any]) -> None:
-            super().__init__(select)
-
-        @classmethod
-        async def from_custom_id(
-            cls,
-            interaction: discord.Interaction,
-            item: ui.Item[Any],
-            match: re.Match[str],
-            /,
-        ) -> 'Choice':
-            del interaction, match
-            assert isinstance(item, ui.Select)
-            return cls(item)
-
-        async def callback(self, interaction: discord.Interaction) -> None:
-            values = (interaction.data or {}).get('values') or [None]
-            await dispatch(interaction, str(self.item.custom_id), values[0])
-
-    return Action, Choice
+    return Action
 
 
 class DiscordTransport:
@@ -146,7 +111,6 @@ class DiscordTransport:
         self._ready = asyncio.Event()
         self._task: asyncio.Task[None] | None = None
         self._action: type[Any] | None = None
-        self._choice: type[Any] | None = None
 
     def _mentions(self) -> discord.AllowedMentions:
         return discord.AllowedMentions(
@@ -161,8 +125,8 @@ class DiscordTransport:
     async def start(
         self, handler: transport.Handler, claws: Sequence[str]
     ) -> None:
-        self._action, self._choice = _items(handler)
-        self.client.add_dynamic_items(self._action, self._choice)
+        self._action = _action(handler)
+        self.client.add_dynamic_items(self._action)
         self._register_commands(handler)
 
         @self.client.event
@@ -320,33 +284,18 @@ class DiscordTransport:
 
     # Outbound
 
-    def _view(
-        self, components: Sequence[transport.Component]
-    ) -> ui.View | None:
-        if not components:
+    def _view(self, buttons: Sequence[transport.Button]) -> ui.View | None:
+        if not buttons:
             return None
-        assert self._action is not None and self._choice is not None
+        assert self._action is not None
         view = ui.View(timeout=None)
-        for component in components:
-            if isinstance(component, transport.Button):
-                button: ui.Button[Any] = ui.Button(
-                    label=component.label,
-                    style=STYLES[component.style],
-                    custom_id=component.custom_id,
-                )
-                view.add_item(self._action(button))
-            else:
-                select: ui.Select[Any] = ui.Select(
-                    custom_id=component.custom_id,
-                    placeholder=component.placeholder or None,
-                    options=[
-                        discord.SelectOption(
-                            label=option[:100], value=str(index)
-                        )
-                        for index, option in enumerate(component.options)
-                    ],
-                )
-                view.add_item(self._choice(select))
+        for component in buttons:
+            button: ui.Button[Any] = ui.Button(
+                label=component.label,
+                style=discord.ButtonStyle.secondary,
+                custom_id=component.custom_id,
+            )
+            view.add_item(self._action(button))
         return view
 
     async def create_thread(
@@ -371,7 +320,7 @@ class DiscordTransport:
         where: transport.Where,
         text: str,
         *,
-        components: Sequence[transport.Component] = (),
+        components: Sequence[transport.Button] = (),
         attachment: transport.Attachment | None = None,
     ) -> int:
         view = self._view(components)
@@ -410,7 +359,7 @@ class DiscordTransport:
         message_id: int,
         text: str,
         *,
-        components: Sequence[transport.Component] | None = None,
+        components: Sequence[transport.Button] | None = None,
     ) -> None:
         kwargs: dict[str, Any] = {'allowed_mentions': self._mentions()}
         if components is not None:

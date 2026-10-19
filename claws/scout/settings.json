@@ -9,7 +9,6 @@
     "../../pi/extensions/context7.ts",
     "../../pi/extensions/read-mutation-queue.ts",
     "../../pi/extensions/watch",
-    "../../pi/claw-extensions/ask-operator.ts",
     "../../pi/claw-extensions/memory",
     "../../pi/claw-extensions/task.ts",
     "-builtin:codemode",

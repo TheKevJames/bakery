@@ -31,8 +31,6 @@ CLAW_NAME = 'claw.toml'
 ConfigError = toml.ConfigError
 DEFAULT_DEBOUNCE_SECONDS = 120.0
 NAME_RE = re.compile(r'[a-z][a-z0-9-]*')
-ASK_POLICIES = ('ask', 'assume', 'park')
-TIMEOUT_POLICIES = ('assume', 'park')
 # pi's levels; pi, not this check, clamps a level the model does not support.
 THINKING_LEVELS = ('off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max')
 # macOS caps a unix socket path at 104 bytes, its terminating NUL included.
@@ -60,13 +58,6 @@ class Concurrency:
 
 
 @dataclasses.dataclass(frozen=True)
-class Ask:
-    policy: str
-    timeout_hours: float
-    on_timeout: str
-
-
-@dataclasses.dataclass(frozen=True)
 class ActiveHours:
     start: datetime.time
     end: datetime.time
@@ -90,7 +81,6 @@ class Job:
     # Overrides for this job's units of work.
     model: str | None
     thinking: str | None
-    ask: str | None
     # A bakery.collectors name: gathers input first; nothing found, no run,
     # unless skip_empty is false (then the job's prompt runs on its own).
     collector: str | None
@@ -138,7 +128,6 @@ class Claw:
     cwd: pathlib.Path
     limits: Limits
     concurrency: Concurrency
-    ask: Ask
     memory: Memory
     # Environment variable name -> Keychain item (see bakery/secrets.py).
     secrets: Mapping[str, str]
@@ -267,11 +256,6 @@ def _job(table: toml.Table, names: set[str], shared: set[str]) -> Job:
             if table.optional('thinking')
             else None
         ),
-        ask=(
-            table.string('ask', ASK_POLICIES)
-            if table.optional('ask')
-            else None
-        ),
         collector=_collector(table),
         skip_empty=_skip_empty(table),
         repeat=table.boolean('repeat') if table.optional('repeat') else False,
@@ -341,7 +325,6 @@ def _claw(
     table = toml.Table(data, name)
     limits = table.table('limits')
     concurrency = table.table('concurrency')
-    ask = table.table('ask')
     memory = table.table('memory')
     secrets = table.secrets('secrets')
     jobs = _jobs(table, shared_jobs)
@@ -373,18 +356,13 @@ def _claw(
         git=_git(table.table('git')),
         policy=policy_.parse(table.table('policy'), profile),
         tasks=_tasks(table.table('tasks')),
-        ask=Ask(
-            policy=ask.string('policy', ASK_POLICIES),
-            timeout_hours=ask.positive('timeout_hours'),
-            on_timeout=ask.string('on_timeout', TIMEOUT_POLICIES),
-        ),
         memory=Memory(
             flush_margin_tokens=memory.count('flush_margin_tokens', minimum=0),
             max_chars=memory.count('max_chars'),
         ),
         jobs=jobs,
     )
-    for sub in (limits, concurrency, ask, memory, table):
+    for sub in (limits, concurrency, memory, table):
         sub.done()
     _check_socket_paths(claw)
     return claw

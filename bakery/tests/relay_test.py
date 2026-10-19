@@ -4,16 +4,16 @@ import threading
 from collections.abc import Awaitable
 from collections.abc import Callable
 
-import pytest
-
 from bakery.chat import relay
 from bakery.chat import transport
 from bakery.gateway import core
 from testing import chat
 from testing import gateway as testing_gateway
 from testing import harness
+from testing import tasks as testing_tasks
 
 ASK = 'pi/claw-extensions/ask-operator.ts'
+TASKS = 'pi/claw-extensions/task.ts'
 
 
 def run(
@@ -21,9 +21,8 @@ def run(
     scenario: Callable[
         [core.Gateway, relay.Relay, chat.FakeTransport], Awaitable[None]
     ],
-    latency: float = 0.0,
 ) -> None:
-    fake = chat.FakeTransport(latency)
+    fake = chat.FakeTransport()
     bot = relay.Relay(fake, chat.OPERATOR)
 
     async def wrapped(gateway: core.Gateway) -> None:
@@ -171,85 +170,58 @@ def test_messages_steer_in_flight_runs(
     run(claws, scenario)
 
 
-def test_confirm_dialogs_are_buttons(
+def test_ask_operator_hands_the_task_over_without_a_mention(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
+    testing_tasks.task('add', '-n', 'bakery', '--tag', 'triage', 'a task')
     claws = testing_gateway.make_claws(
-        root, {'build': ''}, extensions={'build': ['confirm_bash.ts']}
+        root, {'triage': ''}, extensions={'triage': [TASKS, ASK]}
     )
+    questions = [
+        {'question': 'Which repo?', 'context': 'Two match.', 'default': 'all'},
+        {'question': 'Now?', 'context': 'It is\nlate.', 'default': 'later'},
+    ]
     fake_llm.queue(
-        harness.Reply(tool='bash', args={'command': 'echo approved'})
+        harness.call('task_set', id=1, claim=True),
+        harness.call('ask_operator', id=1, questions=questions),
+        harness.Reply(text='kept going'),
     )
 
     async def scenario(
         gateway: core.Gateway, bot: relay.Relay, fake: chat.FakeTransport
     ) -> None:
-        key = gateway.trigger('build', None, 'go')
-        await fake.until(lambda: fake.threads)
-        thread = fake.thread_named(key)
-        ask = await fake.message(thread, f'<@{chat.OPERATOR}> **Run bash?**')
-        approve = ask.button('Approve').custom_id
-
-        refused = await bot.on_component(chat.STRANGER, approve, None)
-        assert refused == relay.NOT_OPERATOR
-        assert await bot.on_component(chat.OPERATOR, approve, None) == 'Done.'
-        await fake.message(thread, '✅')
-        assert 'approved' in fake_llm.transcript()
-        assert ask.text.endswith('→ approved')
-        assert ask.components == ()
-        expired = await bot.on_component(chat.OPERATOR, approve, None)
-        assert expired == relay.EXPIRED
-
-    run(claws, scenario)
-
-
-def test_ask_operator_is_answered_by_a_thread_reply(
-    root: pathlib.Path, fake_llm: harness.FakeLLM
-) -> None:
-    claws = testing_gateway.make_claws(
-        root, {'triage': ''}, extensions={'triage': [ASK]}
-    )
-    fake_llm.queue(
-        harness.Reply(
-            tool='ask_operator',
-            args={'question': 'Which repo?', 'assumption': 'all'},
-        ),
-        harness.Reply(text='thanks'),
-    )
-
-    async def scenario(
-        gateway: core.Gateway, bot: relay.Relay, fake: chat.FakeTransport
-    ) -> None:
+        del bot
         key = gateway.trigger('triage', None, 'go')
         await fake.until(lambda: fake.threads)
         thread = fake.thread_named(key)
-        ask = await fake.message(thread, f'<@{chat.OPERATOR}> **Which repo?**')
-        assert 'if unanswered: all' in ask.text
-        await bot.on_message(chat.OPERATOR, 'triage', thread, 700, 'tools')
-        await fake.message(thread, '✅')
-        assert 'The operator answered: tools' in fake_llm.transcript()
-        assert fake.messages[700].reactions == ['✅']
+        status = await fake.message(thread, '✅')
+        assert 'settled - asked the operator on bakery:1' in status.text
+        reply = await fake.message(thread, '→ bakery:1 is in `human`.')
+        print(reply.text)
+        assert '1. Which repo?\n   **Context:** Two match.\n' in reply.text
+        assert '2. Now?\n   **Context:** It is\n   late.\n' in reply.text
+        assert '   **Default:** later\n' in reply.text
+        texts = [m.text for m in fake.in_thread(thread)]
+        assert not [t for t in texts if f'<@{chat.OPERATOR}>' in t], texts
+        # The tool ends the run: no model call after it.
+        assert len(fake_llm.requests) == 2
 
     run(claws, scenario)
+    task = testing_tasks.show('bakery:1')
+    assert (task['tag'], task['owner']) == ('human', None)
+    description = str(task['description'])
+    assert description.startswith('## Questions (')
+    assert '1. Which repo?' in description
 
 
-# With Discord latency, pi's own dialog timeout fires before the relay's,
-# and parking the run cancels the relay's wait for an answer.
-@pytest.mark.parametrize('latency', [0.0, 0.2])
-def test_unanswered_questions_park_until_resumed(
-    root: pathlib.Path, fake_llm: harness.FakeLLM, latency: float
+def test_parked_runs_resume_from_their_button(
+    root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     claws = testing_gateway.make_claws(
-        root,
-        {'build': '[ask]\ntimeout_hours = 0.0002\n'},  # under a second
-        extensions={'build': [ASK]},
+        root, {'build': '[limits]\nturns = 1\n'}
     )
     fake_llm.queue(
-        harness.Reply(
-            tool='ask_operator',
-            args={'question': 'Merge?', 'assumption': 'no'},
-        ),
-        harness.Reply(text='resumed fine'),
+        harness.call('bash', command='true'), harness.Reply(text='resumed')
     )
 
     async def scenario(
@@ -259,19 +231,19 @@ def test_unanswered_questions_park_until_resumed(
         await fake.until(lambda: fake.threads)
         thread = fake.thread_named(key)
         parked = await fake.message(thread, f'<@{chat.OPERATOR}> {key} parked')
-        assert 'waiting for an answer: Merge?' in parked.text
-        ask = await fake.message(thread, f'<@{chat.OPERATOR}> **Merge?**')
-        await fake.until(lambda: ask.text.endswith('→ timed out'))
-        # Parking ends the run: no model call after the question.
-        assert len(fake_llm.requests) == 1
-
+        assert 'turn limit reached (1)' in parked.text
         resume = parked.button('Resume').custom_id
-        assert await bot.on_component(chat.OPERATOR, resume, None) == (
+
+        refused = await bot.on_component(chat.STRANGER, resume)
+        assert refused == relay.NOT_OPERATOR
+        assert await bot.on_component(chat.OPERATOR, resume) == (
             f'Resuming {key}.'
         )
-        await fake.message(thread, 'resumed fine')
+        await fake.message(thread, 'resumed')
+        expired = await bot.on_component(chat.OPERATOR, 'bakery:resume:999')
+        assert expired == relay.EXPIRED
 
-    run(claws, scenario, latency)
+    run(claws, scenario)
 
 
 def test_silent_jobs_only_post_when_they_have_news(
@@ -337,31 +309,3 @@ def test_commands(root: pathlib.Path, fake_llm: harness.FakeLLM) -> None:
         assert '$2.00 / $1.00 today' in budget.text
 
     run(claws, scenario)
-
-
-def test_stopping_cancels_pending_questions(
-    root: pathlib.Path, fake_llm: harness.FakeLLM
-) -> None:
-    claws = testing_gateway.make_claws(
-        root, {'triage': ''}, extensions={'triage': [ASK]}
-    )
-    fake_llm.queue(
-        harness.Reply(
-            tool='ask_operator', args={'question': 'Hm?', 'assumption': 'x'}
-        )
-    )
-    fake = chat.FakeTransport()
-    bot = relay.Relay(fake, chat.OPERATOR)
-
-    async def scenario(gateway: core.Gateway) -> None:
-        key = gateway.trigger('triage', None, 'go')
-        await fake.until(lambda: fake.threads)
-        thread = fake.thread_named(key)
-        await fake.message(thread, f'<@{chat.OPERATOR}> **Hm?**')
-
-    testing_gateway.run_gateway(claws, bot, scenario)
-    thread = next(iter(fake.threads))
-    texts = [m.text for m in fake.in_thread(thread)]
-    assert any(text.endswith('→ cancelled') for text in texts)
-    assert any('interrupted' in text for text in texts)
-    assert 'gateway stopping' in fake.notices()

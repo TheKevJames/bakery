@@ -8,7 +8,6 @@ clicks, and commands are acted on.
 """
 
 import asyncio
-import contextlib
 import dataclasses
 import logging
 import time
@@ -26,20 +25,9 @@ log = logging.getLogger(__name__)
 
 PROGRESS_INTERVAL = 5.0
 PREFIX = 'bakery'
-SELECT_BUTTON_LIMIT = 5
-SELECT_OPTION_LIMIT = 25
 THREAD_NAME_LIMIT = 90
 NOT_OPERATOR = 'Only the operator can do that.'
-TIMEOUT_GRACE = 2.0
 EXPIRED = 'This request has expired.'
-
-
-@dataclasses.dataclass
-class _Dialog:
-    work_key: str
-    method: str
-    options: tuple[str, ...]
-    answer: asyncio.Future[dict[str, object]]
 
 
 @dataclasses.dataclass
@@ -49,19 +37,12 @@ class _Status:
     edited_at: float
 
 
-def _request_text(request: dict[str, object], key: str) -> str:
-    value = request.get(key)
-    return value if isinstance(value, str) else ''
-
-
 class Relay:
-    # pylint: disable=too-many-instance-attributes
     def __init__(self, link: transport.Transport, operator_id: int) -> None:
         self.link = link
         self.operator_id = operator_id
         self._gateway: core.Gateway | None = None
         self._status: dict[int, _Status] = {}
-        self._dialogs: dict[str, _Dialog] = {}
         self._threads: dict[str, asyncio.Lock] = {}
 
     def bind(self, gateway: core.Gateway) -> None:
@@ -109,7 +90,7 @@ class Relay:
         work_key: str,
         text: str,
         *,
-        components: Sequence[transport.Component] = (),
+        components: Sequence[transport.Button] = (),
     ) -> tuple[transport.Where, int]:
         """Post to the unit's thread, replacing it if it is gone."""
         where = await self._thread(claw, work_key)
@@ -199,145 +180,6 @@ class Relay:
         for part in parts:
             await self.link.send(where, part)
 
-    # Channel: dialogs
-
-    def _render_dialog(
-        self, request_id: str, request: dict[str, object]
-    ) -> tuple[str, tuple[str, ...], tuple[transport.Component, ...]]:
-        method = request.get('method')
-        title = _request_text(request, 'title')
-        base = f'{PREFIX}:dlg:{request_id}'
-        cancel = transport.Button(f'{base}:x', 'Cancel')
-        if method == 'confirm':
-            body = _request_text(request, 'message')
-            return (
-                f'{self.mention} **{title}**\n{body}',
-                (),
-                (
-                    transport.Button(f'{base}:1', 'Approve', 'success'),
-                    transport.Button(f'{base}:0', 'Deny', 'danger'),
-                ),
-            )
-        if method == 'select':
-            raw = request.get('options')
-            options = (
-                tuple(str(x) for x in raw) if isinstance(raw, list) else ()
-            )
-            options = options[:SELECT_OPTION_LIMIT]
-            components: tuple[transport.Component, ...]
-            if len(options) <= SELECT_BUTTON_LIMIT:
-                components = tuple(
-                    transport.Button(f'{base}:{i}', render.clip(option, 80))
-                    for i, option in enumerate(options)
-                )
-            else:
-                components = (
-                    transport.Select(f'{base}:sel', options, 'Choose…'),
-                )
-            return (
-                f'{self.mention} **{title}**',
-                options,
-                (*components, cancel),
-            )
-        hint = _request_text(request, 'placeholder') or _request_text(
-            request, 'prefill'
-        )
-        return (
-            f'{self.mention} **{title}**\n{hint}\n'
-            '_Reply in this thread to answer._',
-            (),
-            (cancel,),
-        )
-
-    async def _post_dialog(
-        self, info: channel.RunInfo, request: dict[str, object]
-    ) -> tuple[_Dialog, transport.Where, int, str]:
-        """Post a dialog's question; returns it with where it was posted."""
-        request_id = str(request['id'])
-        text, options, components = self._render_dialog(request_id, request)
-        text = render.clip(text)
-        pending = _Dialog(
-            info.work_key,
-            str(request.get('method')),
-            options,
-            asyncio.get_running_loop().create_future(),
-        )
-        # Before sending: the message is clickable before send() returns.
-        self._dialogs[request_id] = pending
-        try:
-            where, message_id = await self._send(
-                info.claw, info.work_key, text, components=components
-            )
-        except BaseException:
-            self._dialogs.pop(request_id, None)
-            raise
-        return pending, where, message_id, text
-
-    async def dialog(
-        self, info: channel.RunInfo, request: dict[str, object]
-    ) -> dict[str, object]:
-        pending, where, message_id, text = await self._post_dialog(
-            info, request
-        )
-        timeout = request.get('timeout')
-        seconds = timeout / 1000 if isinstance(timeout, (int, float)) else None
-        loop = asyncio.get_running_loop()
-        deadline = None if seconds is None else loop.time() + seconds
-        outcome = 'cancelled'
-        answer: dict[str, object] | None = None
-        try:
-            answer = await asyncio.wait_for(pending.answer, seconds)
-            outcome = self._describe(answer)
-        except TimeoutError:
-            outcome = 'timed out'
-        finally:
-            # pi times dialogs out too, from when it sent the request, so it
-            # usually expires first; the run then stops and cancels this
-            # wait just before this deadline.
-            if (
-                answer is None
-                and deadline is not None
-                and loop.time() >= deadline - TIMEOUT_GRACE
-            ):
-                outcome = 'timed out'
-            self._dialogs.pop(str(request['id']), None)
-            with contextlib.suppress(Exception):
-                await self.link.edit(
-                    where,
-                    message_id,
-                    render.clip(f'{text}\n→ {outcome}'),
-                    components=(),
-                )
-        return answer or {'cancelled': True}
-
-    @staticmethod
-    def _describe(answer: dict[str, object]) -> str:
-        if answer.get('cancelled'):
-            return 'cancelled'
-        if 'confirmed' in answer:
-            return 'approved' if answer['confirmed'] else 'denied'
-        return f'answered: {render.clip(str(answer.get("value")), 200)}'
-
-    def _resolve(self, request_id: str, answer: dict[str, object]) -> bool:
-        pending = self._dialogs.get(request_id)
-        if pending is None or pending.answer.done():
-            return False
-        pending.answer.set_result(answer)
-        return True
-
-    def _dialog_answer(
-        self, pending: _Dialog, choice: str
-    ) -> dict[str, object] | None:
-        if choice == 'x':
-            return {'cancelled': True}
-        if pending.method == 'confirm':
-            return {'confirmed': choice == '1'}
-        if pending.method == 'select' and choice.isdigit():
-            index = int(choice)
-            if index < len(pending.options):
-                return {'value': pending.options[index]}
-        return None
-
     # Handler: inbound from Discord
 
     async def on_message(
@@ -363,14 +205,6 @@ class Relay:
                 return
             work_key = known
         where = transport.Where(claw, thread_id)
-        for request_id, pending in list(self._dialogs.items()):
-            if pending.work_key == work_key and pending.method in (
-                'input',
-                'editor',
-            ):
-                self._resolve(request_id, {'value': text})
-                await self.link.react(where, message_id, '✅')
-                return
         try:
             self.gateway.message(claw, work_key, text)
         except (core.GatewayError, config.ConfigError) as e:
@@ -378,30 +212,13 @@ class Relay:
             return
         await self.link.react(where, message_id, '👀')
 
-    async def on_component(
-        self, author_id: int, custom_id: str, value: str | None
-    ) -> str:
+    async def on_component(self, author_id: int, custom_id: str) -> str:
         if author_id != self.operator_id:
             return NOT_OPERATOR
         parts = custom_id.split(':')
-        if parts[:2] == [PREFIX, 'dlg'] and len(parts) == 4:
-            return self._click_dialog(parts[2], parts[3], value)
         if parts[:2] == [PREFIX, 'resume'] and len(parts) == 3:
             return self._click_resume(int(parts[2]))
         return EXPIRED
-
-    def _click_dialog(
-        self, request_id: str, choice: str, value: str | None
-    ) -> str:
-        pending = self._dialogs.get(request_id)
-        if pending is None:
-            return EXPIRED
-        if choice == 'sel' and value is not None:
-            choice = value
-        answer = self._dialog_answer(pending, choice)
-        if answer is None or not self._resolve(request_id, answer):
-            return EXPIRED
-        return 'Done.'
 
     def _click_resume(self, run_id: int) -> str:
         work_key = self.gateway.runs.work_key_of(run_id)

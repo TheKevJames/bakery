@@ -7,7 +7,9 @@
  * own (BAKERY_TASK_NAMESPACE), so these tools address tasks there by id alone.
  * Claims are always made as the claw itself (BAKERY_CLAW), and `task_add`
  * files into the claw's `[tasks] tag` (BAKERY_TASK_TAG), through its link's
- * lineage (lib/file-task.ts); `task` serializes concurrent writers.
+ * lineage (lib/file-task.ts); `task` serializes concurrent writers. Only
+ * `ask_operator` (ask-operator.ts) moves a task to `human`, so every task
+ * moved there says what the operator is asked.
  *
  * Within the namespace, the remaining checks are guard rails on the easy path,
  * not a boundary: bash shares pi's sandbox, so those rules hold because the
@@ -16,12 +18,7 @@
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { fileTask, notFiled } from "./lib/file-task.ts";
-
-function claw(): string {
-  const name = process.env.BAKERY_CLAW;
-  if (!name) throw new Error("BAKERY_CLAW is not set");
-  return name;
-}
+import { checkClaimed, claw, Id, namespace, NS, ref, run, task } from "./lib/task-list.ts";
 
 function taskTag(): string {
   const tag = process.env.BAKERY_TASK_TAG;
@@ -29,43 +26,15 @@ function taskTag(): string {
   return tag;
 }
 
-function namespace(): string {
-  const ns = process.env.BAKERY_TASK_NAMESPACE;
-  if (!ns) throw new Error("BAKERY_TASK_NAMESPACE is not set");
-  return ns;
-}
-
-function ref(id: number): string {
-  return `${namespace()}:${id}`;
-}
-
 function text(message: string, details: Record<string, unknown> = {}) {
   return { content: [{ type: "text" as const, text: message }], details };
-}
-
-async function run(pi: ExtensionAPI, command: string, args: string[], signal?: AbortSignal): Promise<string> {
-  const result = await pi.exec(command, args, { signal });
-  if (result.code !== 0) throw new Error(result.stderr.trim() || `${command} exited with ${result.code}`);
-  return result.stdout.trim();
-}
-
-async function task(pi: ExtensionAPI, args: string[], signal?: AbortSignal): Promise<string> {
-  return run(pi, "task", args, signal);
 }
 
 // Blocked tasks must say what they wait on, in a form triage's collectors can
 // check (bakery/bakery/task_list/blocked.py).
 const BLOCKED = "blocked";
+const HUMAN = "human";
 
-type Shown = { owner: string | null };
-
-async function show(pi: ExtensionAPI, id: number, signal?: AbortSignal): Promise<Shown> {
-  return JSON.parse(await task(pi, ["show", ref(id), "--json"], signal)) as Shown;
-}
-
-const NS = process.env.BAKERY_TASK_NAMESPACE ? `\`${process.env.BAKERY_TASK_NAMESPACE}\`` : "your namespace";
-
-const Id = Type.Integer({ minimum: 1, description: `Id of a task in ${NS}: the number in \`<namespace>:<id>\`` });
 const Priority = Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high")]);
 const Size = Type.Union([Type.Literal("small"), Type.Literal("medium"), Type.Literal("large")]);
 
@@ -107,10 +76,11 @@ export default function tasks(pi: ExtensionAPI) {
         `Update a task in ${NS}: move it to a section (\`tag\`, eg. \`build\`), set its priority or size, ` +
         "claim it for yourself (fails if someone else owns it), release your claim, or append notes " +
         `to its description. Moving it to \`${BLOCKED}\` fails unless its notes, with any appended now, ` +
-        "hold a valid `**Blocked on:**` list (the last one counts) of blockers which have not cleared.",
+        "hold a valid `**Blocked on:**` list (the last one counts) of blockers which have not cleared. " +
+        `Never moves it to \`${HUMAN}\`: use \`ask_operator\` for that.`,
       parameters: Type.Object({
         id: Id,
-        tag: Type.Optional(Type.String({ description: "Section, eg. human" })),
+        tag: Type.Optional(Type.String({ description: "Section, eg. build" })),
         claim: Type.Optional(Type.Boolean()),
         release: Type.Optional(Type.Boolean()),
         priority: Type.Optional(Priority),
@@ -119,10 +89,9 @@ export default function tasks(pi: ExtensionAPI) {
       }),
       async execute(_id, params, signal) {
         if (params.claim && params.release) throw new Error("claim and release are exclusive");
+        if (params.tag === HUMAN) throw new Error(`use ask_operator to move a task to ${HUMAN}`);
         const id = ref(params.id);
-        if (params.release && (await show(pi, params.id, signal)).owner !== claw()) {
-          throw new Error(`task ${id} is not claimed by ${claw()}`);
-        }
+        if (params.release) await checkClaimed(pi, params.id, signal);
         if (params.tag === BLOCKED) {
           const check = ["blocked", "check", String(params.id)];
           if (params.description_append) check.push("--append", params.description_append);

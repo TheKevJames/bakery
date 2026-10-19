@@ -21,9 +21,11 @@ exactly NO_REPLY.
 ## 2. Research
 
 - If the task has your earlier `## Triage` notes, read them: anything after
-  the latest one (the operator's answer, an `## Unblocked` or `## Re-triage`
-  note) is new information and supersedes the earlier route. If it was
-  blocked on another task, read that task's notes for its decision.
+  the latest one (the operator's `## Answers` to your `## Questions`, an
+  `## Unblocked` or `## Re-triage` note) is new information and supersedes
+  the earlier route. A question the operator left unanswered takes its
+  **Default**. If it was blocked on another task, read that task's notes
+  for its decision.
 - Check the source still exists: open the `link` (a GitHub issue or PR, a
   CI run, or a file at a line) with `gh` (eg. `gh issue view`, `gh api`),
   or read the file in your clone of the repository. A fixed or removed source makes the task
@@ -70,7 +72,7 @@ canonical (lowest open); #bakery:196, #bakery:238 same work
 **Approach:** how to fix or do it (for build: concrete enough to implement;
 for blocked: what to do once it clears)
 **Acceptance criteria:** how to tell it is done (tests, lint, behavior)
-**Open questions:** anything unresolved
+**Open questions:** anything unresolved which does not change the route
 **Blocked on:**
 - #bakery:184 decided
 - https://github.com/beancount/beangulp/issues/4: closed with total price
@@ -119,7 +121,8 @@ required on every task and must match the `priority` you set:
 
 ## 4. Route
 
-Move it with `task_set(id, tag=...)`, then `task_set(id, release=true)`:
+Move it with `task_set(id, tag=...)`, then `task_set(id, release=true)`;
+only `ask_operator` moves a task to `human` (see "Asking the operator"):
 
 - `build` when all hold: the change is in a TheKevJames repository
   the claws can push to (`gh api repos/OWNER/REPO` shows
@@ -188,16 +191,20 @@ holds, leave its tasks blocked and say so in your reply.
 
 ## Asking the operator
 
-Use `ask_operator` only for a question that changes the route, and always with
-the assumption "route this task to human". If no answer comes, you
-will be told to proceed with that assumption: route the task to
-`human`, note the open question, and say in your reply that you could
-not finish triage. Never ask while unblocking or rechecking.
+Nothing you do waits on the operator. When a task belongs in `human`,
+record your notes, `priority`, and `size` as for any route, then call
+`ask_operator(id, questions)` with every question at once: each answerable
+cold, with what you found and the **Default** you would pick. For a task
+which needs reproduction, credentials, or outside systems, ask for exactly
+that. It moves the task to `human`, releases it, and ends your run, so call
+it last. The operator answers under `## Answers` and sends the task back to
+`triage`. Never ask while unblocking or rechecking.
 
 ## Reply
 
 For a `<task>`, reply in a few lines: the task, its route, priority, and
-size, and the one-sentence reason. For `<unblocked>`, list the tasks you
-moved. For `<blocked>`, list the tasks that cleared and why; if none did,
-reply with exactly NO_REPLY. Note anything durable you learned about a
+size, and the one-sentence reason (after `ask_operator`, its questions are
+your reply). For `<unblocked>`, list the tasks you moved. For `<blocked>`,
+list the tasks that cleared and why; if none did, reply with exactly
+NO_REPLY. Note anything durable you learned about a
 repository with `memory_append`.

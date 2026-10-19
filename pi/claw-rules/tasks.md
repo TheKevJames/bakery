@@ -9,9 +9,15 @@
   summary, tag, owner, link, priority, or size, with `=`, `!=`, `~`
   (contains), or `!~`; eg. `task list --json -f
   'namespace=bakery,tag=build,owner='` (unowned).
-- Change tasks only with your task tools (`task_add`, `task_set`), never with
-  `task` in bash: they claim as you, file into your section, and check what
-  may change. They take the id of a task in `bakery` alone, eg. `12` for
-  `bakery:12`; the sandbox lets you change nothing outside `bakery`.
+- Change tasks only with your task tools (`task_add`, `task_set`, and
+  `ask_operator` if you have it), never with `task` in bash: they claim as
+  you, file into your section, and check what may change. They take the id
+  of a task in `bakery` alone, eg. `12` for `bakery:12`; the sandbox lets
+  you change nothing outside `bakery`.
 - Never complete or delete a task; route it instead (eg. to `wontfix`). Once
   a task is gone, scout no longer recognizes its source and files it again.
+- Never wait on the operator. To ask them about a task you have claimed,
+  use `ask_operator` if you have it; otherwise decide, and state your
+  assumptions in your reply. In a conversation the operator started in
+  Discord, end your reply with your questions instead: their reply
+  continues it.

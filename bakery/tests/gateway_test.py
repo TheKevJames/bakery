@@ -127,34 +127,30 @@ def test_daily_budget_parks_without_calling_the_model(
     assert len(fake_llm.requests) == 1
 
 
-def test_dialogs_go_to_the_channel_off_the_clock(
+def test_dialogs_are_cancelled_with_a_notice(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     claws = testing_gateway.make_claws(
-        root,
-        {'build': '[limits]\nminutes = 0.01\n'},
-        extensions={'build': ['confirm_bash.ts']},
+        root, {'build': ''}, extensions={'build': ['confirm_bash.ts']}
     )
-
-    async def slow_yes(
-        run: channel.RunInfo, request: dict[str, object]
-    ) -> dict[str, object]:
-        del run, request
-        await asyncio.sleep(1)  # longer than the 0.6s run limit
-        return {'confirmed': True}
-
-    fake = testing_gateway.FakeChannel(dialogs=slow_yes)
+    fake = testing_gateway.FakeChannel()
     fake_llm.queue(
-        harness.Reply(tool='bash', args={'command': 'echo approved'})
+        harness.Reply(tool='bash', args={'command': 'echo approved'}),
+        harness.Reply(text='carried on'),
     )
 
     async def scenario(gateway: core.Gateway) -> None:
-        run = await fake.wait(gateway.trigger('build', None, 'go'))
-        assert run.status == 'settled', run.reason
+        key = gateway.trigger('build', None, 'go')
+        run = await fake.wait(key)
+        assert (run.status, run.final_text) == ('settled', 'carried on')
+        print(fake.notices)
+        assert (
+            f"{key}: cancelled a confirm dialog ('Run bash?');"
+            ' claws ask on the task list'
+        ) in fake.notices
 
     testing_gateway.run_gateway(claws, fake, scenario)
-    assert [r['method'] for r in fake.asked] == ['confirm']
-    assert 'approved' in fake_llm.transcript()
+    assert 'denied by the operator' in fake_llm.transcript()
 
 
 def test_extension_errors_fail_the_run(
@@ -399,7 +395,7 @@ def test_secrets_reach_pi_but_not_bash(
         pi_env = fake_llm.transcript(-2)
         bash_env = fake_llm.transcript().removeprefix(pi_env)
         assert 'GRANTED=granted-value' in pi_env
-        assert 'BAKERY_ASK_POLICY=ask' in bash_env
+        assert 'BAKERY_CLAW=a' in bash_env
         assert 'SHARED=shared-value' in bash_env
         # The claw's home has its git config, with the claws' identity.
         assert 'thekevjames-bakery' in bash_env
