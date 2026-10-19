@@ -46,12 +46,13 @@ All mutable claw state lives outside the repo, under
 `$XDG_STATE_HOME/claws/`, which is a local-only git repo auto-committed after
 every run so memory changes can be reviewed and rolled back. Each commit
 holds only what its writer owns: a run, its claw's dir; `bakery wontfix`,
-`_shared/wontfix.json`; setup, the files it seeds. The operator commits
-their own edits (eg. to `_shared/OPERATOR.md`).
+`_shared/wontfix.json`; setup, the files it seeds. `_shared/OPERATOR.md`,
+which every claw edits, is committed on its own after any run that ends
+with it changed (see [Memory](#memory)).
 
 ```
 $XDG_STATE_HOME/claws/
-├── _shared/OPERATOR.md      # facts about the operator, injected into every profile
+├── _shared/OPERATOR.md      # facts about the operator, injected into every claw
 ├── _gateway/                # gitignored: run ledger (runs.db), control socket, claws' pi state (session registries), sandbox violations
 └── <name>/
     ├── MEMORY.md            # curated long-term memory
@@ -193,22 +194,24 @@ Curation:
   again, a false one is believed. These rules are in prompts, since a tool
   cannot judge text.
 - **Commits**: after every run the gateway commits the claw's state dir
-  (`<work_key>: <status>`), and nothing else: runs of different claws
-  overlap, so a run's commit holds exactly its own claw's changes, and every
-  memory change can be reviewed and reverted. Commits run one at a time, as
-  git allows one writer per index.
+  (`<work_key>: <status>`): runs of different claws overlap, so a run's
+  commit holds exactly its own claw's changes, and every memory change can
+  be reviewed and reverted. Then, if `_shared/OPERATOR.md` changed, it
+  commits that alone (`<work_key>: OPERATOR.md`) and posts the diff in
+  `#bakery`: every change since the last such commit, which may include an
+  overlapping run's or the operator's own. Commits run one at a time, as git
+  allows one writer per index.
 
-Identity changes need the operator's approval:
+`_shared/OPERATOR.md` holds stable facts about the operator, which every
+claw sees (but not the operator's interactive profile, as any claw may have
+written it). Any claw edits it directly with `operator_edit` (exact
+replacements, kept within 4000 characters), only with what the operator
+told it directly; the gateway commits each change and posts its diff in
+`#bakery` (above), so the operator sees, and can revert, every one.
 
-- `_shared/OPERATOR.md` is private (the state repo is local-only) and claws
-  cannot write it. `propose_operator_update(edits, reason)` files a
-  `bakery > human` task with the diff (checked to apply, and to stay within
-  4000 characters), which the operator applies by hand; the same proposal is
-  the same lineage (its link is `operator-md:<hash of the result>`), so it is
-  not filed again while open, nor once rejected.
-- `SOUL.md` / `AGENTS.md` (and other claw configuration) edits are proposed
-  as PRs on this repo from the claw's own clone (see
-  [Safety](#safety)), merging being the approval.
+Identity changes need the operator's approval: `SOUL.md` / `AGENTS.md` (and
+other claw configuration) edits are proposed as PRs on this repo from the
+claw's own clone (see [Safety](#safety)), merging being the approval.
 
 ## Gateway
 
@@ -718,7 +721,7 @@ summary, the reason, and the date, in
 rejected, whatever its namespace or tag; `rm` takes any link with its
 lineage.
 
-Every claw tool that adds a task (`task_add`, `propose_operator_update`)
+Every claw tool that adds a task (`task_add`)
 files through `bakery task add` (`bakery/bakery/task_list/filing.py`, via
 `pi/claw-extensions/lib/file-task.ts`): `task add`, with any of its
 arguments, unless an open task (in any namespace) or a rejection already

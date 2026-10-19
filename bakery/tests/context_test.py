@@ -22,7 +22,7 @@ def make_profile(root: pathlib.Path, context_toml: str) -> pathlib.Path:
     return profile
 
 
-def test_interactive_profile_injects_every_rule_and_operator(
+def test_interactive_profile_injects_every_rule_but_not_operator(
     run_pi: Callable[[pathlib.Path], harness.Pi],
     fake_llm: harness.FakeLLM,
     monkeypatch: pytest.MonkeyPatch,
@@ -46,7 +46,8 @@ def test_interactive_profile_injects_every_rule_and_operator(
     system = fake_llm.system_prompt()
     positions = [system.index(rule) for rule in rules]
     assert positions == sorted(positions)
-    assert 'prefers tabs? never' in system
+    # Every claw edits OPERATOR.md, so it is not the operator's own agent's.
+    assert 'prefers tabs? never' not in system
 
 
 def test_every_turn_reread_and_session_start_once(

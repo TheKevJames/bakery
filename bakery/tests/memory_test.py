@@ -1,11 +1,11 @@
 import datetime
 import pathlib
 
+from bakery import state
 from bakery.gateway import core
 from testing import commands
 from testing import gateway as testing_gateway
 from testing import harness
-from testing import tasks as testing_tasks
 
 MEMORY = 'pi/claw-extensions/memory'
 DREAM = """
@@ -124,24 +124,24 @@ def test_flush_before_compaction(
     assert 'flushed fact' in today_note(root).read_text()
 
 
-def test_operator_updates_are_filed_for_the_operator(
+def test_claws_edit_operator_md_and_the_operator_sees_it(
     root: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     claws = testing_gateway.make_claws(
         root, {'a': ''}, extensions={'a': [MEMORY]}
     )
+    shared = root / 'state' / 'claws' / '_shared' / 'OPERATOR.md'
     edit = [
         {'oldText': '## Preferences\n', 'newText': '## Preferences\n- tabs\n'}
     ]
     fake_llm.queue(
-        harness.call('propose_operator_update', edits=edit, reason='said so'),
+        harness.call('operator_edit', edits=edit),
         harness.call(
-            'propose_operator_update', edits=edit, reason='said so again'
+            'operator_edit', edits=[{'oldText': 'x', 'newText': 'y'}]
         ),
         harness.call(
-            'propose_operator_update',
-            edits=[{'oldText': 'x', 'newText': 'y'}],
-            reason='r',
+            'operator_edit',
+            edits=[{'oldText': '- tabs', 'newText': 'x' * 5000}],
         ),
         harness.Reply(text='done'),
     )
@@ -150,18 +150,22 @@ def test_operator_updates_are_filed_for_the_operator(
     async def scenario(gateway: core.Gateway) -> None:
         run = await fake.wait(gateway.trigger('a', None, 'go'))
         assert run.status == 'settled', run.reason
+        await fake.until(
+            lambda: any('OPERATOR.md changed' in n for n in fake.notices)
+        )
 
     testing_gateway.run_gateway(claws, fake, scenario)
     results = fake_llm.tool_results()
-    assert 'Filed as task #bakery:1' in results[0]
-    assert 'open task #bakery:1 already has' in results[1]
-    assert 'text not found' in results[2]
-    shown = testing_tasks.task('bakery:1', 'show')
-    assert 'bakery > human' in shown
-    assert '+ - tabs' in shown
-    assert 'said so' in shown
-    shared = root / 'state' / 'claws' / '_shared' / 'OPERATOR.md'
-    assert '- tabs' not in shared.read_text()
+    assert 'OPERATOR.md is now' in results[0]
+    assert 'text not found' in results[1]
+    assert 'the limit is 4000' in results[2]
+    assert '- tabs' in shared.read_text()
+    [notice] = [n for n in fake.notices if 'OPERATOR.md changed' in n]
+    print(notice)
+    assert notice.startswith('OPERATOR.md changed by the end of a/')
+    assert '+- tabs' in notice
+    log = state.git('log', '--format=%s', '--', '_shared/OPERATOR.md')
+    assert log.stdout.splitlines()[0].endswith(': OPERATOR.md')
 
 
 def test_compaction_counts_towards_the_run_cost(

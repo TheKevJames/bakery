@@ -211,6 +211,8 @@ def settings(claw: config.Claw, path_env: str) -> dict[str, object]:
         *(claw.profile / name for name in PI_PROFILE_WRITES),
         claw.state_dir,
         sockets(claw),
+        # Every claw edits it; the gateway commits and posts each change.
+        state.operator_file(),
     ]
     return {
         'network': {

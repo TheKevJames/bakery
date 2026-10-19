@@ -295,11 +295,33 @@ class Gateway:
             info.state_commit = await asyncio.to_thread(
                 state.commit, f'{info.work_key}: {info.status}', info.claw
             )
+            await self._commit_operator_file(info.work_key)
         except Exception:
             log.exception('committing state after %s failed', info.work_key)
         for future in self._finished.pop(info.work_key, []):
             if not future.done():
                 future.set_result(info)
+
+    async def _commit_operator_file(self, work_key: str) -> None:
+        """
+        Commit OPERATOR.md if it changed, and show the operator the diff:
+        every claw may edit it, and every agent reads it.
+        """
+        path = str(state.operator_file().relative_to(state.root()))
+        commit = await asyncio.to_thread(
+            state.commit, f'{work_key}: OPERATOR.md', path
+        )
+        if commit is None:
+            return
+        diff = await asyncio.to_thread(
+            state.git, 'show', '--format=', commit, '--', path
+        )
+        # Runs overlap, and the operator edits it too: this is every change
+        # since the last commit, not necessarily this run's alone.
+        self.notify(
+            f'OPERATOR.md changed by the end of {work_key}'
+            f' ({commit[:8]}):\n```diff\n{diff.stdout}```'
+        )
 
     async def _release_claims(self, claw: str, when: str) -> None:
         """Release what `claw` still claims; it has no run in flight."""

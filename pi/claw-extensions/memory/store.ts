@@ -76,11 +76,3 @@ export function writeCapped(file: string, text: string, maxChars: number): void 
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, text.endsWith("\n") ? text : `${text}\n`);
 }
-
-export function describeEdits(edits: Edit[]): string {
-  return edits
-    .map(({ oldText, newText }) =>
-      [...oldText.split("\n").map((l) => `- ${l}`), ...newText.split("\n").map((l) => `+ ${l}`)].join("\n"),
-    )
-    .join("\n\n");
-}

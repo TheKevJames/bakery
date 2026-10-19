@@ -18,9 +18,3 @@ path = "../pi/rules/testing.md"
 
 [[file]]
 path = "../pi/rules/file-types.md"
-
-# Shared with every claw; created by `bakery state init`.
-[[file]]
-path = "${XDG_STATE_HOME}/claws/_shared/OPERATOR.md"
-max_chars = 4000
-optional = true
