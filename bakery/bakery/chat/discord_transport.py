@@ -49,10 +49,11 @@ def channel_name(claw: str) -> str:
 
 @contextlib.contextmanager
 def _gone() -> Generator[None]:
-    """Translate a webhook's NotFound for a thread or message."""
+    """Translate a webhook's error for a deleted thread or message."""
     try:
         yield
-    except discord.NotFound as e:
+    # By code, not status: posting to a deleted thread is a 400, not a 404.
+    except discord.HTTPException as e:
         if e.code == UNKNOWN_CHANNEL:
             raise transport.ThreadGone(str(e)) from e
         if e.code == UNKNOWN_MESSAGE:
