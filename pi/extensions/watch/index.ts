@@ -154,7 +154,7 @@ export default function watchExtension(pi: ExtensionAPI) {
       "Use `watch` instead of a blocking bash wait (`sleep`, `--watch` flags, polling loops) for anything " +
         "taking longer than ~10s: CI runs, PR merges, deploys, long test suites.",
       "`watch` `exit` mode runs a command in the background and reports its exit code, eg. " +
-        "`gh pr checks 12 --watch --fail-fast`. `poll` mode re-runs a probe every `interval` seconds: exit 0 " +
+        "`gh run watch 123 --exit-status`. `poll` mode re-runs a probe every `interval` seconds: exit 0 " +
         "means the condition is met, 1 means not yet, anything else means the probe failed and stops the " +
         "watch. Commands run with `set -o pipefail`.",
       "After starting a `watch`, don't check on it: its result arrives as a `watch` message, which wakes you " +
