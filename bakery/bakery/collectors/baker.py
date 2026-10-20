@@ -256,7 +256,7 @@ def _tasks() -> Section:
     lines = [
         f'- #{store.ref(t)} [{t["tag"]}]'
         f' {t["priority"]}/{t["size"]} {t["summary"]} ({t["link"]})'
-        for t in store.listed(f'link~{TASK_LINK_PREFIX}')
+        for t in store.listed(f'link^={TASK_LINK_PREFIX}')
     ] + [
         f'- [rejected] {r.summary} ({r.link})'
         for _, r in sorted(wontfix.load().items())
@@ -266,7 +266,7 @@ def _tasks() -> Section:
         'Your tasks (open, and rejected)',
         lines,
         5_000,
-        f"task list --json -f 'link~{TASK_LINK_PREFIX}', and rejections in"
+        f"task list --json -f 'link^={TASK_LINK_PREFIX}', and rejections in"
         f' {wontfix.path()}',
     )
 
