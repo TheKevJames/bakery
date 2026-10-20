@@ -12,7 +12,7 @@ server and the unit's claims.
 import asyncio
 import logging
 
-from task import cli
+from task import api
 
 from .. import state
 from ..task_list import claims
@@ -27,7 +27,7 @@ async def serve(claw: config.Claw, work_key: str) -> asyncio.Server:
     path.parent.mkdir(parents=True, exist_ok=True)
     # Left by a gateway which stopped without closing it.
     path.unlink(missing_ok=True)
-    return await cli.listen(path, claims.writer(claw.rules, work_key))
+    return await api.listen(path, claims.writer(claw.rules, work_key))
 
 
 async def close(server: asyncio.Server | None, work_key: str) -> None:

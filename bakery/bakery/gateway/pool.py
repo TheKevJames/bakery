@@ -16,7 +16,7 @@ import pathlib
 import sysconfig
 import time
 
-from task import client
+from task import api
 
 from .. import paths
 from .. import secrets
@@ -115,7 +115,7 @@ def child_env(claw: config.Claw, sid: str) -> dict[str, str]:
             'BAKERY_CLAW': claw.name,
             'BAKERY_TASK_NAMESPACE': store.NAMESPACE,
             # Where its `task` sends every command (see task_server).
-            client.ADDRESS: str(state.task_socket(sid)),
+            api.SERVER_ENV: str(state.task_socket(sid)),
             'PI_CODING_AGENT_DIR': str(claw.profile),
             'PI_CODING_AGENT_STATE_DIR': str(claw.pi_state_dir),
             'BAKERY_MEMORY_DIR': str(claw.state_dir),

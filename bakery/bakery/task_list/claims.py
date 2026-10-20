@@ -8,35 +8,30 @@ unit's claims whenever its run ends, however it ends, and every claw's when
 the gateway starts, in case it stopped without doing so.
 """
 
-from task import actors
-from task import errors
-from task import ops
-from task import refs
-from task import rules
+from task import api
 
 from . import hooks
 from . import store
 
 
-def writer(claw_rules: rules.Rules, work_key: str) -> ops.Writer:
+def writer(claw_rules: api.Rules, work_key: str) -> api.Writer:
     """Writes as the unit `work_key`, under its claw's rules."""
 
-    def guard(change: ops.Change) -> None:
+    def guard(change: api.Change) -> None:
         claw_rules.check(change)
         hooks.check(change)
 
-    return ops.Writer(actors.Actor.agent(work_key), guard)
+    return api.Writer(api.Actor.agent(work_key), guard)
 
 
 def claim(
-    claw_rules: rules.Rules, work_key: str, address: str
-) -> dict[str, object] | None:
+    claw_rules: api.Rules, work_key: str, address: str
+) -> api.Task | None:
     """Task `address`, now held by the unit `work_key`; None if it cannot."""
     try:
-        task = writer(claw_rules, work_key).claim(refs.Ref.parse(address))
-    except errors.TaskError:
+        return writer(claw_rules, work_key).claim(api.Ref.parse(address))
+    except api.TaskError:
         return None
-    return task.to_json()
 
 
 def release(work_key: str) -> list[str]:
@@ -53,8 +48,8 @@ def sweep(claw: str) -> list[str]:
     )
 
 
-def _release(tasks: list[dict[str, object]]) -> list[str]:
+def _release(tasks: list[api.Task]) -> list[str]:
     for task in tasks:
-        agent = ops.Writer(actors.Actor.agent(str(task['claim'])))
-        agent.release(refs.Ref.parse(store.ref(task)))
+        assert task.claim, 'listed by its claim'
+        api.Writer(api.Actor.agent(task.claim)).release(task.ref)
     return [store.ref(task) for task in tasks]

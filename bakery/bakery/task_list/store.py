@@ -5,38 +5,32 @@ Read through the task library bakery pins, never the `task` on $PATH (the
 operator's own install), so its shape is the one this code was written for.
 """
 
-from task import db
-from task import errors
-from task import query
-from task import refs
+from task import api
 
 # The claws' namespace of the task list: the only one their rules let them
 # write, so every other task is the operator's.
 NAMESPACE = 'bakery'
-TaskError = errors.TaskError
+TaskError = api.TaskError
 
 
-def ref(task: dict[str, object]) -> str:
-    """A listed task's address, `<namespace>:<id>`."""
-    return f'{task["namespace"]}:{task["id"]}'
+def ref(task: api.Task) -> str:
+    """A task's address, always `<namespace>:<id>`."""
+    return f'{task.namespace}:{task.ident}'
 
 
 def listed(
-    filter_: str = '', order: query.SortOrder = query.SortOrder.tag
-) -> list[dict[str, object]]:
+    filter_: str = '', order: api.SortOrder = api.SortOrder.tag
+) -> list[api.Task]:
     """
-    Every task matching `filter_` (`task list -f` syntax), as JSON, blocked
-    or not unless it says (eg. `blocked=no`).
+    Every task matching `filter_` (`task list -f` syntax), blocked or not
+    unless it says (eg. `blocked=no`).
     """
-    clauses = query.compile_(f'blocked=any,{filter_}', -1, -1, order)
-    with db.connect() as conn:
-        return [task.to_json() for task in db.select(conn, *clauses)]
+    return api.list_(f'blocked=any,{filter_}', sort=order)
 
 
-def shown(address: str) -> dict[str, object]:
+def shown(address: str) -> api.Task:
     """
     One task, by `[namespace:]id` (a bare id is in `default`); TaskError if
     it cannot be shown.
     """
-    with db.connect() as conn:
-        return db.get(conn, refs.Ref.parse(address)).to_json()
+    return api.get(api.Ref.parse(address))

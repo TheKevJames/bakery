@@ -4,9 +4,7 @@ import pathlib
 import shlex
 
 import pytest
-from task import actors
-from task import ops
-from task import refs
+from task import api
 
 from bakery.collectors import triage
 from bakery.gateway import core
@@ -189,7 +187,7 @@ def test_triage_blocks_tasks_where_they_are(
         'https://example.com/1',
     ]
     # Hidden from the queue until all it waits on has cleared.
-    assert [t['id'] for t in triage.waiting()] == []
+    assert [t.ident for t in triage.waiting()] == []
 
 
 def test_recheck_hands_over_what_waits_outside(
@@ -213,8 +211,8 @@ def test_recheck_hands_over_what_waits_outside(
             'add', f't{ident}', '-n', 'bakery',
             *(arg for b in blockers for arg in ('--blocked-by', b)),
         )  # fmt: skip
-    ops.Writer(actors.Actor.agent('someone/else')).claim(
-        refs.Ref.parse('bakery:8')
+    api.Writer(api.Actor.agent('someone/else')).claim(
+        api.Ref.parse('bakery:8')
     )
     fake_llm.queue(
         task('bakery:4', 'unset', '--blocked-by', 'https://example.com/a'),
@@ -239,7 +237,7 @@ def test_recheck_hands_over_what_waits_outside(
         '</blocked>'
     )
     # Back in the queue, with task's own note of what cleared.
-    assert [t['id'] for t in triage.waiting()] == [1, 4]
+    assert [t.ident for t in triage.waiting()] == [1, 4]
     assert testing_tasks.said('bakery:4') == [
         'Cleared: https://example.com/a: released'
     ]

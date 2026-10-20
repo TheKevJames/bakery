@@ -254,8 +254,8 @@ def _memory(
 
 def _tasks() -> Section:
     lines = [
-        f'- #{store.ref(t)} [{t["tag"]}]'
-        f' {t["priority"]}/{t["size"]} {t["summary"]} ({t["link"]})'
+        f'- #{store.ref(t)} [{t.tag}]'
+        f' {t.priority}/{t.size} {t.summary} ({t.link})'
         for t in store.listed(f'link^={TASK_LINK_PREFIX}')
     ] + [
         f'- [rejected] {r.summary} ({r.link})'

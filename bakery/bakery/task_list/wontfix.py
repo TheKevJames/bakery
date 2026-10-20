@@ -65,16 +65,16 @@ def add(address: str, reason: str) -> str:
         task = store.shown(address)
     except store.TaskError as e:
         raise WontfixError(str(e)) from e
-    if not task['link']:
+    if not task.link:
         raise WontfixError(f'task {address} has no link')
-    link = lineage.source(str(task['link']))
+    link = lineage.source(task.link)
     rejections = load()
     rejected = rejections.get(lineage.of(link))
     if rejected is not None:
         raise WontfixError(f'{rejected.link} is already rejected')
     today = datetime.datetime.now(datetime.UTC).date().isoformat()
     rejections[lineage.of(link)] = Rejection(
-        link, str(task['summary']), reason.strip(), today
+        link, task.summary, reason.strip(), today
     )
     _save(rejections, f'wontfix: add {link}')
     return link
