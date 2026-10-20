@@ -31,5 +31,10 @@
             "matchDepNames": ["task"],
             "versioning": "pep440",
         },
+        {
+            // N.B. pi/patches/ is keyed to the exact version: carry it forward by hand
+            "matchDepNames": ["@anthropic-ai/sandbox-runtime"],
+            "automerge": false,
+        },
     ],
 }
