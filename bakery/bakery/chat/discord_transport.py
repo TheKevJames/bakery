@@ -7,7 +7,8 @@ first connect if missing.
 
 Claws post through one bot-owned webhook per channel, so each has its own
 name and avatar. Because the bot owns them, their messages can carry
-interactive components, whose clicks are delivered to the bot.
+interactive components, whose clicks are delivered to the bot. A webhook
+deleted while the gateway runs is found or created again on its next use.
 """
 
 import asyncio
@@ -35,6 +36,7 @@ ARCHIVE_MINUTES = 10080
 # Discord's JSON error codes.
 UNKNOWN_CHANNEL = 10003
 UNKNOWN_MESSAGE = 10008
+UNKNOWN_WEBHOOK = 10015
 
 
 def channel_name(claw: str) -> str:
@@ -107,6 +109,7 @@ class DiscordTransport:
         self.control: discord.TextChannel | None = None
         self.channels: dict[str, discord.TextChannel] = {}
         self.webhooks: dict[str, discord.Webhook] = {}
+        self._renewing: dict[str, asyncio.Lock] = {}
         self._claw_of: dict[int, str] = {}
         self._ready = asyncio.Event()
         self._task: asyncio.Task[None] | None = None
@@ -171,26 +174,39 @@ class DiscordTransport:
             return found or await category.create_text_channel(name)
 
         self.control = await text_channel(CONTROL_CHANNEL)
-        assert self.client.user is not None
         for claw in claws:
             channel = await text_channel(channel_name(claw))
             self.channels[claw] = channel
             self._claw_of[channel.id] = claw
-            hooks = await channel.webhooks()
-            hook = next(
-                (
-                    h
-                    for h in hooks
-                    if h.user and h.user.id == self.client.user.id
-                ),
-                None,
+            self.webhooks[claw] = await self._webhook(claw)
+
+    async def _webhook(self, claw: str) -> discord.Webhook:
+        """The bot's webhook in the claw's channel, created if missing."""
+        assert self.client.user is not None
+        channel = self.channels[claw]
+        hooks = await channel.webhooks()
+        hook = next(
+            (h for h in hooks if h.user and h.user.id == self.client.user.id),
+            None,
+        )
+        if hook is None:
+            avatar = self.avatars.get(claw)
+            hook = await channel.create_webhook(
+                name=claw, avatar=avatar.read_bytes() if avatar else None
             )
-            if hook is None:
-                avatar = self.avatars.get(claw)
-                hook = await channel.create_webhook(
-                    name=claw, avatar=avatar.read_bytes() if avatar else None
-                )
-            self.webhooks[claw] = hook
+        return hook
+
+    async def _renew_webhook(
+        self, claw: str, stale: discord.Webhook
+    ) -> discord.Webhook:
+        """A webhook for the claw in place of `stale`, which was deleted."""
+        lock = self._renewing.setdefault(claw, asyncio.Lock())
+        async with lock:
+            # Another report may have replaced it already.
+            if self.webhooks[claw] is stale:
+                log.warning('webhook for %s was deleted; renewing it', claw)
+                self.webhooks[claw] = await self._webhook(claw)
+            return self.webhooks[claw]
 
     # Inbound
 
@@ -342,16 +358,26 @@ class DiscordTransport:
             message_id: int = message.id
             return message_id
         assert where.thread_id is not None
-        with _gone():
-            sent = await self.webhooks[where.claw].send(
-                text,
-                username=where.claw,
-                thread=discord.Object(where.thread_id),
-                wait=True,
-                **kwargs,
-            )
-        sent_id: int = sent.id
-        return sent_id
+        claw, thread = where.claw, discord.Object(where.thread_id)
+
+        async def post(hook: discord.Webhook) -> int:
+            with _gone():
+                sent = await hook.send(
+                    text, username=claw, thread=thread, wait=True, **kwargs
+                )
+            sent_id: int = sent.id
+            return sent_id
+
+        hook = self.webhooks[claw]
+        try:
+            return await post(hook)
+        except discord.NotFound as e:
+            if e.code != UNKNOWN_WEBHOOK:
+                raise
+        hook = await self._renew_webhook(claw, hook)
+        if file is not None:
+            file.reset()  # the first attempt read it
+        return await post(hook)
 
     async def edit(
         self,
@@ -370,13 +396,21 @@ class DiscordTransport:
             await partial.edit(content=text, **kwargs)
             return
         assert where.thread_id is not None
-        with _gone():
-            await self.webhooks[where.claw].edit_message(
-                message_id,
-                content=text,
-                thread=discord.Object(where.thread_id),
-                **kwargs,
-            )
+        hook = self.webhooks[where.claw]
+        try:
+            with _gone():
+                await hook.edit_message(
+                    message_id,
+                    content=text,
+                    thread=discord.Object(where.thread_id),
+                    **kwargs,
+                )
+        except discord.NotFound as e:
+            if e.code != UNKNOWN_WEBHOOK:
+                raise
+            await self._renew_webhook(where.claw, hook)
+            # Only the webhook that posted a message can edit it.
+            raise transport.MessageGone(str(e)) from e
 
     async def react(
         self, where: transport.Where, message_id: int, emoji: str
