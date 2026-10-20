@@ -14,6 +14,7 @@ import json
 import pathlib
 import re
 import subprocess
+import time
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
@@ -35,6 +36,9 @@ LOG_LINE = re.compile(
 )
 PID = re.compile(r'\(\d+\)')
 SAMPLE_CHARS = 160
+STALE_WORKTREE_DAYS = 14
+# A per-task unit's session id, which names its worktrees.
+TASK_SESSION = re.compile(r'-task-(\d+)$')
 
 
 @dataclasses.dataclass(frozen=True)
@@ -271,6 +275,53 @@ def _tasks() -> Section:
     )
 
 
+def _last_used(worktree: pathlib.Path) -> float:
+    """When git last touched the worktree: its index, else the dir."""
+    times = [worktree.stat().st_mtime]
+    dot_git = worktree / '.git'
+    if dot_git.is_file():
+        admin = pathlib.Path(
+            dot_git.read_text().removeprefix('gitdir:').strip()
+        )
+        times.extend(
+            p.stat().st_mtime
+            for p in (admin / 'index', admin / 'HEAD')
+            if p.exists()
+        )
+    return max(times)
+
+
+def _task_open(session: str) -> bool:
+    match = TASK_SESSION.search(session)
+    if match is None:
+        return False
+    try:
+        store.shown(f'{store.NAMESPACE}:{match[1]}')
+    except store.TaskError:
+        return False
+    return True
+
+
+def _worktrees(root: pathlib.Path, claw_dirs: list[pathlib.Path]) -> Section:
+    """Worktrees left behind: long unused, and no open task needs them."""
+    cutoff = time.time() - STALE_WORKTREE_DAYS * 86_400
+    lines = []
+    for claw_dir in claw_dirs:
+        for worktree in sorted(claw_dir.glob('worktrees/*/*/*')):
+            if not worktree.is_dir() or _task_open(worktree.name):
+                continue
+            used = _last_used(worktree)
+            if used < cutoff:
+                day = datetime.date.fromtimestamp(used).isoformat()
+                lines.append(
+                    f'- {worktree.relative_to(root)}: unused since {day},'
+                    ' and no open task'
+                )
+    return Section(
+        'Stale worktrees', lines, 2_000, f'ls -d {root}/*/worktrees/*/*/*'
+    )
+
+
 def _gateway_log(root: pathlib.Path, since: float) -> Section:
     logs = sorted(
         (root / '_gateway').glob('gateway.log*'),
@@ -329,6 +380,7 @@ def collect(claw: 'config.Claw', work_key: str) -> base.Collection:
         _errors(calls),
         _memory(root, claw_dirs, calls, since),
         _tasks(),
+        _worktrees(root, claw_dirs),
         _gateway_log(root, since),
     )
     began = window.isoformat(timespec='seconds') if since else 'the beginning'

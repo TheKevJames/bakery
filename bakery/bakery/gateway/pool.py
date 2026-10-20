@@ -119,6 +119,8 @@ def child_env(claw: config.Claw, sid: str) -> dict[str, str]:
             'PI_CODING_AGENT_DIR': str(claw.profile),
             'PI_CODING_AGENT_STATE_DIR': str(claw.pi_state_dir),
             'BAKERY_MEMORY_DIR': str(claw.state_dir),
+            # Names the unit's worktrees (pi/claw-rules/repos.md).
+            'BAKERY_SESSION_ID': sid,
             'BAKERY_SHARED_DIR': str(state.root() / state.SHARED),
             'BAKERY_MEMORY_MAX_CHARS': str(claw.memory.max_chars),
             'BAKERY_FLUSH_MARGIN_TOKENS': str(claw.memory.flush_margin_tokens),

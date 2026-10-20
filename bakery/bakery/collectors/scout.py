@@ -298,9 +298,9 @@ def _issues(
 def _fetch(repo: scout_repos.Repo, branch: str, token: str) -> str:
     """
     Fetch the default branch into scout's clone; returns its ref. The clone is
-    the one pi/claw-rules/repos.md has scout's model use, so it is an ordinary
-    clone with `origin` and `origin/HEAD`, and only refs are read from it: the
-    model may have its own checkout and worktrees there.
+    the one pi/claw-rules/repos.md has scout's model use, so it is made the
+    same way, bare with `origin` and `origin/HEAD`, and only refs are read
+    from it: the model may have its own worktrees of it.
     """
     basic = base64.b64encode(f'x-access-token:{token}'.encode()).decode()
     # Configured through the environment so the token never shows in `ps`.
@@ -310,15 +310,14 @@ def _fetch(repo: scout_repos.Repo, branch: str, token: str) -> str:
         'GIT_CONFIG_VALUE_0': f'Authorization: Basic {basic}',
         'GIT_TERMINAL_PROMPT': '0',
     }
-    if not (repo.clone / '.git').exists():
+    if not repo.clone.exists():
         subprocess.run(
-            ('git', 'clone', '--quiet', '--no-checkout', repo.remote,
-             str(repo.clone)),
+            ('git', 'init', '--quiet', '--bare', str(repo.clone)),
             capture_output=True,
             text=True,
             check=True,
-            env=env,
-        )  # fmt: skip
+        )
+        scout_repos.git(repo, 'remote', 'add', 'origin', repo.remote)
     ref = f'refs/remotes/origin/{branch}'
     scout_repos.git(
         repo,

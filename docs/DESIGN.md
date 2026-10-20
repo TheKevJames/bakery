@@ -9,7 +9,7 @@ daemon and controlled over Discord. Its terms are defined in
 
 | Path | Contents |
 | --- | --- |
-| `pi/` | Shared pi resources: `extensions/`, `claw-extensions/` (claws only: `policy/`, `memory/`, `ask-operator.ts`), `claw-sandbox/` (the claws' sandbox launcher), `claw-prompts/` (claws only, eg. `/dream`), `skills/` (incl. vendored), `prompts/`, `agents/`, `rules/` (instruction fragments). |
+| `pi/` | Shared pi resources: `extensions/`, `claw-extensions/` (claws only: `policy/`, `memory/`, `ask-operator.ts`), `claw-sandbox/` (the claws' sandbox launcher), `claw-git-hooks/` (the claws' git hooks), `claw-prompts/` (claws only, eg. `/dream`), `skills/` (incl. vendored), `prompts/`, `agents/`, `rules/` (instruction fragments). |
 | `interactive/` | The interactive profile; used directly as `PI_CODING_AGENT_DIR`. |
 | `claws/<name>/` | One profile per claw: `claw.toml`, `context.toml`, `settings.json`, `SOUL.md`, `IDENTITY.md`, `AGENTS.md`. |
 | `bakery/` | Python project: the `bakery` CLI, the gateway, and collectors. |
@@ -58,7 +58,8 @@ $XDG_STATE_HOME/claws/
     ├── MEMORY.md            # curated long-term memory
     ├── memory/YYYY-MM-DD.md # daily notes (kept forever)
     ├── sessions/            # gitignored: pi session transcripts
-    ├── clones/              # gitignored: the claw's clones, as <owner>/<repo>
+    ├── clones/              # gitignored: the claw's bare clones, as <owner>/<repo>.git
+    ├── worktrees/           # gitignored: its units' worktrees, as <owner>/<repo>/<session id>
     ├── home/                # gitignored: the claw's XDG config, cache, and data
     └── tmp/                 # gitignored: its pi children's $TMPDIRs
 ```
@@ -594,20 +595,30 @@ Enforcement:
 2. **Secrets** reach pi's environment; bash only gets a claw's
    `bash_secrets` (default `GH_TOKEN`). That is hygiene, not a boundary:
    bash shares pi's sandbox and could read pi's environment.
-3. **Repositories and pushing.** Claws read and change repos only in their
-   own clones, `<state>/clones/<owner>/<repo>`, cloned from GitHub, fetched
-   and checked out at `origin/HEAD` before every use, with a `git worktree`
-   per piece of work (`pi/claw-rules/repos.md`, in every claw's context).
-   That includes bakery, whose checkout pi runs from may hold
-   the operator's unmerged work. It commits on `kjames/bakery-*` branches, pushes over HTTPS, and
-   opens PRs with `gh`; the operator reviews and merges. The gateway writes
-   the claw's git config (`<state>/home/config/git/config`, its `GIT_CONFIG_GLOBAL`, so git never
+3. **Repositories and pushing.** Claws read repos only in their own
+   clones, `<state>/clones/<owner>/<repo>.git`: bare, cloned from GitHub,
+   and fetched before every use, so `origin/HEAD` is what GitHub has. They
+   read them in place (`git show`, `git grep`) or check files out, and
+   change them, only in a worktree per repo and unit of work,
+   `<state>/worktrees/<owner>/<repo>/<session id>` (`$BAKERY_SESSION_ID`),
+   removed once done with (`pi/claw-rules/repos.md`, in every claw's
+   context). That includes bakery, whose checkout pi runs from may hold
+   the operator's unmerged work. They commit on `kjames/bakery-*` branches,
+   push over HTTPS, and open PRs with `gh`; the operator reviews and
+   merges. The gateway writes the claw's git config
+   (`<state>/home/config/git/config`, its `GIT_CONFIG_GLOBAL`, so git never
    trips on an unreadable `~/.gitconfig`) at every start: the claws' GitHub
-   user's identity (`[git]`), no signing, no hook templates (the
-   sandbox refuses writes to any `.git/hooks`, but allows `.git/config` in
-   the claw's own clones), and `gh` as the only credential helper, answering
-   with `GH_TOKEN`. GitHub's rulesets, not the claw, keep pushes off the
-   operator's default branches.
+   user's identity (`[git]`), no signing, no hook templates (the sandbox
+   refuses writes to any `.git/hooks`, but allows `.git/config` in the
+   claw's own clones), `gh` as the only credential helper, answering with
+   `GH_TOKEN`, and `core.hooksPath` pointing at `pi/claw-git-hooks/`. Its
+   `pre-commit` and `pre-push` refuse to run anywhere but a worktree under
+   `<state>/worktrees/`, and `pre-push` refuses any ref but a
+   `kjames/bakery-*` branch, tags included. Like the rest of the claw's
+   instructions, they hold only as long as bash goes along (eg. no
+   `--no-verify`, or a `core.hooksPath` of its own); GitHub's rulesets, not
+   the claw, keep pushes off the operator's default branches. Baker's
+   digest lists worktrees unused for 14 days whose unit has no open task.
 
 An extension that fails while pi starts (eg. a bad policy or `context.toml`)
 fails the run before the model is called.
@@ -771,9 +782,9 @@ Finds things in the operator's repos that belong on the task list. Profile:
   collaborator`): inviting it is how a repo is added, so the public
   `TheKevJames` repos with rulesets, and no private ones. `scout.toml`
   holds per-repo `exclude` globs by name, and `ignore_ci_lines`. The
-  collector keeps scout's own clone of each, in scout's `clones/`: an
-  ordinary clone, as `pi/claw-rules/repos.md` has the model use, from which
-  the collector only reads refs:
+  collector keeps scout's own clone of each, in scout's `clones/`: a bare
+  clone, made as `pi/claw-rules/repos.md` has the model make one, from
+  which the collector only reads refs:
   - **CI**: the latest completed default-branch run of each workflow failed
     (Dependabot's own update jobs excluded). Link: the first failed run of
     the current failure streak, so a fresh failure after a fix is new.
@@ -937,6 +948,7 @@ Reviews how the claws learn and files a task for each gap. Profile:
   - memory sizes, `memory_append` sources, and the state-repo commits that
     changed `MEMORY.md` or `_shared`;
   - baker's own tasks, and rejections of its links;
+  - worktrees unused for 14 days whose unit has no open task;
   - gateway warnings and errors.
 
   Sections are capped (about 38k characters in all) and say how to read

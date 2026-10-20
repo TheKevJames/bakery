@@ -77,6 +77,10 @@ def git_config(claw: config.Claw) -> pathlib.Path:
     return home(claw) / 'config' / 'git' / 'config'
 
 
+def git_hooks() -> pathlib.Path:
+    return paths.repo() / 'pi' / 'claw-git-hooks'
+
+
 def prepare(claw: config.Claw) -> None:
     """
     What a claw's pi child needs before it starts: its dirs, and its git
@@ -94,9 +98,12 @@ def prepare(claw: config.Claw) -> None:
         f'\temail = {claw.git.user_email}\n'
         '[commit]\n'
         '\tgpgsign = false\n'
-        # The sandbox refuses writes to any .git/hooks, so clones get none.
+        # The sandbox refuses writes to any .git/hooks, so clones get none
+        # of their own; these keep the claw's changes in its worktrees.
         '[init]\n'
         '\ttemplateDir =\n'
+        '[core]\n'
+        f'\thooksPath = {git_hooks()}\n'
         # gh answers with $GH_TOKEN, the claws' GitHub user's token; there
         # is nothing to store (or erase) it in.
         '[credential]\n'

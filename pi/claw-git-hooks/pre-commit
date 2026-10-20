@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shellcheck source-path=SCRIPTDIR source=worktree.sh
+source "$(dirname "$0")/worktree.sh"
+
+require_worktree

@@ -110,14 +110,14 @@ def _accessible(gh: github.GitHub) -> list[dict[str, Any]]:
 def repos(
     gh: github.GitHub, settings: Settings, clones: pathlib.Path
 ) -> list[Repo]:
-    """Every reachable repo, cloned (if at all) at <clones>/<owner>/<name>."""
+    """Every reachable repo; clones live at <clones>/<owner>/<name>.git."""
     found = []
     for meta in sorted(_accessible(gh), key=operator.itemgetter('full_name')):
         name = meta['full_name']
         found.append(
             Repo(
                 name=name,
-                clone=clones / name,
+                clone=clones / f'{name}.git',
                 exclude=settings.excludes.get(name, ()),
                 remote=f'{settings.git_url}/{name}.git',
             )
