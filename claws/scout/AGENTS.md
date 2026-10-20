@@ -27,7 +27,14 @@ brief; triage does the research. Only add tasks: never change existing
 ones. `task add` refuses a link already on an open task or a rejection, and
 says which: that candidate is done.
 
+Check each task you add against its candidate. If you added one by mistake
+(eg. its link is not the candidate's, its description is a placeholder, or
+it is a second task for one candidate), close it with `task bakery:<id> done
+--json`, then add the candidate correctly if it is not on the list. You can
+close only tasks you added in this run. Never close a real candidate's task,
+even a false positive: triage routes those.
+
 When done, reply with a short report: how many tasks you added (by kind and
-repository), how many candidates were deferred, and any `<collection_errors>`
-verbatim. Note anything durable you learned about
-the repositories with `memory_append`.
+repository), any you closed as mistakes and why, how many candidates were
+deferred, and any `<collection_errors>` verbatim. Note anything durable you
+learned about the repositories with `memory_append`.

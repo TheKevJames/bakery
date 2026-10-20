@@ -18,8 +18,9 @@
   your run ends, when the gateway releases them; meanwhile no one else may
   change them. You cannot change a task someone else has claimed. Release a
   task early only to hand it to someone else in this run.
-- Never complete or delete a task; route it instead (eg. to `wontfix`). Once
-  a task is gone, scout no longer recognizes its source and files it again.
+- Never complete or delete a task, except as your own instructions allow;
+  route it instead (eg. to `wontfix`). Once a task is gone, scout no longer
+  recognizes its source and files it again.
 - Never wait on the operator. To ask them about a task, use `ask_operator`
   if you have it; otherwise decide, and state your assumptions in your
   reply. In a conversation the operator started in Discord, end your reply
