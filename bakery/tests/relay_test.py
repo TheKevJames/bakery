@@ -221,9 +221,7 @@ def test_parked_runs_resume_from_their_button(
     claws = testing_gateway.make_claws(
         root, {'build': '[limits]\nturns = 1\n'}
     )
-    fake_llm.queue(
-        harness.call('bash', command='true'), harness.Reply(text='resumed')
-    )
+    fake_llm.queue(harness.call('bash', command='true'))
 
     async def scenario(
         gateway: core.Gateway, bot: relay.Relay, fake: chat.FakeTransport
@@ -234,6 +232,9 @@ def test_parked_runs_resume_from_their_button(
         parked = await fake.message(thread, f'<@{chat.OPERATOR}> {key} parked')
         assert 'turn limit reached (1)' in parked.text
         resume = parked.button('Resume').custom_id
+        # pi may start its next turn before the limit's abort lands, so the
+        # resumed run's reply is only queued once the first has finished.
+        fake_llm.queue(harness.Reply(text='resumed'))
 
         refused = await bot.on_component(chat.STRANGER, resume)
         assert refused == relay.NOT_OPERATOR
