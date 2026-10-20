@@ -23,6 +23,11 @@ operator_id = 523678345662300161   # the only user the bot acts on
 # only new links, and moving a task to human only asking the operator
 # something.
 
+# What a task needs to be in a section, whichever claw puts it there, and
+# keeps while it is: build picks its tasks by priority.
+[tasks.sections.bakery.build]
+require = ["priority", "size"]
+
 [tasks.scout.create]
 namespaces = ["bakery"]
 tags = ["triage"]

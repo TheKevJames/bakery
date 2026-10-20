@@ -75,6 +75,8 @@ def test_works_through_the_queue_one_task_per_unit(
     del tasks
     testing_tasks.task('add', 'handed over by the operator', '-n', 'bakery')
     fake_llm.queue(
+        # Build picks tasks by priority, so none enters it without one.
+        task('bakery:1', 'set', '--tag', 'build'),
         task('bakery:1', 'set', '--priority', 'high', '--size', 'small',
              '--comment', 'notes'),
         task('bakery:1', 'set', '--tag', 'build'),
@@ -125,7 +127,11 @@ def test_works_through_the_queue_one_task_per_unit(
         testing_tasks.show('1')['tag'],
         testing_tasks.show('1')['claim'],
     ) == ('dev', None)
-    assert len(fake_llm.requests) == 5
+    assert len(fake_llm.requests) == 6
+    assert (
+        'bakery:1 needs its priority and size in bakery > build'
+        in fake_llm.tool_results(3)[0]
+    )
 
 
 def test_a_task_left_waiting_is_not_repeated(

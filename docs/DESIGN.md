@@ -678,7 +678,9 @@ Each claw's rules are its `[tasks.<claw>]` table in `claws/gateway.toml`,
 in task's format: the namespaces and tags it may create tasks in (and the
 fields they need, and may have), the tasks it may claim, and what it may
 change on a task it holds. Whatever no rule grants is denied: no claw may
-write outside `bakery`, or delete a task. Only scout may complete one, and
+write outside `bakery`, or delete a task. Its `[tasks.sections]` table holds
+every claw alike to what a section requires: a task enters `bakery > build`
+only with its `priority` and `size`, and keeps them while it is there. Only scout may complete one, and
 only what it holds: having no claim rule, that is the tasks it added in the
 same run, so it can undo its own mistakes. Bakery's own checks
 (`bakery/bakery/task_list/hooks.py`) refuse a task with a tracked link (see
@@ -710,8 +712,8 @@ Tags here are sections of the `bakery` namespace.
    their own (`task <id> set -n bakery --tag triage`), usually without a
    `link`.
 2. `triage` gets those (lowest id first, claimed for it), researches,
-   comments its notes, sets `priority` and `size`, then re-tags to `build`
-   or `wontfix`, blocks it in `triage` on what it waits on, marks it a
+   comments its notes, sets `priority` and `size` (required for `build`,
+   expected for `human`), then re-tags to `build` or `wontfix`, blocks it in `triage` on what it waits on, marks it a
    duplicate, or puts its questions to the operator with `ask_operator`,
    which moves it to `human`.
 3. The operator answers a `human` task's questions (`--answer "Q1: ..."`)
@@ -845,9 +847,9 @@ Profile: `claws/triage/`. Sonnet, high thinking, $3 per task (and per
   (route and reason, the reason for its priority, source check, code
   locations,
   hypothesis, the duplicate search and its result (required on every
-  task), approach, acceptance criteria, open questions), always set
-  `priority` (by a rubric of examples per level) and `size`, then
-  re-tag:
+  task), approach, acceptance criteria, open questions), set `priority`
+  (by a rubric of examples per level) and `size` for `build`, which `task`
+  requires, and `human`, then re-tag:
   - `bakery > build`: a TheKevJames repo the claws can push to, clear
     scope, checkable by tests, lint, or CI;
   - `bakery > human`: needs a decision on this task, reproduction,
