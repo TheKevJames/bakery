@@ -7,7 +7,7 @@ dependencies = [
     "croniter==6.2.4",
     "discord.py==2.7.1",
     "pygments==2.21.0",
-    "task @ git+https://github.com/TheKevJames/task@826363a1b01158ca2803726fefdfdb3c4c6469cb",
+    "task @ git+https://github.com/TheKevJames/task@9.0.0rc2",
 ]
 
 [project.scripts]
