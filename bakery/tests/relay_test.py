@@ -196,7 +196,12 @@ def test_ask_operator_hands_the_task_over_without_a_mention(
         await fake.until(lambda: fake.threads)
         thread = fake.thread_named(key)
         status = await fake.message(thread, '✅')
-        assert 'settled - asked the operator on bakery:1' in status.text
+        # Had the tool failed, the run went on, and its error is the result
+        # the model saw next.
+        assert 'settled - asked the operator on bakery:1' in status.text, (
+            status.text,
+            fake_llm.tool_results(),
+        )
         reply = await fake.message(thread, '→ bakery:1 waits on the operator.')
         print(reply.text)
         assert 'Q1. Which repo?\n   **Context:** Two match.\n' in reply.text
