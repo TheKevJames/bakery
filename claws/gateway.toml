@@ -16,10 +16,12 @@ operator_id = 523678345662300161   # the only user the bot acts on
 # source would be filed again) but for scout's own mistakes. Each claim
 # belongs to one run, and ends with it.
 # Saying something on a task (comments, and questions to the operator) needs
-# no claim; only the operator answers questions.
+# no claim; only the operator answers questions. What `task` does to a task
+# once what it waits on clears (back to triage, or gone if a duplicate) is no
+# claw's to be granted.
 # bakery/bakery/task_list/hooks.py adds checks rules cannot express: filing
-# only new links, blocking only on valid blockers, and moving a task to human
-# only asking the operator something.
+# only new links, and moving a task to human only asking the operator
+# something.
 
 [tasks.scout.create]
 namespaces = ["bakery"]
@@ -32,24 +34,25 @@ require = ["description", "link"]
 [tasks.scout.change]
 done = true
 
+# Blocked tasks stay in triage, hidden until what they wait on clears.
 [tasks.triage.create]
 namespaces = ["bakery"]
-tags = ["build", "blocked", "human", "triage", "wontfix"]
+tags = ["build", "human", "triage", "wontfix"]
 require = ["description"]
-fields = ["priority", "size"]
+fields = ["blocked_by", "duplicate_of", "priority", "size"]
 
 [tasks.triage.claim]
 namespaces = ["bakery"]
-tags = ["blocked", "triage"]
+tags = ["triage"]
 
 [tasks.triage.change]
-fields = ["priority", "size"]
-tags = ["build", "blocked", "human", "triage", "wontfix"]
+fields = ["blocked_by", "duplicate_of", "priority", "size"]
+tags = ["build", "human", "triage", "wontfix"]
 
 # Its notes on what it triages.
 [tasks.triage.comment]
 namespaces = ["bakery"]
-tags = ["build", "blocked", "human", "triage", "wontfix"]
+tags = ["build", "human", "triage", "wontfix"]
 
 [tasks.triage.question]
 namespaces = ["bakery"]

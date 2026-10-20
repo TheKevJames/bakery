@@ -1,16 +1,17 @@
 """
-The triage collectors: tasks waiting for triage, and blocked tasks.
+The triage collectors: tasks waiting for triage, and tasks waiting on
+something outside the task list.
 
 `collect` (the `queue` job) hands over the next task waiting for triage: the
 lowest-numbered unclaimed task tagged `triage` in the claws' namespace,
-ignoring scheduled (recurring) ones. Each task is its own unit of work,
-`triage/task-<id>`, so its thread and session last as long as the task.
+ignoring blocked and scheduled (recurring) ones. Each task is its own unit
+of work, `triage/task-<id>`, so its thread and session last as long as the
+task. `task` itself sends a blocked task back to triage once all it waits on
+has cleared.
 
-`unblock` and `recheck` hand over the namespace's unclaimed `blocked` tasks
-(see `blocked`), all in one run: `unblock` those whose blockers are all tasks
-and have all cleared, `recheck` those whose task blockers have cleared but
-which also wait on something external, grouped by URL so each is checked
-once.
+`recheck` hands over, in one run, the namespace's unclaimed tasks with
+external blockers, which only an actor can clear, grouped by URL so each is
+checked once.
 
 Each claims what it hands over, as the unit it hands it to, before the run
 starts; the gateway releases it when the run ends.
@@ -23,7 +24,6 @@ from typing import TYPE_CHECKING
 
 from task import query
 
-from ..task_list import blocked
 from ..task_list import claims
 from ..task_list import store
 from . import base
@@ -40,7 +40,7 @@ UNTRUSTED = (
 def waiting() -> list[dict[str, object]]:
     # TODO: hand a scheduled task over once it is due, rather than never.
     return store.listed(
-        f'namespace={store.NAMESPACE},tag=triage,claim=,next=',
+        f'namespace={store.NAMESPACE},tag=triage,blocked=no,claim=,next=',
         query.SortOrder.ident,
     )
 
@@ -69,81 +69,50 @@ def collect(claw: 'config.Claw', work_key: str) -> base.Collection:
 
 
 @dataclasses.dataclass(frozen=True)
-class Blocked:
+class Waiting:
+    """A task in the claws' namespace waiting on something external."""
+
     ident: int
     summary: str
-    on_tasks: tuple[blocked.TaskBlocker, ...]
-    external: tuple[blocked.ExternalBlocker, ...]
+    # Its conditions, by URL.
+    conditions: dict[str, str]
 
     def label(self) -> str:
         return f'#{store.NAMESPACE}:{self.ident} {json.dumps(self.summary)}'
 
 
-def _blocked() -> tuple[list[Blocked], list[str]]:
-    """Blocked tasks whose task blockers have all cleared, and problems."""
-    board = blocked.Board.load()
-    ready: list[Blocked] = []
-    errors: list[str] = []
+def _waiting_outside() -> list[Waiting]:
+    found: list[Waiting] = []
     for task in store.listed(
-        f'namespace={store.NAMESPACE},tag={blocked.TAG},claim='
+        f'namespace={store.NAMESPACE},blocked=yes,claim='
     ):
-        ident = int(str(task['id']))
-        try:
-            blockers = blocked.parse(store.notes(task))
-            on_tasks = tuple(
-                b for b in blockers if isinstance(b, blocked.TaskBlocker)
+        blockers = task['blocked_by']
+        assert isinstance(blockers, list)
+        conditions = {
+            str(b['url']): str(b['condition'])
+            for b in blockers
+            if b['kind'] == 'external'
+        }
+        if conditions:
+            found.append(
+                Waiting(int(str(task['id'])), str(task['summary']), conditions)
             )
-            if not all(board.cleared(b) for b in on_tasks):
-                continue
-        except blocked.BlockerError as e:
-            errors.append(f'{blocked.TAG} #{store.ref(task)}: {e}')
-            continue
-        external = tuple(
-            b for b in blockers if isinstance(b, blocked.ExternalBlocker)
-        )
-        ready.append(Blocked(ident, str(task['summary']), on_tasks, external))
-    return ready, errors
-
-
-def _claim(
-    claw: 'config.Claw', work_key: str, tasks: list[Blocked]
-) -> list[Blocked]:
-    """Those of `tasks` the run `work_key` now holds; others are taken."""
-    return [
-        t
-        for t in tasks
-        if claims.claim(claw.rules, work_key, f'{store.NAMESPACE}:{t.ident}')
-        is not None
-    ]
-
-
-def unblock(claw: 'config.Claw', work_key: str) -> base.Collection:
-    ready = _claim(
-        claw, work_key, [t for t in _blocked()[0] if not t.external]
-    )
-    if not ready:
-        return base.Collection(None)
-    lines = [
-        f'- {t.label()}: cleared ' + ', '.join(str(b) for b in t.on_tasks)
-        for t in ready
-    ]
-    text = '\n'.join(
-        (f'<unblocked tasks="{len(ready)}">', UNTRUSTED, *lines)
-        + ('</unblocked>',)
-    )
-    return base.Collection(text)
+    return found
 
 
 def recheck(claw: 'config.Claw', work_key: str) -> base.Collection:
-    """Also reports blocked tasks it cannot read (the operator moves some)."""
-    found, errors = _blocked()
-    ready = _claim(claw, work_key, [t for t in found if t.external])
+    ready = [
+        t
+        for t in _waiting_outside()
+        if claims.claim(claw.rules, work_key, f'{store.NAMESPACE}:{t.ident}')
+        is not None
+    ]
     if not ready:
-        return base.Collection(None, tuple(errors))
+        return base.Collection(None)
     by_url: dict[str, list[str]] = collections.defaultdict(list)
     for task in ready:
-        for b in task.external:
-            by_url[b.url].append(f'- {task.label()}: {b.condition}')
+        for url, condition in task.conditions.items():
+            by_url[url].append(f'- {task.label()}: {condition}')
     lines = [
         line
         for url, entries in by_url.items()
@@ -154,4 +123,4 @@ def recheck(claw: 'config.Claw', work_key: str) -> base.Collection:
         + tuple(lines)
         + ('</blocked>',)
     )
-    return base.Collection(text, tuple(errors))
+    return base.Collection(text)

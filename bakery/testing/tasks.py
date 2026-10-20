@@ -35,3 +35,10 @@ def said(address: str) -> list[str]:
     comments = show(address)['comments']
     assert isinstance(comments, list)
     return [str(comment['body']) for comment in comments]
+
+
+def blocked_by(address: str) -> list[str]:
+    """What a task waits on: tasks by address, and conditions by URL."""
+    blockers = show(address)['blocked_by']
+    assert isinstance(blockers, list)
+    return [str(b.get('task') or b['url']) for b in blockers]

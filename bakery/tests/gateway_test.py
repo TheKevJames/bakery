@@ -6,7 +6,7 @@ import threading
 import pytest
 from task import actors
 from task import ops
-from task import schema
+from task import refs
 
 from bakery.gateway import channel
 from bakery.gateway import control
@@ -274,7 +274,7 @@ def test_claims_do_not_outlive_runs(
     testing_tasks.task('add', 'stranded', '-n', 'bakery', '--tag', 'triage')
     # Left behind by a run the gateway never saw finish (eg. a crash).
     ops.Writer(actors.Actor.agent('triage/old')).claim(
-        schema.Ref.parse('bakery:1')
+        refs.Ref.parse('bakery:1')
     )
     testing_tasks.task('add', 'next', '-n', 'bakery', '--tag', 'triage')
     testing_tasks.task('add', 'theirs', '-n', 'bakery', '--tag', 'triage')

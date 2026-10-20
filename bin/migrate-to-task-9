@@ -1,0 +1,193 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["task @ git+https://github.com/TheKevJames/task@9.0.0"]
+# ///
+"""
+Move the claws' task notes onto task 9's own questions and relations, once.
+
+1. Each `bakery > human` task asking nothing as task questions asks what its
+   notes do: each item of its last `## Questions` section, else its last
+   `**Open questions:**` line. Asked as `automatic-migration`, so it waits
+   on the operator's answers, as tasks routed to human since do.
+2. Each `bakery > blocked` task's last `**Blocked on:**` list becomes its
+   blockers, and it moves to `bakery > triage`, hidden until they clear.
+   Blockers which have already cleared are dropped, saying so in a comment;
+   a task left with none is simply back in triage, to be re-routed.
+
+Run as the operator, with the gateway stopped so no claw holds a task:
+
+    TASK_FOLDER=... bin/migrate-to-task-9 [--dry-run]
+"""
+
+import argparse
+import re
+import sys
+import textwrap
+
+from task import actors
+from task import db
+from task import errors
+from task import ops
+from task import query
+from task import refs
+from task import schema
+
+NAMESPACE = 'bakery'
+ASKER = ops.Writer(actors.Actor.agent('automatic-migration'))
+OPERATOR = ops.Writer(actors.OPERATOR_ACTOR)
+BLOCKED_ON = '**Blocked on:**'
+TASK_RE = re.compile(
+    rf'#(?P<ref>{refs.REF_RE.pattern}) (?P<until>decided|done)'
+)
+EXTERNAL_RE = re.compile(r'(?P<url>https?://\S+): (?P<condition>\S.*)')
+QUESTIONS_RE = re.compile(r'^## Questions\b.*$', re.MULTILINE)
+ITEM_RE = re.compile(r'^\d+\. ', re.MULTILINE)
+OPEN_RE = re.compile(r'^\*\*Open questions:\*\*(.*)$', re.MULTILINE)
+NONE_RE = re.compile(r'none\b', re.IGNORECASE)
+
+
+def notes(task: schema.Task) -> str:
+    said = [entry.body for entry in task.conversation.entries]
+    return '\n\n'.join(filter(None, [task.description, *said]))
+
+
+def listed(filter_: str) -> list[schema.Task]:
+    clauses = query.compile_(
+        f'namespace={NAMESPACE},blocked=any,{filter_}',
+        -1,
+        -1,
+        query.SortOrder.ident,
+    )
+    with db.connect() as store:
+        return db.select(store, *clauses)
+
+
+def questions(text: str) -> list[str]:
+    """What `text`, a task's notes, last asks the operator."""
+    if sections := list(QUESTIONS_RE.finditer(text)):
+        section = text[sections[-1].end() :]
+        section = section.split('\n## ', 1)[0]
+        items = ITEM_RE.split(section)[1:]
+        return [textwrap.dedent(f'   {item}').strip() for item in items]
+    if lines := OPEN_RE.findall(text):
+        line = lines[-1].strip()
+        return [] if not line or NONE_RE.match(line) else [line]
+    return []
+
+
+def ask(dry_run: bool) -> set[refs.Ref]:
+    """Ask what human tasks' notes ask; the tasks now asking."""
+    asking: set[refs.Ref] = set()
+    for task in listed('tag=human,questions!=open'):
+        if task.conversation.questions:
+            continue
+        asked = questions(notes(task))
+        if not asked:
+            print(f'{task.ref}: asks nothing', file=sys.stderr)
+            continue
+
+        def edit(changed: schema.Task, asked: list[str] = asked) -> schema.Task:
+            changed.converse(ASKER.actor, questions=asked)
+            return changed
+
+        if not dry_run:
+            ASKER.change(ops.Verb.set, task.ref, edit)
+        asking.add(task.ref)
+        print(f'{task.ref}: asks {len(asked)}')
+    return asking
+
+
+def entries(text: str) -> list[str]:
+    """The last `**Blocked on:**` list in `text`; [] if it has none."""
+    lines = text.splitlines()
+    starts = [i for i, line in enumerate(lines) if line.strip() == BLOCKED_ON]
+    if not starts:
+        return []
+    found: list[str] = []
+    for line in lines[starts[-1] + 1 :]:
+        if not line.strip() and not found:
+            continue
+        if not line.startswith('- '):
+            break
+        found.append(line[2:].strip())
+    return found
+
+
+def blocker(
+    store: db.Store, entry: str, undecided: set[refs.Ref]
+) -> tuple[str | None, str]:
+    """
+    `entry` as a `--blocked-by`, or None and why it is dropped. Tasks
+    `undecided` are, whatever their tags say before this script is done.
+    """
+    if match := EXTERNAL_RE.fullmatch(entry):
+        return f'{match["url"]}: {match["condition"]}', ''
+    match = TASK_RE.fullmatch(entry)
+    if not match:
+        return None, f'{entry} (malformed)'
+    ref = refs.Ref.parse(match['ref'])
+    try:
+        target = db.get(store, ref)
+    except errors.TaskError:
+        return None, f'{entry} (done)'
+    if match['until'] == 'done':
+        return str(ref), ''
+    if target.decided and ref not in undecided:
+        return None, f'{entry} (decided)'
+    return f'{ref}:decided', ''
+
+
+def unblock(
+    task: schema.Task, undecided: set[refs.Ref], dry_run: bool
+) -> str:
+    with db.connect() as store:
+        found = [
+            blocker(store, entry, undecided)
+            for entry in entries(notes(task))
+        ]
+    kept = [value for value, _ in found if value]
+    dropped = [why for value, why in found if not value]
+
+    def edit(changed: schema.Task) -> schema.Task:
+        changed.relate(OPERATOR.actor, blocked_by=kept)
+        changed.update(tag=schema.TRIAGE)
+        if dropped:
+            changed.converse(
+                OPERATOR.actor,
+                comments=['Already cleared: ' + ', '.join(dropped)],
+            )
+        return changed
+
+    if not dry_run:
+        OPERATOR.change(ops.Verb.set, task.ref, edit)
+    return f'{task.ref}: blocked by {kept or "nothing"}, dropped {dropped}'
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
+    parser.add_argument('--dry-run', action='store_true')
+    args = parser.parse_args()
+    asking = ask(args.dry_run)
+    tasks = listed('tag=blocked')
+    # Blocked tasks land in triage, so are not decided either: what others
+    # wait on being decided moves first, as in `blocked` it reads as decided.
+    undecided = asking | {task.ref for task in tasks}
+    awaited = {
+        refs.Ref.parse(match['ref'])
+        for task in tasks
+        for entry in entries(notes(task))
+        if (match := TASK_RE.fullmatch(entry))
+    }
+    failed = False
+    for task in sorted(tasks, key=lambda t: t.ref not in awaited):
+        try:
+            print(unblock(task, undecided, args.dry_run))
+        except errors.TaskError as e:
+            print(f'{task.ref}: {e}', file=sys.stderr)
+            failed = True
+    return int(failed)
+
+
+if __name__ == '__main__':
+    sys.exit(main())

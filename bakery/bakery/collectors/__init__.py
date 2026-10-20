@@ -33,7 +33,6 @@ COLLECTORS: dict[str, Collector] = {
     'scout': scout.collect,
     'triage': triage.collect,
     'triage-recheck': triage.recheck,
-    'triage-unblock': triage.unblock,
 }
 
 CHECKS: dict[str, Check] = {'scout': scout_repos.check}
