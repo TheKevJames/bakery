@@ -8,6 +8,8 @@ unit's claims whenever its run ends, however it ends, and every claw's when
 the gateway starts, in case it stopped without doing so.
 """
 
+from collections.abc import Callable
+
 from task import api
 
 from . import hooks
@@ -32,6 +34,23 @@ def claim(
         return writer(claw_rules, work_key).claim(api.Ref.parse(address))
     except api.TaskError:
         return None
+
+
+def claim_first(
+    claw_rules: api.Rules,
+    tasks: list[api.Task],
+    unit: Callable[[api.Task], str],
+) -> tuple[int, api.Task] | None:
+    """
+    The first of `tasks` its own unit (`unit(task)`) can claim, now held by
+    it, and its index; None if none can. Someone else may claim a task
+    between its listing and its claim.
+    """
+    for i, listed in enumerate(tasks):
+        task = claim(claw_rules, unit(listed), store.ref(listed))
+        if task is not None:
+            return i, task
+    return None
 
 
 def release(work_key: str) -> list[str]:

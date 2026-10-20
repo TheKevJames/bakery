@@ -8,6 +8,7 @@ import pytest
 from task import api
 
 from bakery import state
+from bakery.collectors import build_review
 from bakery.collectors import scout_repos
 from bakery.gateway import config
 from bakery.gateway import scheduler
@@ -197,6 +198,9 @@ def test_repo_claws_load(
     assert (queue.collector, queue.repeat) == ('triage', True)
     baker = loaded.claw('baker')
     assert baker.job('review').collector == 'baker'
+    build = loaded.claw('build')
+    assert build.job('review').collector == 'build-review'
+    assert build_review.load_settings(build.profile).operators
     assert all(c.rules != api.Rules() for c in loaded.claws.values())
     assert state.root() in baker.policy.read_paths
 

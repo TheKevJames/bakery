@@ -1,0 +1,39 @@
+# build: implements each task in `ready` in the claws' namespace (highest
+# priority first), opens a pull request for it, and follows it through
+# review: the operator's comments and reviews, failing checks, conflicts, and
+# its merge (to `confirm`) or closing. One task is one unit of work, for its
+# whole life. It never merges.
+
+model = "anthropic/claude-opus-5-5"
+thinking = "high"
+
+[limits]
+cost_usd = 10.0  # per run
+minutes = 60
+turns = 150
+daily_cost_usd = 30.0
+
+[concurrency]
+# Pull request news resumes tasks' units alongside new work.
+max_resumes = 2
+
+# One task per run, working through the queue. Also runs within two minutes
+# of the task list changing (eg. triage routes a task to ready, or the
+# operator answers build's questions).
+[[job]]
+name = "queue"
+cron = "30 * * * *"
+prompt = "Build this task."
+collector = "build"
+repeat = true
+watch = "${TASK_FOLDER}"
+debounce_seconds = 120
+
+# News on the pull requests of tasks in review, one task per run; settings
+# in build.toml.
+[[job]]
+name = "review"
+cron = "*/10 * * * *"
+prompt = "Your pull request has news."
+collector = "build-review"
+repeat = true

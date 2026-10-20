@@ -248,6 +248,11 @@ obsolete.
 **`bakery > review`**:
 The route for tasks whose pull request awaits the operator's review.
 
+**`bakery > confirm`**:
+The route for tasks whose pull request has merged, awaiting the operator's
+confirmation that the change did what the task asked.
+_Avoid_: merged, done
+
 **Rejection**:
 The operator's record that a link should never be filed again.
 _Avoid_: a wontfix

@@ -50,14 +50,22 @@ class GitHub:
         return json.loads(body)
 
     def get_all(
-        self, path: str, params: dict[str, str] | None = None
+        self,
+        path: str,
+        params: dict[str, str] | None = None,
+        *,
+        key: str | None = None,
     ) -> list[Json]:
-        """Every item of a paginated list endpoint."""
+        """
+        Every item of a paginated list endpoint, or of its `key` in each
+        page for those wrapping their list (eg. search's `items`).
+        """
         items: list[Json] = []
         url: str | None = self._url(path, {'per_page': '100'} | (params or {}))
         while url:
             body, link = self._open(url)
-            items.extend(json.loads(body))
+            page = json.loads(body)
+            items.extend(page if key is None else page[key])
             match = NEXT_LINK.search(link or '')
             url = match.group(1) if match else None
         return items
