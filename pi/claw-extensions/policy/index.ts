@@ -6,7 +6,7 @@
  * and names other than localhost resolving to this machine). Which tools a
  * claw uses is not policy: it gets pi's default tools and every extension
  * tool its profile loads, since bash shares that one sandbox and so could do
- * whatever a withheld tool would. Results showing a sandbox refusal get a note saying so, so
+ * whatever a withheld tool would. Failed results showing a sandbox refusal get a note saying so, so
  * neither the model nor a later reader mistakes it for eg. missing auth or
  * files.
  *
@@ -68,6 +68,9 @@ export default function policyExtension(pi: ExtensionAPI) {
   }
 
   pi.on("tool_result", async (event) => {
+    // A call that succeeded was not refused: its output only quotes the text
+    // (a file, a task, a transcript).
+    if (!event.isError) return undefined;
     const refused = event.content.some((part) => part.type === "text" && SANDBOX_REFUSAL.test(part.text));
     if (!refused) return undefined;
     return { content: [...event.content, { type: "text" as const, text: SANDBOX_NOTE }] };

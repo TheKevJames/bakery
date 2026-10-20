@@ -40,7 +40,16 @@ class ToolCall:  # pylint: disable=too-many-instance-attributes
     text: str
 
     def refusals(self) -> tuple[str, ...]:
-        """The lines of its result showing the sandbox refusing something."""
+        """
+        The lines of its failed result showing the sandbox refusing.
+
+        A call that succeeded refused nothing, whatever it printed: its text
+        only quotes refusals (a file, a task, another claw's transcript).
+        What a successful command hid (`cmd 2>&1 | tail`) is still in the
+        sandbox's own violation log.
+        """
+        if not self.is_error:
+            return ()
         return tuple(
             line.strip()
             for line in self.text.splitlines()

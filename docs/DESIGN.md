@@ -588,9 +588,9 @@ Enforcement:
      Keychain is unreachable.
    - What it blocks (denied reads, writes, and network) is appended to
      `_gateway/violations/<claw>/<session>.jsonl`, out of the claw's reach,
-     for baker. A tool result showing a refusal (`Operation not permitted`,
-     `EPERM`, or the proxy's 403) gets a note from the policy extension that
-     it is policy rather than missing auth or files.
+     for baker. A failed tool result showing a refusal (`Operation not
+     permitted`, `EPERM`, or the proxy's 403) gets a note from the policy
+     extension that it is policy rather than missing auth or files.
    - `bakery sandbox show <claw>` prints its settings (with the caller's
      `$PATH`); `bakery sandbox exec <claw> -- <command>` runs a command as
      the claw's pi would, in its sandbox and environment, secrets included.
