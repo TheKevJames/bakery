@@ -9,7 +9,8 @@
   Filter a list with `-f`: comma-separated `field<op>value` on namespace,
   summary, tag, claim, link, priority, or size, with `=`, `!=`, `~`
   (contains), or `!~`; eg. `task list --json -f
-  'namespace=bakery,tag=build,claim='` (unclaimed).
+  'namespace=bakery,tag=build,claim='` (unclaimed). `next` (the due date)
+  takes only `=` and `!=`, eg. `next=2026-01-31`, or `next=` (unscheduled).
 - Change tasks with `task add`, `task <id> set`, and `task <id> release`
   (always `--json`, to see the task as it stands after). The gateway runs
   them for you, as you, under your rules: what you may create, claim, and

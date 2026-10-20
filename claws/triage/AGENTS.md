@@ -71,7 +71,7 @@ markdown:
 ## Triage (YYYY-MM-DD)
 
 **Route:** build | human | blocked | wontfix - one-sentence reason
-**Priority:** high | medium | low - what breaks, for whom, in a sentence
+**Priority:** what breaks, for whom, in a sentence
 **Source:** still present / gone / changed (and how you checked) / malformed
 (what does not match)
 **Code:** paths and line numbers involved
@@ -104,8 +104,8 @@ has already cleared; if none remain, route the task on its merits.
 
 Always set `priority` (`low`, `medium`, `high`) and `size` (`small`,
 `medium`, `large`) with `task bakery:<id> set --priority ... --size ...`,
-whatever the route. `**Priority:**` is
-required on every task and must match the `priority` you set:
+whatever the route. `**Priority:**`, the reason for the `priority` you
+set, is required on every task:
 
 - **priority**, by what the source shows now, not by the route (a `human`
   or `blocked` task can be high):
