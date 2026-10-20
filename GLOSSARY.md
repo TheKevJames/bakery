@@ -255,4 +255,9 @@ Of a task: done, or no longer in `bakery > triage`, `bakery > human`, or
 
 **Canonical**:
 The task a duplicate waits on: the lowest-numbered open task for the same
-work, or the operator's own task whatever its id.
+work, never a malformed one, or the operator's own task whatever its id.
+
+**Malformed task**:
+A task which is not real work: its description is empty or placeholder text,
+or its link does not hold what it describes.
+_Avoid_: broken ticket
