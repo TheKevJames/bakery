@@ -25,5 +25,11 @@
             "matchFileNames": ["bin/**"],
             "automerge": false,
         },
+        {
+            // task's tags are PEP 440 (eg. 9.0.0rc2), which semver cannot read
+            "matchManagers": ["pep621"],
+            "matchDepNames": ["task"],
+            "versioning": "pep440",
+        },
     ],
 }

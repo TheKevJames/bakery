@@ -32,7 +32,7 @@ def _domain() -> str:
 def render() -> bytes:
     executable = shutil.which('bakery')
     if executable is None:
-        raise ServiceError('bakery is not on PATH; install it with pipx')
+        raise ServiceError('bakery is not on PATH; install it with uv tool')
     env = {
         name: value
         for name, value in os.environ.items()
