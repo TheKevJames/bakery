@@ -56,26 +56,46 @@ class Scheduler:
     def __init__(self, fire: Fire) -> None:
         self.fire = fire
         self.tasks: list[asyncio.Task[None]] = []
+        # Each loop's next fire, and the cron and timezone it came from.
         self.upcoming: dict[tuple[str, str], datetime.datetime] = {}
+        self.specs: dict[tuple[str, str], tuple[str, datetime.tzinfo]] = {}
 
     def start(self, claws: Iterable[config.Claw], tz: datetime.tzinfo) -> None:
-        self.stop()
+        """
+        (Re)start a loop per cron job. A job whose cron and timezone are
+        unchanged keeps its next fire, so a reload cannot skip a fire that
+        came due while its loop had not yet woken.
+        """
+        self._cancel()
+        specs: dict[tuple[str, str], tuple[str, datetime.tzinfo]] = {}
         for claw in claws:
             if not claw.enabled:
                 continue
             for job in claw.jobs:
                 if job.cron is not None:
+                    specs[claw.name, job.name] = (job.cron, tz)
                     self.tasks.append(
                         asyncio.create_task(
                             self._loop(claw, job, job.cron, tz)
                         )
                     )
+        # The loops first run once this returns, so see only the kept fires.
+        self.upcoming = {
+            key: due
+            for key, due in self.upcoming.items()
+            if specs.get(key) == self.specs.get(key)
+        }
+        self.specs = specs
 
     def stop(self) -> None:
+        self._cancel()
+        self.upcoming.clear()
+        self.specs.clear()
+
+    def _cancel(self) -> None:
         for task in self.tasks:
             task.cancel()
         self.tasks.clear()
-        self.upcoming.clear()
 
     async def _loop(
         self,
@@ -84,12 +104,16 @@ class Scheduler:
         cron: str,
         tz: datetime.tzinfo,
     ) -> None:
+        # Pending from before a reload: it may already be due.
+        due = self.upcoming.get((claw.name, job.name))
         while True:
-            due = next_fire(cron, datetime.datetime.now(tz))
-            self.upcoming[claw.name, job.name] = due
+            if due is None:
+                due = next_fire(cron, datetime.datetime.now(tz))
+                self.upcoming[claw.name, job.name] = due
             await _sleep_until(due)
             now = datetime.datetime.now(tz)
             if should_run(job, due, now):
                 self.fire(claw, job, due)
             else:
                 log.info('skipping %s/%s due %s', claw.name, job.name, due)
+            due = None
