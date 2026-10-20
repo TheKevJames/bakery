@@ -20,7 +20,7 @@ SANDBOX_REFUSAL = re.compile(
     r'|Connection blocked by network allowlist|blocked-by-allowlist'
     r'|Connection to \S+ blocked: resolved to'
     r'|CONNECT tunnel failed, response 403|Proxy response \(403\)'
-    r'|Get "[^"]*": Forbidden',
+    r'|[A-Z][a-z]+ "[^"]*": resolved to',
     re.IGNORECASE,
 )
 # The policy extension's note on results showing one.

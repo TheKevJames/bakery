@@ -1,8 +1,8 @@
 diff --git a/dist/sandbox/macos-sandbox-utils.js b/dist/sandbox/macos-sandbox-utils.js
-index 9d5dc7e3dd0a9d80f10e8855edf4251161fa14b0..74c1b7c1b0f65e7ccea249047e7908dc01af613c 100644
+index 0e598b612d84d24b09ec2ab0d7ccc9b009c9457b..796267a1f0093100a93d01434fbfb6284e0fcfc6 100644
 --- a/dist/sandbox/macos-sandbox-utils.js
 +++ b/dist/sandbox/macos-sandbox-utils.js
-@@ -1165,13 +1165,28 @@ resolveCommandText) {
+@@ -1215,13 +1215,28 @@ resolveCommandText) {
          '--style',
          'compact',
      ]);
@@ -37,7 +37,7 @@ index 9d5dc7e3dd0a9d80f10e8855edf4251161fa14b0..74c1b7c1b0f65e7ccea249047e7908dc
          // Extract violation details
          const sandboxMatch = violationLine.match(sandboxExtractRegex);
          if (!sandboxMatch?.[1])
-@@ -1209,7 +1224,7 @@ resolveCommandText) {
+@@ -1259,7 +1274,7 @@ resolveCommandText) {
              encodedCommand,
              timestamp: new Date(), // We could parse the timestamp from the log but this feels more reliable
          });
