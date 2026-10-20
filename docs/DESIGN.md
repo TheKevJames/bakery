@@ -684,8 +684,9 @@ only with its `priority` and `size`, and keeps them while it is there. Only scou
 only what it holds: having no claim rule, that is the tasks it added in the
 same run, so it can undo its own mistakes. Bakery's own checks
 (`bakery/bakery/task_list/hooks.py`) refuse a task with a tracked link (see
-below), and any question without its context and default (see
-[Asking the operator](#asking-the-operator)). What `task` does to a task once what it waits on clears
+below), any question without its context and default (see
+[Asking the operator](#asking-the-operator)), and any task baker files
+without a question. What `task` does to a task once what it waits on clears
 (back to `triage`, or gone if a duplicate) is no claw's to be granted, and
 holds whatever the task's claim.
 
@@ -953,7 +954,8 @@ Reviews how the claws learn and files a task for each gap. Profile:
   and transcripts, `runs.db`, `gateway.log`); unix sockets stay blocked.
 - Its rules let it add tasks only in `bakery > triage`, with a link, and
   ask questions only there: fixes change the claws themselves, so each asks
-  the operator to accept it, and triage routes it only once answered. They
+  the operator to accept it (the task server refuses one asking nothing),
+  and triage routes it only once answered. They
   grant no claims or changes: changes to other claws' memory or to tasks are
   steps in a task's **Fix**, for the operator (triage splits them into
   `bakery > operator` tasks of their own).

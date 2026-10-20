@@ -129,3 +129,32 @@ def test_claws_write_the_task_list_only_through_their_rules(
     assert len(json.loads(claws_tasks)) == 5
     added = testing_tasks.show('bakery:5')
     assert added['claim'] is None
+
+
+def test_baker_files_only_tasks_which_ask_the_operator(
+    root: pathlib.Path, fake_llm: harness.FakeLLM
+) -> None:
+    claws = testing_gateway.make_claws(
+        root, {'baker': ''}, rules={'baker': 'baker'}
+    )
+    filing = (
+        'task', 'add', '-n', 'bakery', '--tag', 'triage', '--json',
+        '--priority', 'low', '--size', 'small', '--description', 'Gap.',
+    )  # fmt: skip
+    asking = ('--link', 'baker:plumbing/y', '--question', QUESTION)
+    fake_llm.queue(
+        bash(shlex.join((*filing, '--link', 'baker:plumbing/x', 'unasked'))),
+        bash(shlex.join((*filing, *asking, 'asked'))),
+        harness.Reply(text='done'),
+    )
+    fake = testing_gateway.FakeChannel()
+
+    async def scenario(gateway: core.Gateway) -> None:
+        done = await fake.wait(gateway.trigger('baker', None, 'go'))
+        assert done.status == 'settled', done.reason
+
+    testing_gateway.run_gateway(claws, fake, scenario)
+    unasked, asked = fake_llm.tool_results()
+    print(unasked, asked, sep='\n---\n')
+    assert 'a task baker files asks the operator at least one' in unasked
+    assert '"id": 1,' in asked and '"tag": "triage"' in asked

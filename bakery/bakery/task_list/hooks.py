@@ -7,6 +7,9 @@ command made them.
 - Asking: every new question, on any change, has its `**Context:**` and its
   `**Default:**`; so everything waiting on the operator is answered the same
   way.
+- Proposing: every task baker files asks at least one question, since its
+  fixes change the claws themselves and triage routes a task with none
+  straight away.
 """
 
 from task import api
@@ -15,6 +18,8 @@ from . import filing
 from . import store
 
 QUESTION = '--question "<question>\\n**Context:** ...\\n**Default:** ..."'
+# Work keys are `<claw>/...`.
+BAKER = 'baker/'
 
 
 def check(change: api.Change) -> None:
@@ -23,7 +28,18 @@ def check(change: api.Change) -> None:
         return
     if before is None and after.link:
         filing.check(after.link)
+    if before is None and change.actor.name.startswith(BAKER):
+        _check_proposal(after)
     _check_questions(before, after)
+
+
+def _check_proposal(task: api.Task) -> None:
+    if not task.conversation.questions:
+        raise api.TaskError(
+            'a task baker files asks the operator at least one question, eg.'
+            ' whether to accept it as is:'
+            f' {QUESTION}'
+        )
 
 
 def _check_questions(before: api.Task | None, after: api.Task) -> None:
