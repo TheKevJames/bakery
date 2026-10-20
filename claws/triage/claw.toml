@@ -1,8 +1,9 @@
 # triage: researches each task tagged `triage` in the claws' namespace
 # (scout's, and those the operator hands over), records its priority, size,
-# and notes, and routes it to build, human, or wontfix, or blocks it on what
-# it waits on; then clears what blocked tasks wait on outside the task list,
-# once it has happened. `task` sends them back to triage once all has.
+# and notes, and routes it to ready, operator, or wontfix, asks the operator
+# about it, or blocks it on what it waits on; then clears what blocked tasks
+# wait on outside the task list, once it has happened. `task` sends them back
+# to triage once all has.
 # Research only: no reproduction, no edits.
 
 model = "anthropic/claude-sonnet-5-5"

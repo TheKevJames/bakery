@@ -4,7 +4,8 @@ something outside the task list.
 
 `collect` (the `queue` job) hands over the next task waiting for triage: the
 lowest-numbered unclaimed task tagged `triage` in the claws' namespace,
-ignoring blocked and scheduled (recurring) ones. Each task is its own unit
+ignoring blocked and scheduled (recurring) ones, and those still waiting on
+the operator's answers. Each task is its own unit
 of work, `triage/task-<id>`, so its thread and session last as long as the
 task. `task` itself sends a blocked task back to triage once all it waits on
 has cleared.
@@ -40,7 +41,8 @@ UNTRUSTED = (
 def waiting() -> list[api.Task]:
     # TODO: hand a scheduled task over once it is due, rather than never.
     return store.listed(
-        f'namespace={store.NAMESPACE},tag=triage,blocked=no,claim=,next=',
+        f'namespace={store.NAMESPACE},tag=triage,blocked=no,claim=,next=,'
+        'questions!=open',
         api.SortOrder.ident,
     )
 

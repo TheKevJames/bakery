@@ -35,17 +35,17 @@ def test_claws_write_the_task_list_only_through_their_rules(
     )
     fake_llm.queue(
         bash(
-            'task bakery:1 set --tag build --priority high --size small --json'
+            'task bakery:1 set --tag ready --priority high --size small --json'
         ),
-        bash('task bakery:2 set --tag build'),
-        bash('task bakery:1 set --tag human'),
+        bash('task bakery:2 set --tag ready'),
+        # Questions leave a task in triage, waiting on the operator.
+        bash(shlex.join(('task', 'bakery:1', 'set', '--question', QUESTION))),
         # Saying something on a task needs no claim.
         bash('task bakery:2 set --comment n --json'),
         bash(f'{ADD[0]} new'),
-        # Whatever enters human, created or moved, asks the operator, with
-        # each question's context and default.
+        # Every question asks with its context and default.
         bash(
-            'task add -n bakery --tag human --description d --json'
+            'task add -n bakery --tag triage --description d --json'
             " --question 'Why?' unasked"
         ),
         bash(
@@ -56,7 +56,7 @@ def test_claws_write_the_task_list_only_through_their_rules(
                     '-n',
                     'bakery',
                     '--tag',
-                    'human',
+                    'triage',
                     '--json',
                     '--description',
                     'Gap.',
@@ -75,7 +75,7 @@ def test_claws_write_the_task_list_only_through_their_rules(
         bash(f'{ADD[0]} --link baker:plumbing/x new'),
         bash(f'{ADD[0]} --link BAKER:plumbing/x again'),
         bash(f'{ADD[0]} --link https://x/gone#L1 no'),
-        bash(f'{ADD[0]} --tag build --link l built'),
+        bash(f'{ADD[0]} --tag ready --link l built'),
         # Scout completes only what it added this run.
         bash(f'{ADD[0]} --link baker:plumbing/y mistaken'),
         bash('task bakery:6 done --json'),
@@ -98,28 +98,28 @@ def test_claws_write_the_task_list_only_through_their_rules(
     print('\n---\n'.join(results))
     assert '"claim": "triage/' in results[0]
     assert 'claimed by operator' in results[1]
-    assert 'enters human only asking the operator a new' in results[2]
+    assert 'you may not ask questions on tasks in bakery > ready' in results[2]
     assert '"body": "n"' in results[3] and '"claim": "operator"' in results[3]
     assert 'you may not set link' not in results[4]
     assert '"id": 3,' in results[4] and '"claim": "triage/' in results[4]
     assert 'each question needs its **Context:**' in results[5]
-    assert '"id": 4,' in results[6] and '"tag": "human"' in results[6]
+    assert '"id": 4,' in results[6] and '"tag": "triage"' in results[6]
     assert "1: the operator's" in results[7]
     assert 'you may not claim tasks in default > triage' in results[8]
     assert 'readonly database' in results[9]
     assert '"id": 5,' in results[10] and '"claim": "scout/' in results[10]
     assert 'open task bakery:5 already has' in results[11]
     assert 'the operator rejected' in results[12] and 'not ours' in results[12]
-    assert 'you may not create tasks in bakery > build' in results[13]
+    assert 'you may not create tasks in bakery > ready' in results[13]
     assert '"id": 6,' in results[14]
     assert results[15].strip() == 'null'
-    assert 'you may not claim tasks in bakery > build' in results[16]
+    assert 'you may not claim tasks in bakery > ready' in results[16]
     assert 'you may not set priority' in results[17]
     assert 'a new task needs its description' in results[18]
     assert testing_tasks.show('1')['summary'] == "the operator's"
     # The run's claims ended with it; the operator's did not.
     final = testing_tasks.show('bakery:1')
-    assert (final['claim'], final['tag']) == (None, 'build')
+    assert (final['claim'], final['tag']) == (None, 'ready')
     theirs = testing_tasks.show('bakery:2')
     assert theirs['claim'] == 'operator'
     assert theirs['comments'] == [json.loads(results[3])['comments'][0]]

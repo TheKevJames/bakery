@@ -35,7 +35,7 @@ for triage.
 The claw that researches each task in `bakery > triage` and routes it.
 
 **Build**:
-The claw that implements tasks in `bakery > build` and opens pull requests for
+The claw that implements tasks in `bakery > ready` and opens pull requests for
 them.
 
 **Baker**:
@@ -183,12 +183,12 @@ An entry in the task list, whether filed by the operator or a claw.
 _Avoid_: ticket, issue, item
 
 **Tag**:
-A flat name that places a task in a section of its namespace, eg. `build`.
+A flat name that places a task in a section of its namespace, eg. `ready`.
 
 **Namespace**:
 A part of the task list in its own directory, so access is granted per
 namespace. `default` is the operator's; `bakery` is the claws', the only one
-their task rules let them change. Written `bakery > build` for a tag within
+their task rules let them change. Written `bakery > ready` for a tag within
 one.
 
 **Task id**:
@@ -211,22 +211,28 @@ The identity of a task's source, such as an issue URL or a fingerprinted
 code location, used to recognise that source again.
 
 **Route**:
-The `bakery` tag a task is moved to, which decides who handles it next.
+The `bakery` tag a task is moved to: the state of its work, and so who
+handles it next.
 
 **`bakery > triage`**:
-The route for tasks awaiting triage.
+The route for tasks awaiting triage, including those whose questions from
+triage or baker await the operator's answers first.
 
-**`bakery > build`**:
-The route for tasks build can implement and verify on its own.
+**`bakery > ready`**:
+The route for tasks the claws can implement and verify on their own.
+_Avoid_: build
 
-**`bakery > human`**:
-The route for tasks waiting on the operator: a claw's questions, or changes
-only the operator may approve.
+**`bakery > operator`**:
+The route for tasks no claw can do: beyond any claw's abilities (eg.
+checking a change in a browser), or beyond what the operator will ever let a
+claw do (eg. merging a pull request). Not for tasks waiting on the
+operator's decision, information, or setup: those ask questions.
+_Avoid_: human
 
 **Question**:
-Something a claw needs from the operator to finish a task, asked on the task
-(task's own Question) as it is routed to `bakery > human`, with its context
-and default; the operator answers every one.
+Something a claw needs from the operator to carry on with a task, asked on
+the task (task's own Question) with its context and default. The task stays
+where it is, untouched, until the operator answers every one.
 _Avoid_: ask, prompt
 
 **`bakery > wontfix`**:

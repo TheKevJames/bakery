@@ -44,7 +44,7 @@ def fixture_tasks(root: pathlib.Path) -> pathlib.Path:
         '--next', '2030-01-01',
     )  # fmt: skip
     testing_tasks.task(
-        'add', 'already routed', '-n', 'bakery', '--tag', 'build'
+        'add', 'already routed', '-n', 'bakery', '--tag', 'ready'
     )
     testing_tasks.task('add', 'from the operator', '--tag', 'dev')
     return folder
@@ -74,24 +74,25 @@ def test_works_through_the_queue_one_task_per_unit(
     testing_tasks.task('add', 'handed over by the operator', '-n', 'bakery')
     fake_llm.queue(
         # Build picks tasks by priority, so none enters it without one.
-        task('bakery:1', 'set', '--tag', 'build'),
+        task('bakery:1', 'set', '--tag', 'ready'),
         task('bakery:1', 'set', '--priority', 'high', '--size', 'small',
              '--comment', 'notes'),
-        task('bakery:1', 'set', '--tag', 'build'),
-        harness.Reply(text='1 to build'),
-        task('bakery:4', 'set', '--tag', 'wontfix', '--priority', 'low'),
-        harness.Reply(text='4 to wontfix'),
+        task('bakery:1', 'set', '--tag', 'ready'),
+        harness.Reply(text='1 to ready'),
+        # Priority and size are optional outside ready.
+        task('bakery:4', 'set', '--tag', 'operator', '--priority', 'low'),
+        harness.Reply(text='4 to operator'),
     )  # fmt: skip
     fake = testing_gateway.FakeChannel()
 
     async def scenario(gateway: core.Gateway) -> None:
         gateway.trigger('triage', None, None)
         first = await fake.wait('triage/task-1')
-        assert (first.status, first.final_text) == ('settled', '1 to build')
+        assert (first.status, first.final_text) == ('settled', '1 to ready')
         second = await fake.wait('triage/task-4')
         assert (second.status, second.final_text) == (
             'settled',
-            '4 to wontfix',
+            '4 to operator',
         )
         # The repeat after it finds nothing left: bakery:2 is scheduled, and
         # the operator's own triage is not the claws'.
@@ -111,10 +112,10 @@ def test_works_through_the_queue_one_task_per_unit(
         first['priority'],
         first['size'],
         first['claim'],
-    ) == ('build', 'high', 'small', None)
+    ) == ('ready', 'high', 'small', None)
     assert testing_tasks.said('bakery:1') == ['notes']
     assert (second['tag'], second['priority'], second['claim']) == (
-        'wontfix',
+        'operator',
         'low',
         None,
     )
@@ -127,7 +128,7 @@ def test_works_through_the_queue_one_task_per_unit(
     ) == ('dev', None)
     assert len(fake_llm.requests) == 6
     assert (
-        'bakery:1 needs its priority and size in bakery > build'
+        'bakery:1 needs its priority and size in bakery > ready'
         in fake_llm.tool_results(3)[0]
     )
 
@@ -157,12 +158,12 @@ def test_triage_blocks_tasks_where_they_are(
 ) -> None:
     del tasks
     testing_tasks.task(
-        'add', 'needs the operator', '-n', 'bakery', '--tag', 'human',
+        'add', 'needs the operator', '-n', 'bakery', '--tag', 'triage',
         '--question', 'which?',
     )  # fmt: skip
     blocking = ('bakery:1', 'set', '--json', '--blocked-by')
     fake_llm.queue(
-        # bakery:3 is in build, asking nothing: already decided.
+        # bakery:3 is in ready, asking nothing: already decided.
         task(*blocking, 'bakery:3:decided'),
         task(
             *blocking, 'bakery:4:decided', '--blocked-by', '1',
@@ -186,8 +187,26 @@ def test_triage_blocks_tasks_where_they_are(
         '1',
         'https://example.com/1',
     ]
-    # Hidden from the queue until all it waits on has cleared.
+    # Hidden from the queue until all it waits on has cleared, as bakery:4
+    # is until the operator answers it.
     assert [t.ident for t in triage.waiting()] == []
+
+
+def test_answering_every_question_queues_the_task_again(
+    tasks: pathlib.Path,
+) -> None:
+    del tasks
+    testing_tasks.task(
+        'add', 'asks twice', '-n', 'bakery', '--tag', 'triage',
+        '--question', 'which?', '--question', 'when?',
+    )  # fmt: skip
+    testing_tasks.task('bakery:1', 'done')
+    assert [t.ident for t in triage.waiting()] == []
+    testing_tasks.task('bakery:4', 'set', '--answer', 'Q1: this')
+    assert [t.ident for t in triage.waiting()] == []
+    testing_tasks.task('bakery:4', 'set', '--answer', 'Q2: default')
+    assert [t.ident for t in triage.waiting()] == [4]
+    assert testing_tasks.show('bakery:4')['tag'] == 'triage'
 
 
 def test_recheck_hands_over_what_waits_outside(
