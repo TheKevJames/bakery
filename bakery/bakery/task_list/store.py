@@ -20,9 +20,11 @@ def ref(task: dict[str, object]) -> str:
     return f'{task["namespace"]}:{task["id"]}'
 
 
-def listed(filter_: str = '') -> list[dict[str, object]]:
+def listed(
+    filter_: str = '', order: query.SortOrder = query.SortOrder.tag
+) -> list[dict[str, object]]:
     """Every task matching `filter_` (`task list -f` syntax), as JSON."""
-    clauses = query.compile_(filter_, -1, -1, query.SortOrder.tag)
+    clauses = query.compile_(filter_, -1, -1, order)
     with db.connect() as conn:
         return [task.to_json() for task in db.select(conn, *clauses)]
 

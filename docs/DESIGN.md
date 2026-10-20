@@ -839,7 +839,8 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
   does not hold what it describes, is never a canonical), research (code,
   history in its clones, issues, docs, web; no reproduction, tests, or
   edits), append notes
-  (route and reason, priority and reason, source check, code locations,
+  (route and reason, the reason for its priority, source check, code
+  locations,
   hypothesis, the duplicate search and its result (required on every
   task), approach, acceptance criteria, open questions), always set
   `priority` (by a rubric of examples per level) and `size`, then

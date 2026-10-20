@@ -22,8 +22,7 @@ operator_id = 523678345662300161   # the only user the bot acts on
 [tasks.scout.create]
 namespaces = ["bakery"]
 tags = ["triage"]
-require = ["link"]
-fields = ["description", "priority", "size"]
+require = ["description", "link"]
 
 # Scout claims nothing, so it holds, and may complete, only the tasks it adds
 # in a run: to undo its own mistakes (eg. a garbled link) before triage
@@ -34,7 +33,8 @@ done = true
 [tasks.triage.create]
 namespaces = ["bakery"]
 tags = ["build", "blocked", "human", "triage", "wontfix"]
-fields = ["description", "priority", "size"]
+require = ["description"]
+fields = ["priority", "size"]
 
 [tasks.triage.claim]
 namespaces = ["bakery"]
@@ -48,5 +48,5 @@ tags = ["build", "blocked", "human", "triage", "wontfix"]
 [tasks.baker.create]
 namespaces = ["bakery"]
 tags = ["human"]
-require = ["link"]
-fields = ["description", "priority", "size"]
+require = ["description", "link"]
+fields = ["priority", "size"]

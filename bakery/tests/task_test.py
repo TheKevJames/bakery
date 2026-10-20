@@ -64,7 +64,7 @@ def test_claws_write_the_task_list_only_through_their_rules(
         bash('TASK_SERVER= task bakery:1 set --summary mine --force'),
         harness.Reply(text='done'),
         # Scout files only new links, into triage.
-        bash(f'{ADD[0]} --link baker:plumbing/x --priority high new'),
+        bash(f'{ADD[0]} --link baker:plumbing/x new'),
         bash(f'{ADD[0]} --link BAKER:plumbing/x again'),
         bash(f'{ADD[0]} --link https://x/gone#L1 no'),
         bash(f'{ADD[0]} --tag build --link l built'),
@@ -72,6 +72,9 @@ def test_claws_write_the_task_list_only_through_their_rules(
         bash(f'{ADD[0]} --link baker:plumbing/y mistaken'),
         bash('task bakery:6 done --json'),
         bash('task bakery:1 done --json'),
+        # Triage sets priority; every new task has a description.
+        bash(f'{ADD[0]} --link baker:plumbing/z --priority high prioritized'),
+        bash('task add -n bakery --tag triage --link baker:plumbing/w bare'),
         harness.Reply(text='done'),
     )
     fake = testing_gateway.FakeChannel()
@@ -103,6 +106,8 @@ def test_claws_write_the_task_list_only_through_their_rules(
     assert '"id": 6,' in results[14]
     assert results[15].strip() == 'null'
     assert 'you may not claim tasks in bakery > build' in results[16]
+    assert 'you may not set priority' in results[17]
+    assert 'a new task needs its description' in results[18]
     assert testing_tasks.show('1')['summary'] == "the operator's"
     # The run's claims ended with it; the operator's did not.
     final = testing_tasks.show('bakery:1')
@@ -117,4 +122,4 @@ def test_claws_write_the_task_list_only_through_their_rules(
     )
     assert len(json.loads(claws_tasks)) == 5
     added = testing_tasks.show('bakery:5')
-    assert (added['claim'], added['priority']) == (None, 'high')
+    assert added['claim'] is None
