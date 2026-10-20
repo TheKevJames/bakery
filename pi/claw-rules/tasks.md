@@ -1,7 +1,7 @@
 # Task list
 
 - The task list has namespaces. Yours is `bakery`, and its tags (`triage`,
-  `build`, `human`, `wontfix`, ...) are its sections; every other
+  `ready`, `operator`, `wontfix`, ...) are its sections; every other
   namespace is the operator's. Tasks are named `<namespace>:<id>` (eg.
   `bakery:12`), and a bare id means the operator's `default` namespace.
 - Use `task` in bash; see `task --help` and `task <command> --help`. Read
@@ -9,11 +9,12 @@
   Filter a list with `-f`: comma-separated `field<op>value` on namespace,
   summary, tag, claim, link, priority, or size, with `=`, `!=`, `~`
   (contains), `!~`, `^=` (starts with), or `!^=`; eg. `task list --json -f
-  'namespace=bakery,tag=build,claim='` (unclaimed). `next` (the due date)
+  'namespace=bakery,tag=ready,claim='` (unclaimed). `next` (the due date)
   takes `=`, `!=`, `^=`, and `!^=`, eg. `next=2026-01-31`, `next^=2026-01`
   (due in January), or `next=` (unscheduled).
   `questions=open` lists tasks waiting on the operator's answers, and
-  `questions!=open` those which are not.
+  `questions!=open` those which are not. A task with open questions stays
+  in its section, and no claw works on it until all are answered.
 - A task may wait on others (`blocked_by`, until they are done or decided),
   or on something outside the task list, or be a duplicate of another
   (`duplicate_of`); `task show --json` also lists the tasks waiting on it

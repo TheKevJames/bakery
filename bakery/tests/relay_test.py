@@ -197,7 +197,7 @@ def test_ask_operator_hands_the_task_over_without_a_mention(
         thread = fake.thread_named(key)
         status = await fake.message(thread, '✅')
         assert 'settled - asked the operator on bakery:1' in status.text
-        reply = await fake.message(thread, '→ bakery:1 is in `human`.')
+        reply = await fake.message(thread, '→ bakery:1 waits on the operator.')
         print(reply.text)
         assert 'Q1. Which repo?\n   **Context:** Two match.\n' in reply.text
         assert 'Q2. Now?\n   **Context:** It is\n   late.\n' in reply.text
@@ -209,7 +209,8 @@ def test_ask_operator_hands_the_task_over_without_a_mention(
 
     run(claws, scenario)
     task = testing_tasks.show('bakery:1')
-    assert (task['tag'], task['claim']) == ('human', None)
+    # Asked where it is: the run claimed it to ask, and released it.
+    assert (task['tag'], task['claim']) == ('triage', None)
     asked = task['questions']
     assert isinstance(asked, list)
     assert [(q['body'], q['answer']) for q in asked] == [

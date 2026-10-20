@@ -37,7 +37,7 @@ failing in a way nothing will fix. File one task per gap for the operator.
 ## 1. Recheck your open tasks
 
 The digest lists every task whose link starts with `baker:`. For each one
-in `bakery > human`, recheck its **Acceptance** line: is the gap still
+outside `bakery > wontfix`, recheck its **Acceptance** line: is the gap still
 present, or fixed? Never change tasks; report what you found.
 
 ## 2. Look for gaps
@@ -75,7 +75,7 @@ the code that explains the behaviour. Say how you verified, or mark the gap unve
 
 ## 3. File
 
-One task per gap, in `bakery > human`, with `task add -n bakery --tag human
+One task per gap, in `bakery > triage`, with `task add -n bakery --tag triage
 --link <link> --priority ... --size ... --description "..." --question
 "..." --json -- "<summary>"`:
 
@@ -114,8 +114,9 @@ Accept this proposal as is?
 ```
 
 Every task waiting on the operator asks its questions this way, so they
-answer each the same way, by number; `task add` refuses a task in `human`
-without them.
+answer each the same way, by number; `task add` refuses a question without
+its **Context:** and **Default:**. Always ask it: triage leaves the task
+alone until the operator has answered, then routes it like any other.
 
 Never change other claws' memory or tasks yourself, and never run `bakery
 teach`; put those changes in **Fix**. A lesson is what the claw should

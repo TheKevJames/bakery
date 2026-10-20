@@ -188,8 +188,8 @@ def test_digest_covers_activity_since_the_last_review(
     )
     for tag, slug, summary in (
         ('wontfix', 'x', 'Never this'),
-        ('human', 'y', 'Fixed'),
-        ('human', 'z', 'Still open'),
+        ('triage', 'y', 'Fixed'),
+        ('triage', 'z', 'Still open'),
     ):
         testing_tasks.task(
             'add', '-n', 'bakery', '--tag', tag,
@@ -234,7 +234,7 @@ def test_digest_covers_activity_since_the_last_review(
     assert 'wontfix: add baker:plumbing/x' in text
     assert 'baker:plumbing/y' not in text
     assert (
-        '- #bakery:3 [human] None/None Still open (baker:plumbing/z)' in text
+        '- #bakery:3 [triage] None/None Still open (baker:plumbing/z)' in text
     )
     assert 'ERROR bakery.gateway.core: committing state after' in text
     assert 'old trouble' not in text

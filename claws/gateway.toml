@@ -19,13 +19,14 @@ operator_id = 523678345662300161   # the only user the bot acts on
 # no claim; only the operator answers questions. What `task` does to a task
 # once what it waits on clears (back to triage, or gone if a duplicate) is no
 # claw's to be granted.
+# A question leaves its task where it is: each section's collector skips
+# tasks with open questions, until the operator has answered every one.
 # bakery/bakery/task_list/hooks.py adds checks rules cannot express: filing
-# only new links, and moving a task to human only asking the operator
-# something.
+# only new links, and asking only questions with their context and default.
 
 # What a task needs to be in a section, whichever claw puts it there, and
 # keeps while it is: build picks its tasks by priority.
-[tasks.sections.bakery.build]
+[tasks.sections.bakery.ready]
 require = ["priority", "size"]
 
 [tasks.scout.create]
@@ -42,7 +43,7 @@ done = true
 # Blocked tasks stay in triage, hidden until what they wait on clears.
 [tasks.triage.create]
 namespaces = ["bakery"]
-tags = ["build", "human", "triage", "wontfix"]
+tags = ["operator", "ready", "triage", "wontfix"]
 require = ["description"]
 fields = ["blocked_by", "duplicate_of", "priority", "size"]
 
@@ -52,24 +53,25 @@ tags = ["triage"]
 
 [tasks.triage.change]
 fields = ["blocked_by", "duplicate_of", "priority", "size"]
-tags = ["build", "human", "triage", "wontfix"]
+tags = ["operator", "ready", "triage", "wontfix"]
 
 # Its notes on what it triages.
 [tasks.triage.comment]
 namespaces = ["bakery"]
-tags = ["build", "human", "triage", "wontfix"]
+tags = ["operator", "ready", "triage", "wontfix"]
 
 [tasks.triage.question]
 namespaces = ["bakery"]
-tags = ["human"]
+tags = ["triage"]
 
-# Never build: fixes change the claws themselves, so the operator approves.
+# Fixes change the claws themselves, so each asks the operator to accept it
+# before triage routes it.
 [tasks.baker.create]
 namespaces = ["bakery"]
-tags = ["human"]
+tags = ["triage"]
 require = ["description", "link"]
 fields = ["priority", "size"]
 
 [tasks.baker.question]
 namespaces = ["bakery"]
-tags = ["human"]
+tags = ["triage"]
