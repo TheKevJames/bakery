@@ -9,9 +9,8 @@ from testing import harness
 from testing import tasks as testing_tasks
 
 ADD = ('task add -n bakery --tag triage --description d --json',)
-QUESTIONS = (
-    'Gap.\n\n## Questions (2026-01-01)\n\n1. Accept this proposal as is?\n'
-    '   **Context:** it helps\n   **Default:** accept'
+QUESTION = (
+    'Accept this proposal as is?\n**Context:** it helps\n**Default:** accept'
 )
 
 
@@ -38,10 +37,15 @@ def test_claws_write_the_task_list_only_through_their_rules(
         bash('task bakery:1 set --tag build --json'),
         bash('task bakery:2 set --tag build'),
         bash('task bakery:1 set --tag human'),
-        bash('task bakery:1 set --description-append n --json'),
+        # Saying something on a task needs no claim.
+        bash('task bakery:2 set --comment n --json'),
         bash(f'{ADD[0]} new'),
-        # Whatever enters human, created or moved, asks the operator.
-        bash('task add -n bakery --tag human --description d --json unasked'),
+        # Whatever enters human, created or moved, asks the operator, with
+        # each question's context and default.
+        bash(
+            'task add -n bakery --tag human --description d --json'
+            " --question 'Why?' unasked"
+        ),
         bash(
             shlex.join(
                 (
@@ -53,7 +57,9 @@ def test_claws_write_the_task_list_only_through_their_rules(
                     'human',
                     '--json',
                     '--description',
-                    QUESTIONS,
+                    'Gap.',
+                    '--question',
+                    QUESTION,
                     'asked',
                 )
             )
@@ -90,11 +96,11 @@ def test_claws_write_the_task_list_only_through_their_rules(
     print('\n---\n'.join(results))
     assert '"claim": "triage/' in results[0]
     assert 'claimed by operator' in results[1]
-    assert 'enters human only with a new `## Questions' in results[2]
-    assert '"description": "n"' in results[3]
+    assert 'enters human only asking the operator a new' in results[2]
+    assert '"body": "n"' in results[3] and '"claim": "operator"' in results[3]
     assert 'you may not set link' not in results[4]
     assert '"id": 3,' in results[4] and '"claim": "triage/' in results[4]
-    assert 'enters human only with a new `## Questions' in results[5]
+    assert 'each question needs its **Context:**' in results[5]
     assert '"id": 4,' in results[6] and '"tag": "human"' in results[6]
     assert "1: the operator's" in results[7]
     assert 'you may not claim tasks in default > triage' in results[8]
@@ -111,12 +117,10 @@ def test_claws_write_the_task_list_only_through_their_rules(
     assert testing_tasks.show('1')['summary'] == "the operator's"
     # The run's claims ended with it; the operator's did not.
     final = testing_tasks.show('bakery:1')
-    assert (final['claim'], final['tag'], final['description']) == (
-        None,
-        'build',
-        'n',
-    )
-    assert testing_tasks.show('bakery:2')['claim'] == 'operator'
+    assert (final['claim'], final['tag']) == (None, 'build')
+    theirs = testing_tasks.show('bakery:2')
+    assert theirs['claim'] == 'operator'
+    assert theirs['comments'] == [json.loads(results[3])['comments'][0]]
     claws_tasks = testing_tasks.task(
         'list', '--json', '-f', 'namespace=bakery'
     )

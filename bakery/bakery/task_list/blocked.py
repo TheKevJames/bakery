@@ -9,7 +9,8 @@ tasks by `<namespace>:<id>`:
     - #default:14 done
     - https://github.com/beancount/beangulp/issues/4: closed with total price
 
-Only the description's last such list counts, so later notes supersede it.
+Only the last such list in a task's notes (its description, then its
+comments) counts, so later notes supersede it.
 Task blockers are checked here; external ones (a URL and its condition) only
 by a model, in triage's weekly recheck. A task clears once all its blockers
 have.
@@ -66,8 +67,8 @@ class ExternalBlocker:
 Blocker = TaskBlocker | ExternalBlocker
 
 
-def parse(description: str | None) -> tuple[Blocker, ...]:
-    lines = (description or '').splitlines()
+def parse(notes: str | None) -> tuple[Blocker, ...]:
+    lines = (notes or '').splitlines()
     starts = [i for i, line in enumerate(lines) if line.strip() == HEADING]
     if not starts:
         raise BlockerError(f'no {HEADING} list')
@@ -120,15 +121,13 @@ class Board:
         return blocker.namespace != store.NAMESPACE or state not in UNDECIDED
 
 
-def problems(
-    ref: str | None, description: str | None, board: Board
-) -> list[str]:
+def problems(ref: str | None, notes: str | None, board: Board) -> list[str]:
     """
     Why a claws' task (`ref`, or None if it is new) cannot be blocked by its
-    description; [] if it can.
+    notes; [] if it can.
     """
     try:
-        blockers = parse(description)
+        blockers = parse(notes)
     except BlockerError as e:
         return [str(e)]
     found: list[str] = []

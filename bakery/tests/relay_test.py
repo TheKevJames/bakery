@@ -199,8 +199,8 @@ def test_ask_operator_hands_the_task_over_without_a_mention(
         assert 'settled - asked the operator on bakery:1' in status.text
         reply = await fake.message(thread, '→ bakery:1 is in `human`.')
         print(reply.text)
-        assert '1. Which repo?\n   **Context:** Two match.\n' in reply.text
-        assert '2. Now?\n   **Context:** It is\n   late.\n' in reply.text
+        assert 'Q1. Which repo?\n   **Context:** Two match.\n' in reply.text
+        assert 'Q2. Now?\n   **Context:** It is\n   late.\n' in reply.text
         assert '   **Default:** later\n' in reply.text
         texts = [m.text for m in fake.in_thread(thread)]
         assert not [t for t in texts if f'<@{chat.OPERATOR}>' in t], texts
@@ -210,9 +210,12 @@ def test_ask_operator_hands_the_task_over_without_a_mention(
     run(claws, scenario)
     task = testing_tasks.show('bakery:1')
     assert (task['tag'], task['claim']) == ('human', None)
-    description = str(task['description'])
-    assert description.startswith('## Questions (')
-    assert '1. Which repo?' in description
+    asked = task['questions']
+    assert isinstance(asked, list)
+    assert [(q['body'], q['answer']) for q in asked] == [
+        ('Which repo?\n**Context:** Two match.\n**Default:** all', None),
+        ('Now?\n**Context:** It is\nlate.\n**Default:** later', None),
+    ]
 
 
 def test_parked_runs_resume_from_their_button(

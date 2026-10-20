@@ -4,6 +4,7 @@ import sqlite3
 import threading
 
 import pytest
+from task import actors
 from task import ops
 from task import schema
 
@@ -272,7 +273,7 @@ def test_claims_do_not_outlive_runs(
 ) -> None:
     testing_tasks.task('add', 'stranded', '-n', 'bakery', '--tag', 'triage')
     # Left behind by a run the gateway never saw finish (eg. a crash).
-    ops.Writer(schema.Actor.agent('triage/old')).claim(
+    ops.Writer(actors.Actor.agent('triage/old')).claim(
         schema.Ref.parse('bakery:1')
     )
     testing_tasks.task('add', 'next', '-n', 'bakery', '--tag', 'triage')

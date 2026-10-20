@@ -8,6 +8,8 @@ unit's claims whenever its run ends, however it ends, and every claw's when
 the gateway starts, in case it stopped without doing so.
 """
 
+from task import actors
+from task import errors
 from task import ops
 from task import rules
 from task import schema
@@ -23,7 +25,7 @@ def writer(claw_rules: rules.Rules, work_key: str) -> ops.Writer:
         claw_rules.check(change)
         hooks.check(change)
 
-    return ops.Writer(schema.Actor.agent(work_key), guard)
+    return ops.Writer(actors.Actor.agent(work_key), guard)
 
 
 def claim(
@@ -32,7 +34,7 @@ def claim(
     """Task `address`, now held by the unit `work_key`; None if it cannot."""
     try:
         task = writer(claw_rules, work_key).claim(schema.Ref.parse(address))
-    except schema.TaskError:
+    except errors.TaskError:
         return None
     return task.to_json()
 
@@ -55,6 +57,6 @@ def sweep(claw: str) -> list[str]:
 
 def _release(tasks: list[dict[str, object]]) -> list[str]:
     for task in tasks:
-        agent = ops.Writer(schema.Actor.agent(str(task['claim'])))
+        agent = ops.Writer(actors.Actor.agent(str(task['claim'])))
         agent.release(schema.Ref.parse(store.ref(task)))
     return [store.ref(task) for task in tasks]

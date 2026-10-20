@@ -20,8 +20,8 @@ from collections.abc import Mapping
 from typing import Any
 
 import croniter
+from task import errors
 from task import rules as rules_
-from task import schema
 
 from .. import collectors
 from .. import paths
@@ -431,7 +431,7 @@ def _rules(data: object) -> dict[str, rules_.Rules]:
         raise ConfigError('gateway.tasks: must be a table')
     try:
         return rules_.parse(data)
-    except schema.TaskError as e:
+    except errors.TaskError as e:
         raise ConfigError(f'gateway.tasks: {e}') from None
 
 
