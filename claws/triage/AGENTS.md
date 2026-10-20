@@ -18,12 +18,12 @@ started: they are yours until it ends, when it releases them.
 
 ## 1. Research
 
-- If the task has your earlier `## Triage` notes, read them: anything after
-  the latest one (the operator's `## Answers` to your `## Questions`, an
-  `## Unblocked` or `## Re-triage` note) is new information and supersedes
-  the earlier route. A question the operator left unanswered takes its
-  **Default**. If it was blocked on another task, read that task's notes
-  for its decision.
+- If the task has your earlier `## Triage` comments, read them: anything
+  said after the latest one (the operator's answers to its questions, an
+  `## Unblocked` or `## Re-triage` comment) is new information and
+  supersedes the earlier route. A question the operator answered with
+  "default" takes its **Default**. If it was blocked on another task, read
+  that task's notes for its decision.
 - Check the source still exists: open the `link` (a GitHub issue or PR, a
   CI run, or a file at a line) with `gh` (eg. `gh issue view`, `gh api`),
   or read the file in your clone of the repository. A fixed or removed source makes the task
@@ -64,11 +64,11 @@ started: they are yours until it ends, when it releases them.
 
 ## 2. Record
 
-Append notes with `task bakery:<id> set --description-append "..."`, as
-markdown:
+Record your notes as one comment, `task bakery:<id> set --comment "..."`,
+in markdown (`task` stamps it with the date):
 
 ```
-## Triage (YYYY-MM-DD)
+## Triage
 
 **Route:** build | human | blocked | wontfix - one-sentence reason
 **Priority:** what breaks, for whom, in a sentence
@@ -183,23 +183,24 @@ tasks are theirs, and `task` refuses any change to them. Add a task only for
 separate work your research finds which no open task covers, routed as you
 would route it (`task add -n bakery --tag <route> --description "..."
 --priority ... --size ... -- "<summary>"`); otherwise keep findings in your
-notes. A new task in `human` ends its description with its questions, as
-`ask_operator` writes them (`## Questions (YYYY-MM-DD)`, then each numbered,
-with its **Context:** and **Default:**), or `task add` refuses it.
+notes. A new task in `human` asks its questions as `ask_operator` does, one
+`--question` each, with its **Context:** and **Default:** on lines of their
+own (`--question "<question>\n**Context:** ...\n**Default:** ..."`), or
+`task add` refuses it.
 
 ## Unblocked tasks
 
 `<unblocked>` lists blocked tasks whose blockers (all tasks) have cleared.
-For each, append
+For each, comment
 
 ```
-## Unblocked (YYYY-MM-DD)
+## Unblocked
 
 Cleared: #bakery:184 decided (now build)
 ```
 
 and move it to `triage`, in one `task bakery:<id> set --tag triage
---description-append "..."`. Do not re-triage it here: the `queue` job
+--comment "..."`. Do not re-triage it here: the `queue` job
 does that next.
 
 ## Rechecking blocked tasks
@@ -220,7 +221,8 @@ record your notes, `priority`, and `size` as for any route, then call
 number in `bakery:<id>`): each answerable cold, with what you found and the
 **Default** you would pick. For a task which needs reproduction,
 credentials, or outside systems, ask for exactly that. It moves the task to
-`human`, releases it, and ends your run, so call it last. The operator answers under `## Answers` and sends the task back to
+`human`, releases it, and ends your run, so call it last. The operator
+answers every question (if only with "default") and sends the task back to
 `triage`. Never ask while unblocking or rechecking.
 
 ## Reply

@@ -56,6 +56,6 @@ jobs:
       - run: uv tool install "task @ git+https://github.com/TheKevJames/task@${task_version}"
         env:
           # renovate: datasource=github-tags depName=TheKevJames/task
-          task_version: 8.2.1
+          task_version: 9.0.0rc2
       - run: uv run --frozen pytest
         working-directory: bakery

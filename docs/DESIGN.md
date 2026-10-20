@@ -355,25 +355,26 @@ pi's own retries.
 Nothing in a run waits on the operator: claws put their questions on the
 task list. `ask_operator` (`pi/claw-extensions/ask-operator.ts`, loaded by
 triage, and by build once it exists) takes a task and its questions, each
-with its context and the default the claw would pick. It appends them as a
-numbered `## Questions (<date>)` section and moves the task to
-`bakery > human` (one `task set`, which claims it if it was not already the
-run's), releases it, and ends the run without another model call
-(`terminate`). The task server refuses any task entering `human`,
-created or moved there, without such a new section, with every question's
-**Context:** and **Default:** (`bakery/bakery/task_list/hooks.py`), so
-everything waiting on the operator is answered the same way: baker ends each
-gap report with "Accept this proposal as is?". Its result's
+with its context and the default the claw would pick. It asks them as the
+task's questions (`--question`, which task numbers `Q1`, `Q2`, ... and
+stamps with who asked and when) and moves the task to `bakery > human` (one
+`task set`, which claims it if it was not already the run's), releases it,
+and ends the run without another model call (`terminate`). The task server
+refuses any task entering `human`, created or moved there, without a new
+question, with every new question's **Context:** and **Default:**
+(`bakery/bakery/task_list/hooks.py`), so everything waiting on the operator
+is answered the same way: baker asks of each gap report "Accept this
+proposal as is?". Its result's
 `details.reply` becomes the run's reply, and the runner settles the run (`asked the operator on
 bakery:<id>`), aborting it if a sibling tool call in the same batch would
 carry it on. The questions show in the unit's thread without an @mention:
 the operator finds them in `bakery > human`.
 
-The operator answers under `## Answers`, by number (an unanswered question
-takes its default), and moves the task to `bakery > triage`, which re-routes
-it to its next claw's per-task unit of work (see [Task flow](#task-flow)).
-Questions from a later run go in a new `## Questions` section; the open ones
-are the last section's with no `## Answers` after it.
+The operator answers every question by its number (`task <id> set --answer
+"Q1: ..."`; "default" takes its default), and moves the task to
+`bakery > triage`, which re-routes it to its next claw's per-task unit of
+work (see [Task flow](#task-flow)). Only the operator may answer, once per
+question; `task list -f questions=open` lists what still waits on them.
 
 Claws without `ask_operator` decide, and state their assumptions in their
 reply; in a conversation the operator started in Discord, a claw ends its
@@ -708,12 +709,11 @@ Tags here are sections of the `bakery` namespace.
    their own (`task <id> set -n bakery --tag triage`), usually without a
    `link`.
 2. `triage` gets those (lowest id first, claimed for it), researches,
-   appends notes, sets `priority` and `size`, then re-tags to `build`,
+   comments its notes, sets `priority` and `size`, then re-tags to `build`,
    `blocked`, or `wontfix`, or puts its questions to the operator with
    `ask_operator`, which moves it to `human`.
-3. The operator answers a `human` task's `## Questions` by appending
-   `## Answers` to its description and moving it to `triage`, where triage
-   re-routes it.
+3. The operator answers a `human` task's questions (`--answer "Q1: ..."`)
+   and moves it to `triage`, where triage re-routes it.
 4. `triage` moves a `blocked` task back to `triage` once what it waits on
    clears (another task decided or done, or an upstream change), to be
    re-routed.
@@ -838,7 +838,7 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
   task (a malformed task, with a placeholder description or a link which
   does not hold what it describes, is never a canonical), research (code,
   history in its clones, issues, docs, web; no reproduction, tests, or
-  edits), append notes
+  edits), comment its notes
   (route and reason, the reason for its priority, source check, code
   locations,
   hypothesis, the duplicate search and its result (required on every
@@ -857,8 +857,8 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
     duplicate of a `bakery > wontfix` task), or clearly malformed
     (`bakery > human` if real work may hide behind it), with what to
     change at the source.
-- A blocked task's notes end with a `**Blocked on:**` list, one blocker per
-  line: `#<ns>:<id> decided` (refused for the operator's own tasks, outside
+- A blocked task's notes (its description, then its comments) end with a
+  `**Blocked on:**` list, one blocker per line: `#<ns>:<id> decided` (refused for the operator's own tasks, outside
   `bakery`, which record no decisions), `#<ns>:<id> done`, or
   `<url>: <condition>`. The last list
   counts; the task clears once all of its blockers have.
@@ -871,7 +871,7 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
   merits instead).
 - The `unblock` job's `triage-unblock` collector hands over, in one run,
   every unclaimed blocked task whose blockers are all tasks and have all
-  cleared; triage appends an `## Unblocked` note and moves each to
+  cleared; triage comments an `## Unblocked` note and moves each to
   `bakery > triage`. It runs hourly and within two minutes of `$TASK_FOLDER`
   changing, so a task clears soon after its blocker is decided.
 - The `recheck` job (Mondays at 06:00, silent when nothing clears) uses the
@@ -882,8 +882,9 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
   cannot read (eg. moved by hand without a valid list) in `#bakery`; weekly,
   rather than hourly in `unblock`, so they do not flood it.
 - Both claim what they hand over, as their run.
-- Its rules let it change only what it holds (append notes, set priority and
-  size, route), claim only `triage` and `blocked` tasks, and add tasks in
+- Its rules let it change only what it holds (set priority and size,
+  route), comment on any task in `bakery`, ask questions only as it moves a
+  task to `human`, claim only `triage` and `blocked` tasks, and add tasks in
   any of its routes, which it does only for separate work its research finds
   that no open task covers.
 - Every task it routes to `bakery > human` goes through `ask_operator`,

@@ -76,8 +76,8 @@ the code that explains the behaviour. Say how you verified, or mark the gap unve
 ## 3. File
 
 One task per gap, in `bakery > human`, with `task add -n bakery --tag human
---link <link> --priority ... --size ... --description "..." --json --
-"<summary>"`:
+--link <link> --priority ... --size ... --description "..." --question
+"..." --json -- "<summary>"`:
 
 - `summary`: one line, at most ~80 characters, saying what to fix.
 - `link`: `baker:<type>/<slug>`, the slug lowercase-kebab and naming the
@@ -103,17 +103,19 @@ One task per gap, in `bakery > human`, with `task add -n bakery --tag human
 closing a task, or a ready-to-run `bakery teach <claw> "<lesson>"` line
 for a claw's memory
 **Acceptance:** what you will check on later runs to call it fixed
-
-## Questions (YYYY-MM-DD)
-
-1. Accept this proposal as is?
-   **Context:** the gap and its fix, in a sentence
-   **Default:** accept
 ```
 
-Every task waiting on the operator ends with its questions, numbered, so
-they answer each the same way; `task add` refuses a task in `human` without
-them.
+- `question`, one `--question` each (usually just this one):
+
+```
+Accept this proposal as is?
+**Context:** the gap and its fix, in a sentence
+**Default:** accept
+```
+
+Every task waiting on the operator asks its questions this way, so they
+answer each the same way, by number; `task add` refuses a task in `human`
+without them.
 
 Never change other claws' memory or tasks yourself, and never run `bakery
 teach`; put those changes in **Fix**. A lesson is what the claw should

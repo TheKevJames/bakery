@@ -28,3 +28,10 @@ def task(*args: str) -> str:
 def show(address: str) -> dict[str, object]:
     shown: dict[str, object] = json.loads(task('show', address, '--json'))
     return shown
+
+
+def said(address: str) -> list[str]:
+    """What a task's comments say, in order."""
+    comments = show(address)['comments']
+    assert isinstance(comments, list)
+    return [str(comment['body']) for comment in comments]

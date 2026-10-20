@@ -224,8 +224,9 @@ The route for tasks waiting on the operator: a claw's questions, or changes
 only the operator may approve.
 
 **Question**:
-Something a claw needs from the operator to finish a task, recorded on the
-task as it is routed to `bakery > human`.
+Something a claw needs from the operator to finish a task, asked on the task
+(task's own Question) as it is routed to `bakery > human`, with its context
+and default; the operator answers every one.
 _Avoid_: ask, prompt
 
 **`bakery > blocked`**:

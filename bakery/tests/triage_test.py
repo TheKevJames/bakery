@@ -4,6 +4,7 @@ import pathlib
 import shlex
 
 import pytest
+from task import actors
 from task import ops
 from task import schema
 
@@ -85,7 +86,7 @@ def test_works_through_the_queue_one_task_per_unit(
     testing_tasks.task('add', 'handed over by the operator', '-n', 'bakery')
     fake_llm.queue(
         task('bakery:1', 'set', '--priority', 'high', '--size', 'small',
-             '--description-append', 'notes'),
+             '--comment', 'notes'),
         task('bakery:1', 'set', '--tag', 'build'),
         harness.Reply(text='1 to build'),
         task('bakery:4', 'set', '--tag', 'wontfix', '--priority', 'low'),
@@ -121,7 +122,7 @@ def test_works_through_the_queue_one_task_per_unit(
         first['size'],
         first['claim'],
     ) == ('build', 'high', 'small', None)
-    assert first['description'] == 'notes'
+    assert testing_tasks.said('bakery:1') == ['notes']
     assert (second['tag'], second['priority'], second['claim']) == (
         'wontfix',
         'low',
@@ -168,7 +169,7 @@ def test_blocking_a_task_needs_blockers_which_have_not_cleared(
         '**Blocked on:**\n- #bakery:4 decided\n- #default:1 done\n'
         '- https://example.com/1: released'
     )
-    blocking = ('bakery:1', 'set', '--tag', 'blocked', '--description-append')
+    blocking = ('bakery:1', 'set', '--tag', 'blocked', '--comment')
     fake_llm.queue(
         task(*blocking, '**Blocked on:**\n- see upstream'),
         task(
@@ -200,7 +201,8 @@ def test_blocking_a_task_needs_blockers_which_have_not_cleared(
     )
     blocked = testing_tasks.show('bakery:1')
     assert (blocked['tag'], blocked['claim']) == ('blocked', None)
-    assert blocked['description'] == valid  # refused notes were not appended
+    # Refused notes were not kept.
+    assert testing_tasks.said('bakery:1') == [valid]
 
 
 def test_blocked_tasks_go_back_once_their_blockers_clear(
@@ -237,17 +239,12 @@ def test_blocked_tasks_go_back_once_their_blockers_clear(
             '--description',
             notes,
         )
-    ops.Writer(schema.Actor.agent('someone/else')).claim(
+    ops.Writer(actors.Actor.agent('someone/else')).claim(
         schema.Ref.parse('bakery:11')
     )
     fake_llm.queue(
         task(
-            'bakery:5',
-            'set',
-            '--tag',
-            'triage',
-            '--description-append',
-            '## Unblocked',
+            'bakery:5', 'set', '--tag', 'triage', '--comment', '## Unblocked'
         ),
         harness.Reply(text='moved 5'),
         harness.Reply(text='nothing cleared'),

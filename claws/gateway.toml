@@ -15,9 +15,11 @@ operator_id = 523678345662300161   # the only user the bot acts on
 # namespace, `bakery`, and never deletes a task, nor completes one (its
 # source would be filed again) but for scout's own mistakes. Each claim
 # belongs to one run, and ends with it.
+# Saying something on a task (comments, and questions to the operator) needs
+# no claim; only the operator answers questions.
 # bakery/bakery/task_list/hooks.py adds checks rules cannot express: filing
-# only new links, blocking only on valid blockers, and asking the operator
-# only with questions.
+# only new links, blocking only on valid blockers, and moving a task to human
+# only asking the operator something.
 
 [tasks.scout.create]
 namespaces = ["bakery"]
@@ -41,8 +43,17 @@ namespaces = ["bakery"]
 tags = ["blocked", "triage"]
 
 [tasks.triage.change]
-fields = ["description_append", "priority", "size"]
+fields = ["priority", "size"]
 tags = ["build", "blocked", "human", "triage", "wontfix"]
+
+# Its notes on what it triages.
+[tasks.triage.comment]
+namespaces = ["bakery"]
+tags = ["build", "blocked", "human", "triage", "wontfix"]
+
+[tasks.triage.question]
+namespaces = ["bakery"]
+tags = ["human"]
 
 # Never build: fixes change the claws themselves, so the operator approves.
 [tasks.baker.create]
@@ -50,3 +61,7 @@ namespaces = ["bakery"]
 tags = ["human"]
 require = ["description", "link"]
 fields = ["priority", "size"]
+
+[tasks.baker.question]
+namespaces = ["bakery"]
+tags = ["human"]

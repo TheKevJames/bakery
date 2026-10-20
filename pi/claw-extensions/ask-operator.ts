@@ -2,14 +2,14 @@
  * Ask Operator Extension (claws only)
  *
  * An `ask_operator` tool which puts questions to the operator on the task
- * list: it appends them to a task, moves the task to `human`, releases it,
- * and ends the run (`terminate`). Nothing waits on the operator: they answer
- * on the task and send it back through triage.
+ * list: it asks them as the task's questions, moves the task to `human`,
+ * releases it, and ends the run (`terminate`). Nothing waits on the operator:
+ * they answer each question on the task and send it back through triage.
  *
  * It runs `task` like any other command the claw runs, so the gateway's task
  * server applies the claw's rules to it; the server also refuses any move to
- * `human` without a `## Questions` section as this tool writes it
- * (bakery/bakery/task_list/hooks.py).
+ * `human` which asks nothing, or asks a question without its context and
+ * default as this tool writes them (bakery/bakery/task_list/hooks.py).
  *
  * The result's `details.reply` is what the gateway posts as the run's reply,
  * since a terminated run has no final message of its own.
@@ -20,6 +20,7 @@ import { Type } from "typebox";
 const HUMAN = "human";
 
 type Question = { question: string; context: string; default: string };
+type Asked = { number: number; body: string };
 
 function namespace(): string {
   const ns = process.env.BAKERY_TASK_NAMESPACE;
@@ -33,25 +34,13 @@ async function task(pi: ExtensionAPI, args: string[], signal?: AbortSignal): Pro
   return result.stdout.trim();
 }
 
+/** One question as the task records it, so it reads cold. */
+function body(q: Question): string {
+  return `${q.question.trim()}\n**Context:** ${q.context.trim()}\n**Default:** ${q.default.trim()}`;
+}
+
 function indent(text: string): string {
-  return text.trim().replaceAll("\n", "\n   ");
-}
-
-function today(): string {
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-}
-
-/** Numbered, so the operator can answer each under `## Answers` by number. */
-function questionsSection(questions: Question[]): string {
-  const items = questions.map(
-    (q, i) =>
-      `${i + 1}. ${indent(q.question)}\n` +
-      `   **Context:** ${indent(q.context)}\n` +
-      `   **Default:** ${indent(q.default)}`,
-  );
-  return `## Questions (${today()})\n\n${items.join("\n")}\n`;
+  return text.replaceAll("\n", "\n   ");
 }
 
 export default function (pi: ExtensionAPI) {
@@ -61,9 +50,9 @@ export default function (pi: ExtensionAPI) {
       label: "Ask Operator",
       description:
         `Put questions to the operator on a task in \`${process.env.BAKERY_TASK_NAMESPACE ?? "your namespace"}\`: ` +
-        `appends them under \`## Questions\`, moves the task to \`${HUMAN}\`, releases it, and ends your run. ` +
+        `asks them as the task's questions, moves the task to \`${HUMAN}\`, releases it, and ends your run. ` +
         "Call it last, after recording everything else on the task: you get no further turn. The operator " +
-        "answers under `## Answers`, by number; an unanswered question means they accept its default.",
+        'answers every question, by its number (`Q1`, `Q2`, ...); "default" means they accept its default.',
       parameters: Type.Object({
         id: Type.Integer({ minimum: 1, description: "The task's id: the number in `<namespace>:<id>`" }),
         questions: Type.Array(
@@ -78,14 +67,16 @@ export default function (pi: ExtensionAPI) {
 
       async execute(_toolCallId, params, signal) {
         const id = `${namespace()}:${params.id}`;
-        const section = questionsSection(params.questions);
-        await task(pi, [id, "set", "--tag", HUMAN, "--description-append", section, "--json"], signal);
+        const asking = params.questions.flatMap((q) => ["--question", body(q)]);
+        const stored = await task(pi, [id, "set", "--tag", HUMAN, ...asking, "--json"], signal);
         await task(pi, [id, "release", "--json"], signal);
         const count = params.questions.length;
+        const asked: Asked[] = JSON.parse(stored).questions.slice(-count);
+        const list = asked.map((q) => `Q${q.number}. ${indent(q.body)}`).join("\n");
         const noun = count === 1 ? "question" : "questions";
         return {
           content: [{ type: "text" as const, text: `Moved ${id} to ${HUMAN} with ${count} ${noun}. Stop here.` }],
-          details: { task: id, reply: `→ ${id} is in \`${HUMAN}\`.\n\n${section}` },
+          details: { task: id, reply: `→ ${id} is in \`${HUMAN}\`.\n\n${list}\n` },
           terminate: true,
         };
       },

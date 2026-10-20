@@ -89,7 +89,7 @@ def _blocked() -> tuple[list[Blocked], list[str]]:
     ):
         ident = int(str(task['id']))
         try:
-            blockers = blocked.parse(str(task['description'] or ''))
+            blockers = blocked.parse(store.notes(task))
             on_tasks = tuple(
                 b for b in blockers if isinstance(b, blocked.TaskBlocker)
             )

@@ -11,6 +11,8 @@
   (contains), or `!~`; eg. `task list --json -f
   'namespace=bakery,tag=build,claim='` (unclaimed). `next` (the due date)
   takes only `=` and `!=`, eg. `next=2026-01-31`, or `next=` (unscheduled).
+  `questions=open` lists tasks waiting on the operator's answers, and
+  `questions!=open` those which are not.
 - Change tasks with `task add`, `task <id> set`, and `task <id> release`
   (always `--json`, to see the task as it stands after). The gateway runs
   them for you, as you, under your rules: what you may create, claim, and
@@ -19,6 +21,11 @@
   your run ends, when the gateway releases them; meanwhile no one else may
   change them. You cannot change a task someone else has claimed. Release a
   task early only to hand it to someone else in this run.
+- Saying something on a task is not changing it: comment with `task <id>
+  set --comment "..."` (markdown) where your rules allow, whoever holds the
+  task, without claiming it. `task` stamps each comment with who said it and
+  when, and nothing said can be changed later, so say it once, completely.
+  Only the operator answers questions; read their answers in `task show`.
 - Never complete or delete a task, except as your own instructions allow;
   route it instead (eg. to `wontfix`). Once a task is gone, scout no longer
   recognizes its source and files it again.
