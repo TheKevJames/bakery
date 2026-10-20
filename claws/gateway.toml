@@ -12,8 +12,9 @@ operator_id = 523678345662300161   # the only user the bot acts on
 # What each claw may do to the task list (task's `task.rules` format; see
 # bakery/bakery/task_list/claims.py). Whatever no rule grants is denied: a
 # claw without a table may only read. Every claw writes only the claws'
-# namespace, `bakery`, and never completes or deletes a task (its source
-# would be filed again). Each claim belongs to one run, and ends with it.
+# namespace, `bakery`, and never deletes a task, nor completes one (its
+# source would be filed again) but for scout's own mistakes. Each claim
+# belongs to one run, and ends with it.
 # bakery/bakery/task_list/hooks.py adds checks rules cannot express: filing
 # only new links, blocking only on valid blockers, and asking the operator
 # only with questions.
@@ -23,6 +24,12 @@ namespaces = ["bakery"]
 tags = ["triage"]
 require = ["link"]
 fields = ["description", "priority", "size"]
+
+# Scout claims nothing, so it holds, and may complete, only the tasks it adds
+# in a run: to undo its own mistakes (eg. a garbled link) before triage
+# builds on them.
+[tasks.scout.change]
+done = true
 
 [tasks.triage.create]
 namespaces = ["bakery"]

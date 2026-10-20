@@ -68,6 +68,10 @@ def test_claws_write_the_task_list_only_through_their_rules(
         bash(f'{ADD[0]} --link BAKER:plumbing/x again'),
         bash(f'{ADD[0]} --link https://x/gone#L1 no'),
         bash(f'{ADD[0]} --tag build --link l built'),
+        # Scout completes only what it added this run.
+        bash(f'{ADD[0]} --link baker:plumbing/y mistaken'),
+        bash('task bakery:6 done --json'),
+        bash('task bakery:1 done --json'),
         harness.Reply(text='done'),
     )
     fake = testing_gateway.FakeChannel()
@@ -96,6 +100,9 @@ def test_claws_write_the_task_list_only_through_their_rules(
     assert 'open task bakery:5 already has' in results[11]
     assert 'the operator rejected' in results[12] and 'not ours' in results[12]
     assert 'you may not create tasks in bakery > build' in results[13]
+    assert '"id": 6,' in results[14]
+    assert results[15].strip() == 'null'
+    assert 'you may not claim tasks in bakery > build' in results[16]
     assert testing_tasks.show('1')['summary'] == "the operator's"
     # The run's claims ended with it; the operator's did not.
     final = testing_tasks.show('bakery:1')

@@ -677,7 +677,9 @@ Each claw's rules are its `[tasks.<claw>]` table in `claws/gateway.toml`,
 in task's format: the namespaces and tags it may create tasks in (and the
 fields they need, and may have), the tasks it may claim, and what it may
 change on a task it holds. Whatever no rule grants is denied: no claw may
-write outside `bakery`, or complete or delete a task. Bakery's own checks
+write outside `bakery`, or delete a task. Only scout may complete one, and
+only what it holds: having no claim rule, that is the tasks it added in the
+same run, so it can undo its own mistakes. Bakery's own checks
 (`bakery/bakery/task_list/hooks.py`) refuse a task with a tracked link (see
 below), a task entering `blocked` without valid blockers, and one entering
 `human` without questions (see [Asking the operator](#asking-the-operator)).
