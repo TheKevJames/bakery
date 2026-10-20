@@ -83,7 +83,7 @@ One task per gap, in `bakery > human`, with `task add -n bakery --tag human
 - `link`: `baker:<type>/<slug>`, the slug lowercase-kebab and naming the
   gap rather than one instance of it. `task add` refuses a link that is
   already on an open task, in any section, or on a rejection, and says which;
-  check the digest's tasks (or `task list --json -f 'link~baker:'`) and your
+  check the digest's tasks (or `task list --json -f 'link^=baker:'`) and your
   memory for the same gap under another slug first. Rejections are permanent. Other tasks
   disappear once the operator marks them done; file again only if the gap is
   still there.

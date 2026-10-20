@@ -48,10 +48,8 @@ def release(work_key: str) -> list[str]:
 
 def sweep(claw: str) -> list[str]:
     """Release everything any of `claw`'s units claims; the addresses."""
-    # Filters fold case and `~` is a substring match, so filter exactly here.
-    listed = store.listed(f'namespace={store.NAMESPACE},claim~{claw}/')
     return _release(
-        [t for t in listed if str(t['claim']).startswith(f'{claw}/')]
+        store.listed(f'namespace={store.NAMESPACE},claim^={claw}/')
     )
 
 
