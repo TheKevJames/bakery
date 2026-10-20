@@ -86,10 +86,12 @@ for blocked: what to do once it clears)
 `**Duplicates:**` is required on every task, including when the search
 finds none.
 
-Always set `priority` (`low`, `medium`, `high`) and `size` (`small`,
-`medium`, `large`) with `task bakery:<id> set --priority ... --size ...`,
-whatever the route. `**Priority:**`, the reason for the `priority` you
-set, is required on every task:
+Set `priority` (`low`, `medium`, `high`) and `size` (`small`, `medium`,
+`large`) with `task bakery:<id> set --priority ... --size ...` on a task
+you route to `build`, which `task` refuses without them, or to `human`.
+They are optional for `wontfix`, and for a task you block or mark a
+duplicate in `triage`. `**Priority:**`, the reason for the `priority` you
+set, is required whenever you set one:
 
 - **priority**, by what the source shows now, not by the route (a `human`
   or blocked task can be high):
@@ -208,7 +210,7 @@ reply.
 ## Asking the operator
 
 Nothing you do waits on the operator. When a task belongs in `human`,
-record your notes, `priority`, and `size` as for any route, then call
+record your notes, `priority`, and `size`, then call
 `ask_operator(id, questions)` with every question at once (`id` is the
 number in `bakery:<id>`): each answerable cold, with what you found and the
 **Default** you would pick. For a task which needs reproduction,

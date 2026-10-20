@@ -34,7 +34,9 @@ def test_claws_write_the_task_list_only_through_their_rules(
         rules={'triage': 'triage', 'scout': 'scout'},
     )
     fake_llm.queue(
-        bash('task bakery:1 set --tag build --json'),
+        bash(
+            'task bakery:1 set --tag build --priority high --size small --json'
+        ),
         bash('task bakery:2 set --tag build'),
         bash('task bakery:1 set --tag human'),
         # Saying something on a task needs no claim.

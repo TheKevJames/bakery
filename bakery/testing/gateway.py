@@ -15,6 +15,8 @@ from collections.abc import Awaitable
 from collections.abc import Callable
 from collections.abc import Mapping
 
+from task import rules as rules_
+
 from bakery.chat import relay
 from bakery.gateway import channel
 from bakery.gateway import config
@@ -110,7 +112,7 @@ RULES_RE = re.compile(r'^\[tasks\.(?P<claw>[a-z][a-z0-9-]*)\.', re.MULTILINE)
 def _without_rules(gateway_toml: str, rules: dict[str, str]) -> str:
     """
     `gateway_toml` with only the rules `rules` maps test claws to, from the
-    repo's claw each names.
+    repo's claw each names, and every section's requirement.
     """
     first = RULES_RE.search(gateway_toml)
     if first is None:
@@ -125,6 +127,8 @@ def _without_rules(gateway_toml: str, rules: dict[str, str]) -> str:
         table = tables[start:end]
         match = RULES_RE.match(table)
         assert match
+        if match['claw'] == rules_.SECTIONS:
+            kept.append(table)
         for claw, repo_claw in rules.items():
             if match['claw'] == repo_claw:
                 kept.append(
