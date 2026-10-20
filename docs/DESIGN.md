@@ -498,8 +498,14 @@ gateway's `Channel`), `transport` (the interface), `discord_transport`
    `bakery gateway run`, kept alive, with `PATH`, `HOME`, `LANG`,
    `TASK_FOLDER`, `XDG_*`, and `BAKERY_REPO` recorded at install time.
    Install from the `uv tool` `bakery` so the plist points at a stable path.
-3. Logs: `$XDG_STATE_HOME/claws/_gateway/gateway.log` (rotating), and
-   `launchd.log` for anything before logging starts. SIGHUP reloads config.
+   That install is code, the checkout's `claws/` is config, and either can
+   be ahead, so `install` and `restart` first load the claws config (from
+   the checkout the plist records, for `restart`) and refuse, printing why,
+   if this bakery cannot: launchd would only respawn a gateway that exits at
+   once, with every claw down and `kickstart -k` hanging.
+3. Logs: `$XDG_STATE_HOME/claws/_gateway/gateway.log` (rotating, and with
+   why the gateway could not start, if it could not), and `launchd.log` for
+   anything before logging starts. SIGHUP reloads config.
 
 ## Safety
 

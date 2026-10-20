@@ -8,6 +8,7 @@ import subprocess
 
 from . import paths
 from . import state
+from .gateway import config
 
 LABEL = 'in.thekev.bakery'
 # Recorded at install time so the agent finds pi, node, gh, and the task
@@ -65,7 +66,33 @@ def _launchctl(*args: str, check: bool = True) -> None:
         )
 
 
+def _recorded_repo() -> pathlib.Path:
+    """The checkout the installed agent runs from, else this shell's."""
+    try:
+        recorded = plistlib.loads(plist_path().read_bytes())
+        return pathlib.Path(recorded['EnvironmentVariables']['BAKERY_REPO'])
+    except (OSError, plistlib.InvalidFileException, KeyError, TypeError):
+        return paths.repo()
+
+
+def check_config(repo: pathlib.Path) -> None:
+    """
+    Load the checkout's claws config with this (the installed) bakery, as the
+    agent will on start: if it cannot, launchd respawns it in a throttled loop
+    and `kickstart -k` hangs, with every claw down.
+    """
+    try:
+        config.load(repo / 'claws')
+    except config.ConfigError as e:
+        raise ServiceError(
+            f'the installed bakery cannot load {repo / "claws"}: {e}\n'
+            'fix the config, or, if the checkout is newer than the install, '
+            f'reinstall: uv tool install --force {repo / "bakery"}'
+        ) from None
+
+
 def install() -> pathlib.Path:
+    check_config(paths.repo())
     path = plist_path()
     (state.root() / '_gateway').mkdir(parents=True, exist_ok=True)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -81,4 +108,5 @@ def uninstall() -> None:
 
 
 def restart() -> None:
+    check_config(_recorded_repo())
     _launchctl('kickstart', '-k', f'{_domain()}/{LABEL}')
