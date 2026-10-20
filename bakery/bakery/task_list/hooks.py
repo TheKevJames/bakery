@@ -5,9 +5,9 @@ command made them.
 
 - Filing: a task is created only if its link is new (see `filing`).
 - Asking: a task enters `human`, created there or moved there, only asking
-  the operator a new question, each with its context and default, as
-  pi/claw-extensions/ask-operator.ts asks them; so everything waiting on the
-  operator is answered the same way.
+  the operator a new question with `--question`, each with its `**Context:**`
+  and its `**Default:**`; so everything waiting on the operator is answered
+  the same way.
 """
 
 from task import errors
@@ -18,6 +18,7 @@ from . import filing
 from . import store
 
 HUMAN = 'human'
+QUESTION = '--question "<question>\\n**Context:** ...\\n**Default:** ..."'
 
 
 def check(change: ops.Change) -> None:
@@ -37,13 +38,14 @@ def _check_questions(before: schema.Task | None, after: schema.Task) -> None:
     if not questions:
         raise errors.TaskError(
             f'a task enters {HUMAN} only asking the operator a new question:'
-            ' use ask_operator, or add the task with --question'
+            f' add {QUESTION} to the `set --tag {HUMAN}` or `add` which moves'
+            ' it there'
         )
     if not all(
         '**Context:**' in q.body and '**Default:**' in q.body
         for q in questions
     ):
         raise errors.TaskError(
-            'each question needs its **Context:** and its **Default:**,'
-            ' as ask_operator asks them'
+            'each question needs its **Context:** and its **Default:**:'
+            f' {QUESTION}'
         )
