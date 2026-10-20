@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shellcheck source-path=SCRIPTDIR source=worktree.sh
+source "$(dirname "$0")/worktree.sh"
+
+require_worktree
+# GitHub's rulesets keep claws off default branches; this keeps them to their
+# own branches altogether, tags included.
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+    if [[ "${remote_ref}" != refs/heads/kjames/bakery-* ]]; then
+        refuse "push only kjames/bakery-* branches, not ${remote_ref}"
+    fi
+done

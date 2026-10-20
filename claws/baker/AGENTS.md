@@ -26,6 +26,10 @@ failing in a way nothing will fix. File one task per gap for the operator.
     edits (`operator_edit`); the gateway commits and posts each change.
   - `_gateway/runs.db` (SQLite `runs`: claw, work_key, job, status, reason,
     cost_usd, turns) and `_gateway/gateway.log`.
+  - `<claw>/worktrees/<owner>/<repo>/<session>`: each unit's worktrees of
+    the claw's clones, which the unit removes when done. The digest lists
+    those long unused whose unit has no open task: a `plumbing` gap in
+    whatever left them (never remove them yourself).
 - **The bakery repository** (your clone of `TheKevJames/bakery`): each claw's
   `claws/<name>/` (`claw.toml` policy and jobs, `AGENTS.md`, `SOUL.md`,
   `context.toml`), `claws/defaults.toml` and `claws/gateway.toml` (with

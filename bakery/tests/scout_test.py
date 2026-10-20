@@ -306,10 +306,11 @@ def test_collects_new_candidates_in_priority_order(
     assert (f'/repos/{REPO}', f'Bearer {COLLECTOR_TOKEN}') in github.requests
     # Scout's own clone, in its state, is the one pi/claw-rules/repos.md has
     # the model use; the collector keeps working once the model has used it.
-    clone = claw.state_dir / 'clones' / REPO
-    commands.git(clone, 'fetch', '-q')
-    commands.git(clone, 'checkout', '-q', '--detach', 'origin/HEAD')
-    assert 'TODO: handle errors' in (clone / 'app.py').read_text()
+    clone = claw.state_dir / 'clones' / f'{REPO}.git'
+    worktree = claw.state_dir / 'worktrees' / REPO / 'scout-daily-x'
+    commands.git(clone, 'fetch', '-q', '--prune', 'origin')
+    commands.git(clone, 'worktree', 'add', '-q', str(worktree), 'origin/HEAD')
+    assert 'TODO: handle errors' in (worktree / 'app.py').read_text()
     assert candidates(scout.collect(claw, 'test/run').text) == found
 
 

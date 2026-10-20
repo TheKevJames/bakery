@@ -1,7 +1,7 @@
 # Scout watches every repo the claws' GitHub user can reach (inviting it is
 # how a repo is added): CI, open issues and non-bot PRs, and to-do comments
 # on the default branch, which the collector fetches into scout's own clone,
-# under its state dir's clones/<owner>/<repo>. Only comments count, not
+# under its state dir's clones/<owner>/<repo>.git. Only comments count, not
 # strings or prose (see bakery/bakery/collectors/scout_todos.py).
 #
 # [[repo]] entries `exclude` git glob pathspecs from one repo by `name`, eg.

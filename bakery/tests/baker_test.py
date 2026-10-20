@@ -1,5 +1,6 @@
 import datetime
 import json
+import os
 import pathlib
 import time
 from collections.abc import Iterable
@@ -89,6 +90,21 @@ def add_run(
         run_id = runs.start(claw, f'{claw}/{job}-x', f'cron:{job}', job)
         runs.record(run_id, cost_usd=0.5, turns=3)
         runs.finish(run_id, status, reason)
+
+
+def make_worktrees() -> None:
+    """Worktrees in use, and left behind with and without an open task."""
+    old = time.time() - (baker.STALE_WORKTREE_DAYS + 1) * 86_400
+    for session, used in (
+        ('scout-daily-old', old),
+        ('scout-daily-new', time.time()),
+        ('triage-task-2', old),
+        ('triage-task-3', old),
+    ):
+        claw = session.split('-', 1)[0]
+        worktree = state.root() / claw / 'worktrees' / 'o' / 'r' / session
+        worktree.mkdir(parents=True)
+        os.utime(worktree, (used, used))
 
 
 @pytest.fixture(name='world', scope='function')
@@ -198,6 +214,7 @@ def test_digest_covers_activity_since_the_last_review(
     wontfix.add('bakery:1', 'not a gap')
     for ident in ('bakery:1', 'bakery:2'):
         testing_tasks.task(ident, 'done')
+    make_worktrees()
 
     text = baker.collect(world, 'test/run').text
 
@@ -236,6 +253,10 @@ def test_digest_covers_activity_since_the_last_review(
     assert (
         '- #bakery:3 [triage] None/None Still open (baker:plumbing/z)' in text
     )
+    for stale in ('scout-daily-old', 'triage-task-2'):
+        assert f'/o/r/{stale}: unused since' in text, stale
+    assert 'scout-daily-new' not in text
+    assert 'triage-task-3' not in text
     assert 'ERROR bakery.gateway.core: committing state after' in text
     assert 'old trouble' not in text
 

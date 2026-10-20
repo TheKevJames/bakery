@@ -14,6 +14,7 @@ import pytest
 from bakery.gateway import channel
 from bakery.gateway import cli as gateway_cli
 from bakery.gateway import core
+from testing import commands
 from testing import gateway as testing_gateway
 from testing import harness
 from testing import servers
@@ -311,3 +312,63 @@ def test_sandbox_exec_runs_commands_as_the_claw(
     out = capfd.readouterr()
     assert f'TMPDIR={root.resolve()}/state/claws/a/tmp/pi-' in out.out
     assert 'hunter2' not in out.out + out.err
+
+
+def test_claws_change_repos_only_in_worktrees(
+    root: pathlib.Path, capfd: pytest.CaptureFixture[str]
+) -> None:
+    upstream = root / 'remote' / 'o' / 'r.git'
+    commands.git(root, 'init', '-q', '--bare', '-b', 'main', str(upstream))
+    seed = root / 'seed'
+    commands.git(root, 'init', '-q', '-b', 'main', str(seed))
+    (seed / 'app.py').write_text('pass\n')
+    commands.git(seed, 'add', '.')
+    commands.git(
+        seed,
+        '-c', 'user.name=t', '-c', 'user.email=t@t',
+        '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'init',
+    )  # fmt: skip
+    commands.git(seed, 'push', '-q', str(upstream), 'main')
+    claws = testing_gateway.make_claws(
+        root, {'a': f'[policy]\nwrite_paths = {toml_list([upstream])}'}
+    )
+    # As pi/claw-rules/repos.md has every claw work; each refusal is echoed.
+    script = f"""
+        clone="$BAKERY_MEMORY_DIR/clones/o/r.git"
+        git init -q --bare "$clone"
+        git -C "$clone" remote add origin {upstream}
+        git -C "$clone" fetch -q --prune origin
+        git -C "$clone" remote set-head origin --auto
+        wt="$BAKERY_MEMORY_DIR/worktrees/o/r/$BAKERY_SESSION_ID"
+        x=kjames/bakery-x
+        git -C "$clone" worktree add -q -b "$x" "$wt" origin/HEAD
+        cd "$wt" && echo x > x && git add x
+        git commit -qm x && echo COMMITTED
+        git push -q origin "HEAD:$x" && echo PUSHED
+        git push -q origin HEAD:main || echo REFUSED-MAIN
+        git tag v1 && git push -q origin v1 || echo REFUSED-TAG
+        git -C "$clone" push -q origin "$x:kjames/bakery-z" || echo REFUSED-BARE
+        out="$TMPDIR/elsewhere"
+        git -C "$clone" worktree add -q -b kjames/bakery-y "$out" origin/HEAD
+        cd "$out" && echo y > y && git add y
+        git commit -qm y || echo REFUSED-OUTSIDE
+        plain="$BAKERY_MEMORY_DIR/clones/o/plain"
+        git clone -q {upstream} "$plain" && cd "$plain" && echo z > z
+        git add z && git commit -qm z || echo REFUSED-CLONE
+    """
+    args = argparse.Namespace(
+        claw='a', claws_dir=str(claws), command=['sh', '-c', script]
+    )
+
+    gateway_cli.do_sandbox_exec(args)
+
+    out = capfd.readouterr()
+    print(out.out, out.err)
+    for marker in (
+        'COMMITTED', 'PUSHED', 'REFUSED-MAIN', 'REFUSED-TAG', 'REFUSED-BARE',
+        'REFUSED-OUTSIDE', 'REFUSED-CLONE',
+    ):  # fmt: skip
+        assert marker in out.out.split(), marker
+    assert 'bakery: push only kjames/bakery-* branches' in out.err
+    refs = commands.git(upstream, 'for-each-ref', '--format=%(refname)')
+    assert refs.split() == ['refs/heads/kjames/bakery-x', 'refs/heads/main']

@@ -2,8 +2,9 @@
 Claw state: $XDG_STATE_HOME/claws, a local-only git repo.
 
 Memory and identity files are committed after every change so a poisoned or
-botched edit can be reviewed and rolled back; transcripts, clones, each
-claw's home and temp dirs, and the gateway's runtime files are ignored.
+botched edit can be reviewed and rolled back; transcripts, clones and their
+worktrees, each claw's home and temp dirs, and the gateway's runtime files
+are ignored.
 """
 
 import importlib.resources
@@ -20,6 +21,7 @@ GITIGNORE = """\
 /*/clones/
 /*/home/
 /*/tmp/
+/*/worktrees/
 """
 
 # git allows one writer per index (.git/index.lock), and the gateway commits

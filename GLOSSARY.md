@@ -45,8 +45,14 @@ it finds.
 ### Code
 
 **Clone**:
-A claw's own copy of a repository, cloned from GitHub into its state.
+A claw's own copy of a repository's history, cloned from GitHub into its
+state, with no files checked out: read in place, or through a worktree.
 _Avoid_: checkout, mirror
+
+**Worktree**:
+A working copy of a clone for one unit of work: the only place a claw checks
+out or changes a repository's files.
+_Avoid_: checkout
 
 ### Work
 
