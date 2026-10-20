@@ -7,7 +7,7 @@ dependencies = [
     "croniter==6.2.4",
     "discord.py==2.7.1",
     "pygments==2.21.0",
-    "task @ git+https://github.com/TheKevJames/task@9.0.0rc2",
+    "task",
 ]
 
 [project.scripts]
@@ -35,11 +35,10 @@ pythonpath = ["."]
 testpaths = ["tests"]
 timeout = 30
 
-# task is pinned by tag, as pipx installs bakery with pip: uv's sources would
-# be ignored. Renovate finds it with a custom manager (.github/renovate.json5).
-# Tests and claws run this pinned `task`, never another on PATH.
-[tool.hatch.metadata]
-allow-direct-references = true
+# Install bakery with `uv tool install`: pip, and so pipx, ignores these.
+# Tests and claws run this `task`, never another on PATH.
+[tool.uv.sources]
+task = { git = "https://github.com/TheKevJames/task", tag = "9.0.0rc2" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["bakery"]

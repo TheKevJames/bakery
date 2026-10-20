@@ -22,7 +22,7 @@ Setup
 
     $ export PI_CODING_AGENT_DIR=~/src/personal/bakery/interactive
     $ bun install --frozen-lockfile --cwd ~/src/personal/bakery/pi
-    $ pipx install --force ~/src/personal/bakery/bakery
+    $ uv tool install --force ~/src/personal/bakery/bakery
     $ bakery state init
 
 Gateway

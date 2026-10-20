@@ -494,7 +494,7 @@ gateway's `Channel`), `transport` (the interface), `discord_transport`
    `in.thekev.bakery` (`~/Library/LaunchAgents/in.thekev.bakery.plist`):
    `bakery gateway run`, kept alive, with `PATH`, `HOME`, `LANG`,
    `TASK_FOLDER`, `XDG_*`, and `BAKERY_REPO` recorded at install time.
-   Install from the pipx `bakery` so the plist points at a stable path.
+   Install from the `uv tool` `bakery` so the plist points at a stable path.
 3. Logs: `$XDG_STATE_HOME/claws/_gateway/gateway.log` (rotating), and
    `launchd.log` for anything before logging starts. SIGHUP reloads config.
 
