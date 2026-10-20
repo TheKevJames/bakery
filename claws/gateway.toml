@@ -22,7 +22,8 @@ operator_id = 523678345662300161   # the only user the bot acts on
 # A question leaves its task where it is: each section's collector skips
 # tasks with open questions, until the operator has answered every one.
 # bakery/bakery/task_list/hooks.py adds checks rules cannot express: filing
-# only new links, and asking only questions with their context and default.
+# only new links, asking only questions with their context and default, and
+# baker filing only tasks which ask at least one.
 
 # What a task needs to be in a section, whichever claw puts it there, and
 # keeps while it is: build picks its tasks by priority.

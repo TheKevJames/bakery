@@ -115,8 +115,9 @@ Accept this proposal as is?
 
 Every task waiting on the operator asks its questions this way, so they
 answer each the same way, by number; `task add` refuses a question without
-its **Context:** and **Default:**. Always ask it: triage leaves the task
-alone until the operator has answered, then routes it like any other.
+its **Context:** and **Default:**, and a task of yours which asks nothing.
+Triage leaves the task alone until the operator has answered, then routes it
+like any other.
 
 Never change other claws' memory or tasks yourself, and never run `bakery
 teach`; put those changes in **Fix**. A lesson is what the claw should
