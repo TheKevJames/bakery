@@ -6,23 +6,21 @@ link's lineage.
 which weigh many candidates at once, use `tracked`.
 """
 
+from task import api
+
 from . import lineage
 from . import store
 from . import wontfix
-
-Task = dict[str, object]
 
 
 def tracked() -> set[str]:
     """Lineages not to file again: open tasks' and rejections'."""
     return {
-        lineage.of(str(task['link']))
-        for task in store.listed()
-        if task.get('link')
+        lineage.of(task.link) for task in store.listed() if task.link
     } | set(wontfix.load())
 
 
-def holder(link: str) -> Task | wontfix.Rejection | None:
+def holder(link: str) -> api.Task | wontfix.Rejection | None:
     """
     What has `link`'s lineage: an open task (in any namespace), else a
     rejection; None if `link` is new.
@@ -31,7 +29,7 @@ def holder(link: str) -> Task | wontfix.Rejection | None:
     # `link~` is a substring match, so it also finds eg. `…/issues/12` for
     # `…/issues/1`.
     for task in store.listed(f'link~{lineage.source(link)}'):
-        if lineage.of(str(task['link'])) == key:
+        if task.link and lineage.of(task.link) == key:
             return task
     return wontfix.load().get(key)
 
@@ -52,5 +50,5 @@ def check(link: str) -> None:
     if held is not None:
         raise store.TaskError(
             f'not filed: open task {store.ref(held)} already has this'
-            f' link\'s lineage ("{held["summary"]}")'
+            f' link\'s lineage ("{held.summary}")'
         )

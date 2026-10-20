@@ -10,9 +10,7 @@ command made them.
   the same way.
 """
 
-from task import errors
-from task import ops
-from task import schema
+from task import api
 
 from . import filing
 from . import store
@@ -21,7 +19,7 @@ HUMAN = 'human'
 QUESTION = '--question "<question>\\n**Context:** ...\\n**Default:** ..."'
 
 
-def check(change: ops.Change) -> None:
+def check(change: api.Change) -> None:
     before, after = change.before, change.after
     if after is None or after.namespace != store.NAMESPACE:
         return
@@ -31,12 +29,12 @@ def check(change: ops.Change) -> None:
         _check_questions(before, after)
 
 
-def _check_questions(before: schema.Task | None, after: schema.Task) -> None:
+def _check_questions(before: api.Task | None, after: api.Task) -> None:
     """What the change asked must ask the operator something answerable."""
     asked = len(before.conversation.questions) if before else 0
     questions = after.conversation.questions[asked:]
     if not questions:
-        raise errors.TaskError(
+        raise api.TaskError(
             f'a task enters {HUMAN} only asking the operator a new question:'
             f' add {QUESTION} to the `set --tag {HUMAN}` or `add` which moves'
             ' it there'
@@ -45,7 +43,7 @@ def _check_questions(before: schema.Task | None, after: schema.Task) -> None:
         '**Context:**' in q.body and '**Default:**' in q.body
         for q in questions
     ):
-        raise errors.TaskError(
+        raise api.TaskError(
             'each question needs its **Context:** and its **Default:**:'
             f' {QUESTION}'
         )

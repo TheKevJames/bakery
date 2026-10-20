@@ -20,8 +20,7 @@ from collections.abc import Mapping
 from typing import Any
 
 import croniter
-from task import errors
-from task import rules as rules_
+from task import api
 
 from .. import collectors
 from .. import paths
@@ -134,7 +133,7 @@ class Claw:
     git: Git
     policy: policy_.Policy
     # What it may do to the task list, from gateway.toml; nothing if unset.
-    rules: rules_.Rules
+    rules: api.Rules
     jobs: tuple[Job, ...]
 
     @property
@@ -312,7 +311,7 @@ def _claw(
     profile: pathlib.Path,
     data: Mapping[str, Any],
     shared_jobs: set[str],
-    rules: rules_.Rules,
+    rules: api.Rules,
 ) -> Claw:
     table = toml.Table(data, name)
     limits = table.table('limits')
@@ -426,12 +425,12 @@ def _merge_jobs(defaults: object, own: object) -> list[object]:
     return [*kept, *own]
 
 
-def _rules(data: object) -> dict[str, rules_.Rules]:
+def _rules(data: object) -> dict[str, api.Rules]:
     if not isinstance(data, dict):
         raise ConfigError('gateway.tasks: must be a table')
     try:
-        return rules_.parse(data)
-    except errors.TaskError as e:
+        return api.parse_rules(data)
+    except api.TaskError as e:
         raise ConfigError(f'gateway.tasks: {e}') from None
 
 
@@ -459,7 +458,7 @@ def load(claws_dir: pathlib.Path) -> Config:
             if isinstance(job, dict) and job.get('name') not in own_names
         }
         claws[name] = _claw(
-            name, path.parent, data, shared, rules.get(name, rules_.Rules())
+            name, path.parent, data, shared, rules.get(name, api.Rules())
         )
     if unknown := set(rules) - set(claws):
         raise ConfigError(

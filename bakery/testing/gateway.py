@@ -15,7 +15,7 @@ from collections.abc import Awaitable
 from collections.abc import Callable
 from collections.abc import Mapping
 
-from task import rules as rules_
+from task import api
 
 from bakery.chat import relay
 from bakery.gateway import channel
@@ -127,7 +127,7 @@ def _without_rules(gateway_toml: str, rules: dict[str, str]) -> str:
         table = tables[start:end]
         match = RULES_RE.match(table)
         assert match
-        if match['claw'] == rules_.SECTIONS:
+        if match['claw'] == api.RULES_SECTIONS:
             kept.append(table)
         for claw, repo_claw in rules.items():
             if match['claw'] == repo_claw:

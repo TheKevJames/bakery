@@ -4,9 +4,7 @@ import sqlite3
 import threading
 
 import pytest
-from task import actors
-from task import ops
-from task import refs
+from task import api
 
 from bakery.gateway import channel
 from bakery.gateway import control
@@ -273,9 +271,7 @@ def test_claims_do_not_outlive_runs(
 ) -> None:
     testing_tasks.task('add', 'stranded', '-n', 'bakery', '--tag', 'triage')
     # Left behind by a run the gateway never saw finish (eg. a crash).
-    ops.Writer(actors.Actor.agent('triage/old')).claim(
-        refs.Ref.parse('bakery:1')
-    )
+    api.Writer(api.Actor.agent('triage/old')).claim(api.Ref.parse('bakery:1'))
     testing_tasks.task('add', 'next', '-n', 'bakery', '--tag', 'triage')
     testing_tasks.task('add', 'theirs', '-n', 'bakery', '--tag', 'triage')
     testing_tasks.task('bakery:3', 'claim')

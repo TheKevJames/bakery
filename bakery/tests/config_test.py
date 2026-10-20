@@ -5,7 +5,7 @@ import tomllib
 import zoneinfo
 
 import pytest
-from task import rules
+from task import api
 
 from bakery import state
 from bakery.collectors import scout_repos
@@ -197,7 +197,7 @@ def test_repo_claws_load(
     assert (queue.collector, queue.repeat) == ('triage', True)
     baker = loaded.claw('baker')
     assert baker.job('review').collector == 'baker'
-    assert all(c.rules != rules.Rules() for c in loaded.claws.values())
+    assert all(c.rules != api.Rules() for c in loaded.claws.values())
     assert state.root() in baker.policy.read_paths
 
 
