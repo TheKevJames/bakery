@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING
 
 from . import baker
 from . import base
+from . import build
+from . import build_review
 from . import changes
 from . import scout
 from . import scout_repos
@@ -29,6 +31,8 @@ Check = Callable[['config.Claw'], list[str]]
 
 COLLECTORS: dict[str, Collector] = {
     'baker': baker.collect,
+    'build': build.collect,
+    'build-review': build_review.collect,
     'changes': changes.collect,
     'scout': scout.collect,
     'triage': triage.collect,

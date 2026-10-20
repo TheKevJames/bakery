@@ -1,0 +1,10 @@
+# The review job's collector (bakery/bakery/collectors/build_review.py),
+# which resumes a task's unit when its pull request has news.
+
+# Only these GitHub users' comments and reviews count: anyone can comment on
+# a public repository.
+operators = ["TheKevJames"]
+# Resumes for failing checks, conflicts, or a missing pull request, per task
+# since an operator last said anything on it (on the task or its pull
+# request); the last one is told to ask the operator instead.
+max_auto_resumes = 3

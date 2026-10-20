@@ -327,7 +327,8 @@ Configurable in `claw.toml`; defaults:
 
 - at most 4 pi processes globally,
 - at most 1 active new run per claw (others queue),
-- `build` may additionally run up to 2 PR-feedback resumes concurrently,
+- no extra slots for runs resuming units of work (`max_resumes`; `build`
+  has 2, for its pull requests' news),
 - idle RPC children exit after 15 minutes and resume from their session file
   on the next thread reply.
 
@@ -337,8 +338,8 @@ A SQLite run ledger at `$XDG_STATE_HOME/claws/_gateway/runs.db`, one row
 per run, including the bakery checkout's HEAD its input was gathered
 against (`bakery_commit`: at collection for jobs with a collector, else when
 the run starts). Defaults, all configurable per claw:
-$5, 30 minutes, and 50 turns per run; $20 per claw per day; $50 per day
-globally. Daily budgets reset at midnight in the gateway timezone.
+$5, 30 minutes, and 50 turns per run; $20 per claw per day; and, in
+`gateway.toml`, $75 per day globally. Daily budgets reset at midnight in the gateway timezone.
 
 A run's cost budget is the smallest of its per-run limit and what remains of
 the claw's and the global daily budgets. Cost is the change in pi's session
@@ -355,7 +356,7 @@ pi's own retries.
 
 Nothing in a run waits on the operator: claws put their questions on the
 task list. `ask_operator` (`pi/claw-extensions/ask-operator.ts`, loaded by
-triage, and by build once it exists) takes a task and its questions, each
+triage and build) takes a task and its questions, each
 with its context and the default the claw would pick. It asks them as the
 task's questions (`--question`, which task numbers `Q1`, `Q2`, ... and
 stamps with who asked and when), leaving the task in its section (it
@@ -375,7 +376,8 @@ The operator answers every question by its number (`task <id> set --answer
 once per question. Each section's collector skips tasks with open
 questions, so once the last is answered the task goes back to its claw's
 per-task unit of work: triage's queue re-routes it (see
-[Task flow](#task-flow)), and build will carry on with it.
+[Task flow](#task-flow)), and build's queue or review job carries on with
+it.
 
 Claws without `ask_operator` decide, and state their assumptions in their
 reply; in a conversation the operator started in Discord, a claw ends its
@@ -736,15 +738,19 @@ Tags here are sections of the `bakery` namespace.
    upstream change triage's recheck found), to be re-routed; it removes a
    duplicate once its canonical is done.
 5. `build` claims `ready` tasks without open questions (high priority
-   first), moves them to `review` once a PR is open, and runs `done` after
-   merge; its questions, through `ask_operator`, leave the task in `ready`
-   until answered, and it re-tags to `triage` or `wontfix` when an answer
-   changes the route.
+   first), moves them to `review` once a PR is open, and to `confirm` once
+   it is merged; its questions, through `ask_operator`, leave the task in
+   `ready` or `review` until answered. It sends a task it cannot build back
+   to `triage` (to be re-routed, blocked, or a duplicate), or to `operator`
+   or `wontfix`.
 6. `baker` adds tasks about the claws themselves to `triage`, with their
    priority, size, and the question whether to accept each; triage routes
    them once the operator has answered.
 7. The operator does `operator` tasks, which no claw can do, and closes
    them with `done`.
+8. The operator checks that each `confirm` task's merged change did what
+   it asked, and closes it with `done`. Until then the task keeps its link
+   tracked, so scout does not file its source again.
 
 The operator closes `wontfix` tasks, with `done`, after `bakery wontfix add
 bakery:<id> --reason "…"` if the link should never be filed again. That
@@ -917,19 +923,61 @@ Profile: `claws/triage/`. Sonnet, high thinking, $3 per task (and per
 
 ### build - clones + PRs
 
-- Picks `bakery > ready` tasks without open questions by `priority`
-  (`high`, then `medium`, then `low`), then lowest id.
-- Works in its own clones (see [Safety](#safety)), a worktree per task;
-  removed after merge/close.
-- Pushes `kjames/bakery-*` branches and opens PRs; never merges.
-- Polls its PRs every 10 minutes; new review comments or failing CI resume
-  that task's unit of work in the same thread.
-- Merged → `done`. Closed unmerged → `ask_operator`, asking what next.
-- Rules: claims `bakery > ready` tasks, may set links, complete them, and
-  re-tag them to `triage` or `wontfix`, in its `[tasks.build]` table once it
-  exists.
-- Asks through `ask_operator`, like triage: the task stays in `ready`, and
-  build carries on in the same unit once the operator has answered.
+Profile: `claws/build/`. Opus, high thinking; $10, 60 minutes, and 150
+turns per run, and $30 a day. One task is one unit of work,
+`build/task-<id>`, for its whole life.
+
+- The `queue` job's `build` collector (`bakery/bakery/collectors/build.py`)
+  claims and hands over the unclaimed, unblocked `bakery > ready` task
+  without open questions which `task next` would pick (by `priority`,
+  `high` first, then lowest id), with its branch prefix and its PR's
+  footer. It runs hourly, within two minutes of `$TASK_FOLDER` changing,
+  manually, and on repeat until the queue is empty. A task coming back to
+  `ready` (eg. once the operator has answered build's questions) resumes
+  its unit.
+- Per task: checks the repository is one the claws can push to (else back
+  to triage), implements it in a worktree of its clone (see
+  [Safety](#safety)) on `kjames/bakery-<id>-<slug>`, runs what the
+  repository runs (its toolchain installed locally; what cannot run here is
+  left to CI and said so), and opens a ready-for-review PR with `gh`,
+  requesting the operator's review. The PR body ends with the rendered
+  footer: the task, its link (`Refs`, or `Closes` for an issue in the same
+  repository), and that an AI agent (build, linked to its profile, and its
+  model) wrote it and it needs human review. Build comments the PR on the
+  task and moves it to `review`. It never merges.
+- The `review` job (every 10 minutes, on repeat) uses the `build-review`
+  collector (`bakery/bakery/collectors/build_review.py`, settings in
+  `claws/build/build.toml`). It finds the PRs of unclaimed `bakery >
+  review` tasks without open questions by their branch, among the claws'
+  GitHub user's PRs (one search, then each PR), and resumes the unit of the
+  first task with news since the unit's last run started (from the ledger,
+  so nothing is stored): merged or closed; the operator answered its
+  questions; comments and reviews by `build.toml`'s `operators` only, as
+  anyone can comment on a public repository; a check or status on the head
+  which failed; a conflict, once the base branch moved; or no PR at all. The
+  last three are automatic: at most `max_auto_resumes` (3) since an
+  operator last said anything on the task or its PR, the last one told to
+  ask the operator, so a fix which keeps failing cannot loop. See
+  `docs/adr/0002-build-finds-its-pull-requests-by-branch.md`.
+- On news: addresses the operator's comments (changes and pushes, or
+  replies explaining why not), fixes failing checks its change caused (and
+  files others), and rebases away conflicts (`--force-with-lease`, its own
+  branch only). Merged → `confirm`, then removes its worktree and branches.
+  Closed unmerged → asks the operator what next.
+- Routes a task it holds back to `triage` (to be re-routed, blocked with
+  `--blocked-by`, or a duplicate), or to `operator` or `wontfix`, saying
+  why; its open PR is closed for `wontfix`, and otherwise made a draft until
+  the task comes back to `ready`. Separate work it finds is filed in
+  `triage`.
+- Rules (`[tasks.build]`): claims `ready` and `review` tasks; on what it
+  holds, changes `blocked_by`, `duplicate_of`, `priority`, and `size`, and
+  moves it to `review`, `confirm`, `triage`, `operator`, or `wontfix`;
+  comments anywhere in `bakery`; asks only on `ready` and `review` tasks;
+  adds tasks only in `triage`. It never completes a task.
+- Asks through `ask_operator`, like triage, whenever the task, a review, or
+  the code leaves a real choice open, or it is stuck: the task stays in
+  `ready` or `review`, and the same unit carries on once the operator has
+  answered.
 
 ### baker - reads every claw, files for the operator
 

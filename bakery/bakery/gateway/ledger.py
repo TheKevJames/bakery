@@ -131,6 +131,25 @@ class Ledger:
         ).fetchone()
         return row is not None
 
+    def last_started(self, work_key: str) -> float | None:
+        """When the latest run of `work_key` started."""
+        row = self.db.execute(
+            'SELECT MAX(started_at) FROM runs WHERE work_key = ?', (work_key,)
+        ).fetchone()
+        return None if row[0] is None else float(row[0])
+
+    def started_by_job(self, work_key: str, job: str, since: float) -> int:
+        """
+        How many runs of `work_key` its job `job` started (rather than a
+        reply continuing it) after `since`.
+        """
+        row = self.db.execute(
+            'SELECT COUNT(*) FROM runs'
+            ' WHERE work_key = ? AND trigger GLOB ? AND started_at > ?',
+            (work_key, f'*:{job}', since),
+        ).fetchone()
+        return int(row[0])
+
     def last_claw(self, work_key: str) -> str | None:
         row = self.db.execute(
             'SELECT claw FROM runs WHERE work_key = ? ORDER BY id DESC',

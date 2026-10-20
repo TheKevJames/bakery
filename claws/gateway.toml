@@ -3,7 +3,7 @@
 
 timezone = "Europe/Lisbon"  # cron schedules and the daily budget reset
 max_processes = 4           # live pi children across all claws
-daily_cost_usd = 50.0       # across all claws
+daily_cost_usd = 75.0       # across all claws
 
 [discord]
 guild_id = 1465773145427280065     # the operator's private server
@@ -64,6 +64,31 @@ tags = ["operator", "ready", "triage", "wontfix"]
 [tasks.triage.question]
 namespaces = ["bakery"]
 tags = ["triage"]
+
+# Build follows a task from ready, through its pull request's review, to
+# confirm once merged; it sends what it cannot build back to triage (blocked
+# and duplicate tasks wait there), to the operator, or to wontfix. Its only
+# new tasks are follow-ups for triage.
+[tasks.build.create]
+namespaces = ["bakery"]
+tags = ["triage"]
+require = ["description"]
+
+[tasks.build.claim]
+namespaces = ["bakery"]
+tags = ["ready", "review"]
+
+[tasks.build.change]
+fields = ["blocked_by", "duplicate_of", "priority", "size"]
+tags = ["confirm", "operator", "review", "triage", "wontfix"]
+
+[tasks.build.comment]
+namespaces = ["bakery"]
+tags = ["confirm", "operator", "ready", "review", "triage", "wontfix"]
+
+[tasks.build.question]
+namespaces = ["bakery"]
+tags = ["ready", "review"]
 
 # Fixes change the claws themselves, so each asks the operator to accept it
 # before triage routes it.
