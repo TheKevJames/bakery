@@ -642,18 +642,19 @@ Claws share the operator's `task` tool (`TheKevJames/task`, data in
 `docs/adr/0001-agents-write-through-a-server.md`, and this repo's
 `docs/adr/0001-claws-write-tasks-through-the-gateway.md`. What claws rely on:
 
-- tasks live in namespaces, one directory each: `$TASK_FOLDER/<ns>/tasks.db`
-  (SQLite, rollback journal so the Syncthing backup only ever sees
-  self-contained files), with each description a plain `<id>.txt` beside it,
-  editable by hand. `default` is the operator's; `bakery` is the claws';
+- tasks live in namespaces, all in one database, `$TASK_FOLDER/tasks.sqlite`
+  (SQLite, rollback journal so the Syncthing backup only ever sees a
+  self-contained file), descriptions included: `task describe` edits one.
+  `default` is the operator's; `bakery` is the claws';
 - a task is addressed as `<ns>:<id>` (ids are unique within a namespace, and
   never reused); a bare id means `default`. `set -n <ns>` moves a task under
   a new id, keeping its tag and its claim;
-- writers take `BEGIN IMMEDIATE` on the namespaces they write, so the
-  operator and claws serialize and lose nothing; readers take no lock;
+- writers take `BEGIN IMMEDIATE` on the whole database, so the operator and
+  claws serialize and lose nothing, and a write changes all of a task, its
+  description included, or none of it; readers take no lock;
 - tags are flat lowercase names (`--tag ready`), sections of a namespace;
   `list` covers every namespace, and `-f namespace=bakery,tag=ready`
-  narrows it;
+  narrows it (as do eg. `claim^=triage/` and `description~flaky`);
 - `claim`, `link`, `priority` (low, medium, high), and `size` (small, medium,
   large) fields. A claim names who holds the task: `operator`, or a claw's
   unit of work by its work key (eg. `triage/task-151`);
