@@ -832,7 +832,9 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
   within two minutes of `$TASK_FOLDER` changing (scout or the operator adds
   tasks), manually
   (`bakery trigger triage queue`), and on repeat until the queue is empty.
-- Per task (claimed for it): check the source still exists, research (code,
+- Per task (claimed for it): check the source still exists and matches the
+  task (a malformed task, with a placeholder description or a link which
+  does not hold what it describes, is never a canonical), research (code,
   history in its clones, issues, docs, web; no reproduction, tests, or
   edits), append notes
   (route and reason, priority and reason, source check, code locations,
@@ -849,8 +851,9 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
     task; and every duplicate of an open task, which waits on its canonical
     being decided (or done, for the operator's own tasks);
   - `bakery > wontfix`: false positive, done, or obsolete (including a
-    duplicate of a `bakery > wontfix` task), with what to change at the
-    source.
+    duplicate of a `bakery > wontfix` task), or clearly malformed
+    (`bakery > human` if real work may hide behind it), with what to
+    change at the source.
 - A blocked task's notes end with a `**Blocked on:**` list, one blocker per
   line: `#<ns>:<id> decided` (refused for the operator's own tasks, outside
   `bakery`, which record no decisions), `#<ns>:<id> done`, or

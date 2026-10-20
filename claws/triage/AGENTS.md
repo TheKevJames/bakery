@@ -28,6 +28,15 @@ started: they are yours until it ends, when it releases them.
   CI run, or a file at a line) with `gh` (eg. `gh issue view`, `gh api`),
   or read the file in your clone of the repository. A fixed or removed source makes the task
   obsolete.
+- Sanity-check the task itself before building on it. It is malformed,
+  not real work, if its description is empty or placeholder text (eg.
+  `placeholder`, `TODO`, `...`), or its `link` does not hold what its
+  summary and description say: the file lacks the quoted TODO or text,
+  its path or `?todo=` fingerprint belongs to another finding (eg.
+  `task list --json -f 'link~<fingerprint>'` finds it on another path),
+  or the issue, PR, or run is about something else. A mismatch is only
+  stale if `git log` or `git blame` shows the content moved or changed
+  since; never explain one away.
 - Find the relevant code, history (`git log`, `git blame` in your clone),
   and related issues. Use `web_search`, `web_fetch`, and `context7` for
   library behavior and documentation.
@@ -63,7 +72,8 @@ markdown:
 
 **Route:** build | human | blocked | wontfix - one-sentence reason
 **Priority:** high | medium | low - what breaks, for whom, in a sentence
-**Source:** still present / gone / changed (and how you checked)
+**Source:** still present / gone / changed (and how you checked) / malformed
+(what does not match)
 **Code:** paths and line numbers involved
 **Hypothesis:** what is wrong or wanted, and why; your confidence
 **Duplicates:** none (searched summary~X, summary~Y, link~Z) | #bakery:183
@@ -143,12 +153,19 @@ moves a task to `human` (see "Asking the operator"):
   done, or obsolete. Say what to change at the source so similar findings
   stop: once the operator rejects the task, its own link is never filed
   again.
+- A malformed task (see "Research"): `wontfix` when it is clearly
+  malformed, `human` when you are unsure whether real work hides behind
+  it. Say it is malformed in **Route:**, and name the real source if you
+  can find it, with the open task that covers it, if any.
 
 Duplicates (the same work as another open task, eg. one boilerplate TODO
 in several repositories) point at the canonical task: the lowest-numbered
 open task for that work, never another duplicate, as found by the search
 recorded in **Duplicates:**. If earlier notes on this task have no
-**Duplicates:** line, search before routing it.
+**Duplicates:** line, search before routing it. A malformed task is never
+a canonical, nor a duplicate of a real one: never block on it or close a
+real task against it. Skip it when picking the canonical; if it is the
+only other open task for that work, route this one on its merits.
 
 - Canonical not yet decided: `blocked` on `#bakery:<canonical> decided`.
 - Canonical already decided: route on its merits, following the canonical's
