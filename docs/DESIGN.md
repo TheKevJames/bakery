@@ -682,17 +682,18 @@ write outside `bakery`, or delete a task. Only scout may complete one, and
 only what it holds: having no claim rule, that is the tasks it added in the
 same run, so it can undo its own mistakes. Bakery's own checks
 (`bakery/bakery/task_list/hooks.py`) refuse a task with a tracked link (see
-below), a task entering `blocked` without valid blockers, and one entering
-`human` without questions (see [Asking the operator](#asking-the-operator)).
-Each applies however the task enters: created there, or moved.
+below), and one entering `human` without questions (see
+[Asking the operator](#asking-the-operator)), however it enters: created
+there, or moved. What `task` does to a task once what it waits on clears
+(back to `triage`, or gone if a duplicate) is no claw's to be granted, and
+holds whatever the task's claim.
 
 A claim belongs to a run: a claw claims every task it adds or changes, and
 holds it until the run ends, however it ends, when the gateway releases it
 silently (`bakery/bakery/task_list/claims.py`); meanwhile no one else may
 change it. Collectors claim what they hand a run before it starts: triage's
 queue claims its task as the unit it starts (`triage/task-<id>`), skipping
-any taken meanwhile, and `unblock` and `recheck` claim their tasks as their
-run. When the gateway starts, it releases whatever claws' units still hold,
+any taken meanwhile, and `recheck` claims its tasks as its run. When the gateway starts, it releases whatever claws' units still hold,
 and says so in `#bakery`: it stopped without releasing them.
 
 The operator writes the files directly, under no rules, and claims as
@@ -709,14 +710,16 @@ Tags here are sections of the `bakery` namespace.
    their own (`task <id> set -n bakery --tag triage`), usually without a
    `link`.
 2. `triage` gets those (lowest id first, claimed for it), researches,
-   comments its notes, sets `priority` and `size`, then re-tags to `build`,
-   `blocked`, or `wontfix`, or puts its questions to the operator with
-   `ask_operator`, which moves it to `human`.
+   comments its notes, sets `priority` and `size`, then re-tags to `build`
+   or `wontfix`, blocks it in `triage` on what it waits on, marks it a
+   duplicate, or puts its questions to the operator with `ask_operator`,
+   which moves it to `human`.
 3. The operator answers a `human` task's questions (`--answer "Q1: ..."`)
    and moves it to `triage`, where triage re-routes it.
-4. `triage` moves a `blocked` task back to `triage` once what it waits on
-   clears (another task decided or done, or an upstream change), to be
-   re-routed.
+4. `task` moves a blocked task back to `triage`, with a `Cleared:` comment,
+   once all it waits on has cleared (another task done or decided, or an
+   upstream change triage's recheck found), to be re-routed; it removes a
+   duplicate once its canonical is done.
 5. `build` claims `build` tasks (high priority first), moves them to
    `review` once a PR is open, and runs `done` after merge; its questions go
    through `ask_operator` to `human`, and back through triage.
@@ -739,8 +742,8 @@ ignoring case, saying which (`bakery/bakery/task_list/filing.py`, run by the
 task server as a hook). Links holding a comma are refused, as `task` splits
 filters on commas. Scout's collector drops tracked
 candidates up front, with the same rule. Done tasks free their link: a gap
-which comes back after it was fixed is filed again. A `blocked` task is
-open, so its link is not filed again either, and its source stays as it is.
+which comes back after it was fixed is filed again. A blocked task is open,
+so its link is not filed again either, and its source stays as it is.
 
 ## Claws (v1)
 
@@ -823,13 +826,13 @@ Finds things in the operator's repos that belong on the task list. Profile:
 
 ### triage - read-only + web
 
-Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
-`unblock`), $3 per task (and per `unblock` or `recheck` run).
+Profile: `claws/triage/`. Sonnet, high thinking, $3 per task (and per
+`recheck` run).
 
 - The `queue` job's `triage` collector (`bakery/bakery/collectors/triage.py`)
   claims and hands over the lowest-numbered unclaimed task tagged
   `bakery > triage` (scout's, the operator's handed over, and tasks sent
-  back), skipping scheduled (recurring) ones, as the unit
+  back), skipping blocked and scheduled (recurring) ones, as the unit
   `triage/task-<id>`. It runs hourly,
   within two minutes of `$TASK_FOLDER` changing (scout or the operator adds
   tasks), manually
@@ -849,46 +852,35 @@ Profile: `claws/triage/`. Sonnet, high thinking (Haiku, low thinking, for
     scope, checkable by tests, lint, or CI;
   - `bakery > human`: needs a decision on this task, reproduction,
     credentials, outside systems, or anything uncertain;
-  - `bakery > blocked`: valid and scoped, but waiting on something checkable:
-    an upstream change, another task, or the operator's decision on another
-    task; and every duplicate of an open task, which waits on its canonical
-    being decided (or done, for the operator's own tasks);
-  - `bakery > wontfix`: false positive, done, or obsolete (including a
-    duplicate of a `bakery > wontfix` task), or clearly malformed
-    (`bakery > human` if real work may hide behind it), with what to
-    change at the source.
-- A blocked task's notes (its description, then its comments) end with a
-  `**Blocked on:**` list, one blocker per line: `#<ns>:<id> decided` (refused for the operator's own tasks, outside
-  `bakery`, which record no decisions), `#<ns>:<id> done`, or
-  `<url>: <condition>`. The last list
-  counts; the task clears once all of its blockers have.
-  `bakery/bakery/task_list/blocked.py` parses and checks it, for the task
-  server (whenever a task enters `bakery > blocked`) and for the collectors
-  below. Done tasks are deleted,
-  so a task which does not exist counts as done. A list is refused if it is
-  malformed, names the task itself, or names a task blocker which has
-  already cleared, including one which does not exist (triage routes on the
-  merits instead).
-- The `unblock` job's `triage-unblock` collector hands over, in one run,
-  every unclaimed blocked task whose blockers are all tasks and have all
-  cleared; triage comments an `## Unblocked` note and moves each to
-  `bakery > triage`. It runs hourly and within two minutes of `$TASK_FOLDER`
-  changing, so a task clears soon after its blocker is decided.
+  - blocked, left in `bakery > triage` with task's own relations
+    (`--blocked-by`): valid and scoped, but waiting on something checkable:
+    another task being done (`<ns>:<id>`) or decided (`<ns>:<id>:decided`:
+    out of triage, not blocked, and with no open questions), or a condition
+    at a URL (`"<url>: <condition>"`); every task sharing only the decision
+    of an undecided canonical waits on it being decided;
+  - duplicate (`--duplicate-of`): one change would close it along with its
+    canonical, in practice in the same repository; `task` removes it once
+    the canonical is done;
+  - `bakery > wontfix`: false positive, done, or obsolete (including one
+    sharing the decision of a `bakery > wontfix` task), or clearly
+    malformed (`bakery > human` if real work may hide behind it), with what
+    to change at the source.
+- `task` hides blocked tasks, refuses blockers which have already cleared,
+  do not exist, or would make tasks wait on each other, and moves a blocked
+  task back to `bakery > triage`, with a `Cleared:` comment, once all it
+  waits on has cleared: no claw unblocks anything.
 - The `recheck` job (Mondays at 06:00, silent when nothing clears) uses the
-  `triage-recheck` collector: unclaimed blocked tasks with an external
-  blocker whose task blockers have cleared, grouped by URL so each is
-  checked once, in one run. Triage moves those whose conditions all hold to
-  `bakery > triage` likewise. The collector also reports blocked tasks it
-  cannot read (eg. moved by hand without a valid list) in `#bakery`; weekly,
-  rather than hourly in `unblock`, so they do not flood it.
-- Both claim what they hand over, as their run.
-- Its rules let it change only what it holds (set priority and size,
-  route), comment on any task in `bakery`, ask questions only as it moves a
-  task to `human`, claim only `triage` and `blocked` tasks, and add tasks in
+  `triage-recheck` collector: unclaimed tasks with an external blocker,
+  grouped by URL so each is checked once, in one run, claimed as the run.
+  Triage comments what it found on each whose condition holds, and clears
+  that blocker (`unset --blocked-by <url>`).
+- Its rules let it change only what it holds (set priority and size, what
+  it waits on, route), comment on any task in `bakery`, ask questions only
+  as it moves a task to `human`, claim only `triage` tasks, and add tasks in
   any of its routes, which it does only for separate work its research finds
   that no open task covers.
 - Every task it routes to `bakery > human` goes through `ask_operator`,
-  with its questions; never while unblocking or rechecking.
+  with its questions; never while rechecking.
 - A run's claims end with it, however it ends (see
   [Shared task list](#shared-task-list)), so a task a failed, parked, or
   interrupted run left in `bakery > triage` is handed over again, to the
@@ -952,7 +944,7 @@ Reviews how the claws learn and files a task for each gap. Profile:
 
 ### Models
 
-`claude-haiku-5-5` for scout and triage's `unblock`; `claude-sonnet-5-5`
+`claude-haiku-5-5` for scout; `claude-sonnet-5-5`
 for triage; `claude-opus-5-5` for build, baker, and every claw's dream. A
 memory flush runs on its unit's model. The gateway runs whatever `pi` is on
 `PATH`.

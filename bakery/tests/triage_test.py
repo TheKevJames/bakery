@@ -6,7 +6,7 @@ import shlex
 import pytest
 from task import actors
 from task import ops
-from task import schema
+from task import refs
 
 from bakery.collectors import triage
 from bakery.gateway import core
@@ -23,17 +23,7 @@ prompt = "Triage this task."
 collector = "triage"
 repeat = true
 """
-BLOCKED = """
-[[job]]
-name = "queue"
-cron = "0 * * * *"
-prompt = "Triage this task."
-collector = "triage"
-[[job]]
-name = "unblock"
-cron = "0 * * * *"
-prompt = "Unblock these tasks."
-collector = "triage-unblock"
+RECHECK = """
 [[job]]
 name = "recheck"
 cron = "0 6 * * 1"
@@ -158,130 +148,99 @@ def test_a_task_left_waiting_is_not_repeated(
     assert testing_tasks.show('bakery:1')['claim'] is None
 
 
-def test_blocking_a_task_needs_blockers_which_have_not_cleared(
+def test_triage_blocks_tasks_where_they_are(
     root: pathlib.Path, tasks: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     del tasks
     testing_tasks.task(
-        'add', 'needs the operator', '-n', 'bakery', '--tag', 'human'
-    )
-    valid = (
-        '**Blocked on:**\n- #bakery:4 decided\n- #default:1 done\n'
-        '- https://example.com/1: released'
-    )
-    blocking = ('bakery:1', 'set', '--tag', 'blocked', '--comment')
+        'add', 'needs the operator', '-n', 'bakery', '--tag', 'human',
+        '--question', 'which?',
+    )  # fmt: skip
+    blocking = ('bakery:1', 'set', '--json', '--blocked-by')
     fake_llm.queue(
-        task(*blocking, '**Blocked on:**\n- see upstream'),
+        # bakery:3 is in build, asking nothing: already decided.
+        task(*blocking, 'bakery:3:decided'),
         task(
-            *blocking,
-            '**Blocked on:**\n- #bakery:3 decided'
-            '\n- #bakery:99 done\n- #bakery:1 done\n- #default:1 decided',
+            *blocking, 'bakery:4:decided', '--blocked-by', '1',
+            '--blocked-by', 'https://example.com/1: released',
         ),
-        task(*blocking, valid),
         harness.Reply(text='1 blocked'),
-    )
+    )  # fmt: skip
     fake = testing_gateway.FakeChannel()
 
     async def scenario(gateway: core.Gateway) -> None:
         gateway.trigger('triage', 'queue', None)
         await fake.wait('triage/task-1')
 
-    testing_gateway.run_gateway(triage_claws(root, BLOCKED), fake, scenario)
-    malformed, cleared = fake_llm.tool_results(2)
-    assert "'see upstream' is not `#<namespace>:<id> decided`" in malformed
-    assert '#bakery:3 decided: already cleared (build)' in cleared
-    assert (
-        '#bakery:99 done: already cleared'
-        ' (#bakery:99 is done or does not exist)' in cleared
-    )
-    assert '#bakery:1 done: a task cannot block itself' in cleared
-    assert (
-        "#default:1 decided: #default:1 is the operator's (dev),"
-        ' so use `#default:1 done`' in cleared
-    )
+    testing_gateway.run_gateway(triage_claws(root), fake, scenario)
+    refused, _ = fake_llm.tool_results(2)
+    assert 'bakery:3 is already decided' in refused
     blocked = testing_tasks.show('bakery:1')
-    assert (blocked['tag'], blocked['claim']) == ('blocked', None)
-    # Refused notes were not kept.
-    assert testing_tasks.said('bakery:1') == [valid]
+    assert (blocked['tag'], blocked['claim']) == ('triage', None)
+    assert testing_tasks.blocked_by('bakery:1') == [
+        'bakery:4',
+        '1',
+        'https://example.com/1',
+    ]
+    # Hidden from the queue until all it waits on has cleared.
+    assert [t['id'] for t in triage.waiting()] == []
 
 
-def test_blocked_tasks_go_back_once_their_blockers_clear(
+def test_recheck_hands_over_what_waits_outside(
     root: pathlib.Path, tasks: pathlib.Path, fake_llm: harness.FakeLLM
 ) -> None:
     del tasks
-    # bakery:1 (triage) is undecided, default:1 (the operator's) is not done,
-    # bakery:3 (build) is decided, and bakery:4 is done.
-    testing_tasks.task('add', 't4', '-n', 'bakery', '--tag', 'build')
-    testing_tasks.task('bakery:4', 'done')
     for ident, blockers in (
-        (5, '- #bakery:3 decided'),
-        (6, '- #bakery:1 decided'),
-        (7, '- #bakery:4 done\n- https://example.com/a: released'),
-        (8, '- #default:1 done\n- https://example.com/a: released'),
+        (4, ('https://example.com/a: released',)),
+        (5, ('https://example.com/a: released', 'default:1')),
         (
-            9,
-            '- https://example.com/a: released\n'
-            '- https://example.com/b: merged',
+            6,
+            (
+                'https://example.com/a: released',
+                'https://example.com/b: merged',
+            ),
         ),
-        (10, ''),
-        (11, '- #bakery:3 decided'),
+        (7, ('bakery:3',)),
+        (8, ('https://example.com/b: merged',)),
     ):
-        notes = (
-            f'## Triage\n\n**Blocked on:**\n{blockers}' if blockers else 'x'
-        )
         testing_tasks.task(
-            'add',
-            f't{ident}',
-            '-n',
-            'bakery',
-            '--tag',
-            'blocked',
-            '--description',
-            notes,
-        )
+            'add', f't{ident}', '-n', 'bakery',
+            *(arg for b in blockers for arg in ('--blocked-by', b)),
+        )  # fmt: skip
     ops.Writer(actors.Actor.agent('someone/else')).claim(
-        schema.Ref.parse('bakery:11')
+        refs.Ref.parse('bakery:8')
     )
     fake_llm.queue(
-        task(
-            'bakery:5', 'set', '--tag', 'triage', '--comment', '## Unblocked'
-        ),
-        harness.Reply(text='moved 5'),
-        harness.Reply(text='nothing cleared'),
+        task('bakery:4', 'unset', '--blocked-by', 'https://example.com/a'),
+        task('bakery:5', 'unset', '--blocked-by', 'https://example.com/a'),
+        harness.Reply(text='a released'),
     )
     fake = testing_gateway.FakeChannel()
 
     async def scenario(gateway: core.Gateway) -> None:
-        unblocked = await fake.wait(gateway.trigger('triage', 'unblock', None))
-        assert unblocked.final_text == 'moved 5'
         rechecked = await fake.wait(gateway.trigger('triage', 'recheck', None))
-        assert rechecked.final_text == 'nothing cleared'
+        assert rechecked.final_text == 'a released'
 
-    testing_gateway.run_gateway(triage_claws(root, BLOCKED), fake, scenario)
+    testing_gateway.run_gateway(triage_claws(root, RECHECK), fake, scenario)
     assert prompt(fake_llm, 0).endswith(
-        f'<unblocked tasks="1">\n{triage.UNTRUSTED}\n'
-        '- #bakery:5 "t5": cleared #bakery:3 decided\n</unblocked>'
-    )
-    assert prompt(fake_llm, 2).endswith(
-        f'<blocked tasks="2" urls="2">\n{triage.UNTRUSTED}\n'
+        f'<blocked tasks="3" urls="2">\n{triage.UNTRUSTED}\n'
         '## https://example.com/a\n'
-        '- #bakery:7 "t7": released\n'
-        '- #bakery:9 "t9": released\n'
+        '- #bakery:4 "t4": released\n'
+        '- #bakery:5 "t5": released\n'
+        '- #bakery:6 "t6": released\n'
         '## https://example.com/b\n'
-        '- #bakery:9 "t9": merged\n'
+        '- #bakery:6 "t6": merged\n'
         '</blocked>'
     )
-    assert (
-        testing_tasks.show('bakery:5')['tag'],
-        testing_tasks.show('bakery:5')['claim'],
-    ) == ('triage', None)
-    # Rechecked, so claimed, then released when its run ended.
-    assert testing_tasks.show('bakery:7')['claim'] is None
-    # Reported weekly by recheck, not hourly by unblock.
-    assert [n for n in fake.notices if '#bakery:10' in n] == [
-        'triage/recheck collection problems:\n'
-        'blocked #bakery:10: no **Blocked on:** list'
+    # Back in the queue, with task's own note of what cleared.
+    assert [t['id'] for t in triage.waiting()] == [1, 4]
+    assert testing_tasks.said('bakery:4') == [
+        'Cleared: https://example.com/a: released'
     ]
+    # Still waiting on the operator's own task.
+    assert testing_tasks.blocked_by('bakery:5') == ['1']
+    # Rechecked, so claimed, then released when its run ended.
+    assert testing_tasks.show('bakery:5')['claim'] is None
 
 
 def test_file_changes_trigger_after_a_quiet_period(

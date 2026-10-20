@@ -38,7 +38,7 @@ timeout = 30
 # Install bakery with `uv tool install`: pip, and so pipx, ignores these.
 # Tests and claws run this `task`, never another on PATH.
 [tool.uv.sources]
-task = { git = "https://github.com/TheKevJames/task", tag = "9.0.0rc2" }
+task = { git = "https://github.com/TheKevJames/task", rev = "515c42c4cb0a856f044cef461d402657bb17f12c" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["bakery"]

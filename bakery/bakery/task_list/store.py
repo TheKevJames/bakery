@@ -8,7 +8,7 @@ operator's own install), so its shape is the one this code was written for.
 from task import db
 from task import errors
 from task import query
-from task import schema
+from task import refs
 
 # The claws' namespace of the task list: the only one their rules let them
 # write, so every other task is the operator's.
@@ -21,19 +21,14 @@ def ref(task: dict[str, object]) -> str:
     return f'{task["namespace"]}:{task["id"]}'
 
 
-def notes(task: dict[str, object]) -> str:
-    """A listed task's notes: its description, then its comments, in order."""
-    comments = task['comments']
-    assert isinstance(comments, list)
-    said = [task['description'], *(c['body'] for c in comments)]
-    return '\n\n'.join(str(part) for part in said if part)
-
-
 def listed(
     filter_: str = '', order: query.SortOrder = query.SortOrder.tag
 ) -> list[dict[str, object]]:
-    """Every task matching `filter_` (`task list -f` syntax), as JSON."""
-    clauses = query.compile_(filter_, -1, -1, order)
+    """
+    Every task matching `filter_` (`task list -f` syntax), as JSON, blocked
+    or not unless it says (eg. `blocked=no`).
+    """
+    clauses = query.compile_(f'blocked=any,{filter_}', -1, -1, order)
     with db.connect() as conn:
         return [task.to_json() for task in db.select(conn, *clauses)]
 
@@ -44,4 +39,4 @@ def shown(address: str) -> dict[str, object]:
     it cannot be shown.
     """
     with db.connect() as conn:
-        return db.get(conn, schema.Ref.parse(address)).to_json()
+        return db.get(conn, refs.Ref.parse(address)).to_json()

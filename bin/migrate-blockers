@@ -1,0 +1,134 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["task @ git+https://github.com/TheKevJames/task@9.0.0rc3"]
+# ///
+"""
+Move the claws' `bakery > blocked` tasks onto task's own relations, once.
+
+Each task's last `**Blocked on:**` list, in its description then comments,
+becomes its blockers, and it moves to `bakery > triage`, hidden until they
+clear. Blockers which have already cleared are dropped, saying so in a
+comment; a task left with none is simply back in triage, to be re-routed.
+
+Run as the operator, with the gateway stopped so no claw holds a task:
+
+    TASK_FOLDER=... bin/migrate-blockers [--dry-run]
+"""
+
+import argparse
+import re
+import sys
+
+from task import actors
+from task import db
+from task import errors
+from task import ops
+from task import query
+from task import refs
+from task import schema
+
+NAMESPACE = 'bakery'
+HEADING = '**Blocked on:**'
+TASK_RE = re.compile(
+    rf'#(?P<ref>{refs.REF_RE.pattern}) (?P<until>decided|done)'
+)
+EXTERNAL_RE = re.compile(r'(?P<url>https?://\S+): (?P<condition>\S.*)')
+OPERATOR = ops.Writer(actors.OPERATOR_ACTOR)
+
+
+def entries(task: schema.Task) -> list[str]:
+    """The task's last `**Blocked on:**` list; [] if it has none."""
+    said = [entry.body for entry in task.conversation.entries]
+    lines = '\n\n'.join(filter(None, [task.description, *said])).splitlines()
+    starts = [i for i, line in enumerate(lines) if line.strip() == HEADING]
+    if not starts:
+        return []
+    found: list[str] = []
+    for line in lines[starts[-1] + 1 :]:
+        if not line.strip() and not found:
+            continue
+        if not line.startswith('- '):
+            break
+        found.append(line[2:].strip())
+    return found
+
+
+def blocker(
+    store: db.Store, entry: str, moving: set[refs.Ref]
+) -> tuple[str | None, str]:
+    """
+    `entry` as a `--blocked-by`, or None and why it is dropped. Tasks
+    `moving` out of `blocked` land in triage, so are not decided.
+    """
+    if match := EXTERNAL_RE.fullmatch(entry):
+        return f'{match["url"]}: {match["condition"]}', ''
+    match = TASK_RE.fullmatch(entry)
+    if not match:
+        return None, f'{entry} (malformed)'
+    ref = refs.Ref.parse(match['ref'])
+    try:
+        target = db.get(store, ref)
+    except errors.TaskError:
+        return None, f'{entry} (done)'
+    if match['until'] == 'done':
+        return str(ref), ''
+    if target.decided and ref not in moving:
+        return None, f'{entry} (decided)'
+    return f'{ref}:decided', ''
+
+
+def migrate(task: schema.Task, moving: set[refs.Ref], dry_run: bool) -> str:
+    with db.connect() as store:
+        found = [blocker(store, entry, moving) for entry in entries(task)]
+    kept = [value for value, _ in found if value]
+    dropped = [why for value, why in found if not value]
+
+    def edit(changed: schema.Task) -> schema.Task:
+        changed.relate(actors.OPERATOR_ACTOR, blocked_by=kept)
+        changed.update(tag=schema.TRIAGE)
+        if dropped:
+            changed.converse(
+                actors.OPERATOR_ACTOR,
+                comments=['Already cleared: ' + ', '.join(dropped)],
+            )
+        return changed
+
+    if not dry_run:
+        OPERATOR.change(ops.Verb.set, task.ref, edit)
+    return f'{task.ref}: blocked by {kept or "nothing"}, dropped {dropped}'
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
+    parser.add_argument('--dry-run', action='store_true')
+    args = parser.parse_args()
+    clauses = query.compile_(
+        f'namespace={NAMESPACE},tag=blocked,blocked=any',
+        -1,
+        -1,
+        query.SortOrder.ident,
+    )
+    with db.connect() as store:
+        tasks = db.select(store, *clauses)
+    moving = {task.ref for task in tasks}
+    # What others wait on being decided moves first: in `blocked`, it would
+    # read as decided.
+    awaited = {
+        refs.Ref.parse(match['ref'])
+        for task in tasks
+        for entry in entries(task)
+        if (match := TASK_RE.fullmatch(entry))
+    }
+    failed = False
+    for task in sorted(tasks, key=lambda t: t.ref not in awaited):
+        try:
+            print(migrate(task, moving, args.dry_run))
+        except errors.TaskError as e:
+            print(f'{task.ref}: {e}', file=sys.stderr)
+            failed = True
+    return int(failed)
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -11,8 +11,8 @@ the gateway starts, in case it stopped without doing so.
 from task import actors
 from task import errors
 from task import ops
+from task import refs
 from task import rules
-from task import schema
 
 from . import hooks
 from . import store
@@ -33,7 +33,7 @@ def claim(
 ) -> dict[str, object] | None:
     """Task `address`, now held by the unit `work_key`; None if it cannot."""
     try:
-        task = writer(claw_rules, work_key).claim(schema.Ref.parse(address))
+        task = writer(claw_rules, work_key).claim(refs.Ref.parse(address))
     except errors.TaskError:
         return None
     return task.to_json()
@@ -58,5 +58,5 @@ def sweep(claw: str) -> list[str]:
 def _release(tasks: list[dict[str, object]]) -> list[str]:
     for task in tasks:
         agent = ops.Writer(actors.Actor.agent(str(task['claim'])))
-        agent.release(schema.Ref.parse(store.ref(task)))
+        agent.release(refs.Ref.parse(store.ref(task)))
     return [store.ref(task) for task in tasks]

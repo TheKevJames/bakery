@@ -229,9 +229,6 @@ Something a claw needs from the operator to finish a task, asked on the task
 and default; the operator answers every one.
 _Avoid_: ask, prompt
 
-**`bakery > blocked`**:
-The route for valid, scoped tasks waiting on their blockers.
-
 **`bakery > wontfix`**:
 The route for tasks that should not be worked on: false positives, done, or
 obsolete.
@@ -244,19 +241,22 @@ The operator's record that a link should never be filed again.
 _Avoid_: a wontfix
 
 **Blocker**:
-One thing a blocked task waits on: another task being decided or done, or an
-external condition.
+One thing a valid, scoped task waits on (task's own Blocker), as triage
+routes it: another task being done or decided, or a condition at a URL,
+which triage's weekly recheck clears. A blocked task stays in
+`bakery > triage`, hidden until all it waits on has cleared.
 
-**Cleared**:
-Of a blocker: no longer holding.
-
-**Decided**:
-Of a task: done, or no longer in `bakery > triage`, `bakery > human`, or
-`bakery > blocked`.
+**Duplicate**:
+A task one change would close along with its canonical, in practice in the
+same repository (task's own Duplicate); gone once its canonical is done.
+Tasks which only share their canonical's decision, each with its own source
+to change, are blocked on it being decided instead.
+_Avoid_: the same TODO in another repository
 
 **Canonical**:
-The task a duplicate waits on: the lowest-numbered open task for the same
-work, never a malformed one, or the operator's own task whatever its id.
+The task its duplicates, and the tasks sharing its decision, wait on: the
+lowest-numbered open task for that work or decision, never a malformed one,
+or the operator's own task whatever its id.
 
 **Malformed task**:
 A task which is not real work: its description is empty or placeholder text,

@@ -1,7 +1,7 @@
 # Task list
 
 - The task list has namespaces. Yours is `bakery`, and its tags (`triage`,
-  `build`, `human`, `blocked`, `wontfix`, ...) are its sections; every other
+  `build`, `human`, `wontfix`, ...) are its sections; every other
   namespace is the operator's. Tasks are named `<namespace>:<id>` (eg.
   `bakery:12`), and a bare id means the operator's `default` namespace.
 - Use `task` in bash; see `task --help` and `task <command> --help`. Read
@@ -13,6 +13,13 @@
   takes only `=` and `!=`, eg. `next=2026-01-31`, or `next=` (unscheduled).
   `questions=open` lists tasks waiting on the operator's answers, and
   `questions!=open` those which are not.
+- A task may wait on others (`blocked_by`, until they are done or decided),
+  or on something outside the task list, or be a duplicate of another
+  (`duplicate_of`); `task show --json` also lists the tasks waiting on it
+  (`blocks`, `duplicates`). Lists hide blocked tasks (marked `×`) unless
+  you ask: `blocked=yes`, or `blocked=any` for all. `task` moves a task
+  back to triage once all it waits on has cleared, and removes a duplicate
+  once its canonical is done.
 - Change tasks with `task add`, `task <id> set`, and `task <id> release`
   (always `--json`, to see the task as it stands after). The gateway runs
   them for you, as you, under your rules: what you may create, claim, and
