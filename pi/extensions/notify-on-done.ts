@@ -1,8 +1,11 @@
 /**
  * notify-on-done
  *
- * Posts a native macOS notification when a pi session settles and is waiting
- * for input, so you can step away and get pinged when pi needs you.
+ * Posts a native macOS notification when a pi session needs you: when a run
+ * settles and pi is waiting for input, or when a dialog blocks on an answer.
+ * The body states why, eg. `Idle`, `Aborted (1 watch)`, `Errored`, or
+ * `Blocked: Confirm push? (2 watches)`; the watch suffix counts watches still
+ * running, which will wake the session again on completion.
  *
  * Scope: macOS + Terminal.app inside tmux (one pi session per tmux pane).
  * The notification is delivered via `osascript display notification`, which
@@ -14,30 +17,62 @@
  * pane is the active pane of the active window. Any weaker focus (different
  * app, different tmux window/pane) still notifies.
  */
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
+import { WATCH_ACTIVE_CHANNEL, type WatchActiveEvent } from "./watch/api.ts";
 
 const SOUND = "Ping";
-const BODY = "Ready for Input";
 
 // Captured at session_start; the pane that owns this pi process. tmux keeps
 // $TMUX_PANE stable for the process lifetime, so reading it once is correct.
 let tmuxPane: string | undefined;
+
+let activeWatches = 0;
+// Set by agent_end, which precedes agent_settled for the same run.
+let lastRunErrored = false;
 
 // AppleScript string literals only need backslash and double-quote escaped.
 function asString(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
+function withWatches(status: string): string {
+  if (activeWatches === 0) return status;
+  return `${status} (${activeWatches} ${activeWatches === 1 ? "watch" : "watches"})`;
+}
+
 export default function (pi: ExtensionAPI) {
-  pi.on("session_start", async () => {
-    tmuxPane = process.env.TMUX_PANE;
+  pi.events.on(WATCH_ACTIVE_CHANNEL, (data) => {
+    activeWatches = (data as WatchActiveEvent).count;
   });
 
-  pi.on("agent_settled", async (_event, ctx) => {
+  pi.on("session_start", async () => {
+    tmuxPane = process.env.TMUX_PANE;
+    // Watches never outlive their session, so any count left from the
+    // previous one is stale.
+    activeWatches = 0;
+  });
+
+  pi.on("agent_end", async (event) => {
+    const last = event.messages.at(-1);
+    lastRunErrored = last?.role === "assistant" && last.stopReason === "error";
+  });
+
+  pi.on("agent_settled", async (event, ctx) => {
+    const status = event.aborted ? "Aborted" : lastRunErrored ? "Errored" : "Idle";
+    lastRunErrored = false;
+    await notify(ctx, status);
+  });
+
+  pi.on("ui_prompt_start", async (event, ctx) => {
+    await notify(ctx, event.title ? `Blocked: ${event.title}` : `Blocked on ${event.kind}`);
+  });
+
+  async function notify(ctx: ExtensionContext, status: string): Promise<void> {
     if (ctx.mode !== "tui" || process.platform !== "darwin") return;
 
     const title = pi.getSessionName() || "Pi";
-    const notifyCmd = `display notification "${asString(BODY)}" with title "${asString(title)}" sound name "${SOUND}"`;
+    const notifyCmd = `display notification "${asString(withWatches(status))}" with title "${asString(title)}" sound name "${SOUND}"`;
 
     try {
       if (await isThisPaneFocused()) {
@@ -59,7 +94,7 @@ export default function (pi: ExtensionAPI) {
     } catch {
       // Notifications are best-effort; never disrupt the session on failure.
     }
-  });
+  }
 
   async function isThisPaneFocused(): Promise<boolean> {
     if (!tmuxPane) return false;
