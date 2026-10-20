@@ -7,3 +7,4 @@
 - Fetch and branch from the latest default branch before code changes
 - PRs will be squash-merged, so subsequent PRs need to be based off the HEAD of their parent and be rebased by you -- create a watch polling for the parent PR's merge to do this automatically
 - Only stack PRs when the child genuinely needs the parent's code
+- Always work in worktrees stored in a temporary directory and clean them up when done
