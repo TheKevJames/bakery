@@ -17,6 +17,22 @@
             ],
             "versioningTemplate": "{{#if versioning}}{{versioning}}{{else}}semver{{/if}}",
         },
+        {
+            // pep621 reads a PEP 508 direct reference as a PyPI version, so
+            // never finds task's tags; uv sources it would read, but pip (and
+            // so pipx) ignores them.
+            "description": "Update task, pinned by tag in bakery's dependencies",
+            "managerFilePatterns": [
+                "/^bakery/pyproject\\.toml$/",
+            ],
+            "customType": "regex",
+            "matchStrings": [
+                "\"task @ git\\+https://github\\.com/TheKevJames/task@(?<currentValue>[^\"]+)\"",
+            ],
+            "depNameTemplate": "TheKevJames/task",
+            "datasourceTemplate": "github-tags",
+            "versioningTemplate": "pep440",
+        },
     ],
     "packageRules": [
         {
@@ -24,6 +40,15 @@
             "matchManagers": ["custom.regex"],
             "matchFileNames": ["bin/**"],
             "automerge": false,
+        },
+        {
+            // N.B. Renovate cannot re-lock a regex manager's update
+            "matchManagers": ["custom.regex"],
+            "matchDepNames": ["TheKevJames/task"],
+            "automerge": false,
+            "prBodyNotes": [
+                "Run `uv lock` in `bakery/` and push it before merging: Renovate cannot update `uv.lock` for this dependency.",
+            ],
         },
     ],
 }

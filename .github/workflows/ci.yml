@@ -52,10 +52,5 @@ jobs:
           version: 0.13.3
           # renovate: datasource=docker depName=python
           python-version: 3.15.0
-      # The shared task list CLI, used by claws.
-      - run: uv tool install "task @ git+https://github.com/TheKevJames/task@${task_version}"
-        env:
-          # renovate: datasource=github-tags depName=TheKevJames/task
-          task_version: 9.0.0rc2
       - run: uv run --frozen pytest
         working-directory: bakery
