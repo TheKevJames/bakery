@@ -993,15 +993,19 @@ turns per run, and $30 a day. One task is one unit of work,
   so nothing is stored): merged or closed; the operator answered its
   questions; comments and reviews by `build.toml`'s `operators` only, as
   anyone can comment on a public repository; a check or status on the head
-  which failed; a conflict, once the base branch moved; or no PR at all. The
-  last three are automatic: at most `max_auto_resumes` (3) since an
-  operator last said anything on the task or its PR, the last one told to
-  ask the operator, so a fix which keeps failing cannot loop. See
+  which failed; a conflict, once the base branch moved; a check or status
+  failing on the head (whenever it did) which the base branch passes, once
+  it moved and has commits the head lacks (a fix landed there without a
+  conflict to say so); or no PR at all. The last four are automatic: at
+  most `max_auto_resumes` (3) since an operator last said anything on the
+  task or its PR, the last one told to ask the operator, so a fix which
+  keeps failing cannot loop. See
   `docs/adr/0002-build-finds-its-pull-requests-by-branch.md`.
 - On news: addresses the operator's comments (changes and pushes, or
   replies explaining why not), fixes failing checks its change caused (and
-  files others), and rebases away conflicts (`--force-with-lease`, its own
-  branch only). Merged → `confirm`, then removes its worktree and branches.
+  files others), rebases away conflicts, and rebases onto a base branch
+  which passes what fails on its head (`--force-with-lease`, its own branch
+  only). Merged → `confirm`, then removes its worktree and branches.
   Closed unmerged → asks the operator what next.
 - Routes a task it holds back to `triage` (to be re-routed, blocked with
   `--blocked-by`, or a duplicate), or to `operator` or `wontfix`, saying

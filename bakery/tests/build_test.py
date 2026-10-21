@@ -193,6 +193,8 @@ def serve_pulls(github: fake_github.FakeGitHub) -> None:
         pull(github, 3, 'kjames/bakery-3-broken', mergeable=False),
         pull(github, 4, 'kjames/bakery-4-quiet'),
         pull(github, 9, 'renovate/thing'),
+        pull(github, 10, 'kjames/bakery-9-behind', base={'ref': 'fixed'}),
+        pull(github, 11, 'kjames/bakery-10-stale', base={'ref': 'old'}),
     ]  # fmt: skip
     github.routes[f'{path}/issues/2/comments?per_page=100'] = [
         comment('TheKevJames', BEFORE, 'old'),
@@ -220,12 +222,7 @@ def serve_pulls(github: fake_github.FakeGitHub) -> None:
             }
         ]
     }
-    github.routes[f'{path}/branches/main'] = {
-        'commit': {'sha': 'base2', 'commit': {'committer': {'date': AFTER}}}
-    }
-    github.routes[f'{path}/commits/sha4/check-runs?per_page=100'] = {
-        'check_runs': [check('lint', 'failure', BEFORE)]
-    }
+    serve_bases(github)
     created = testing_tasks.show('bakery:1')['created']
     assert isinstance(created, str)
     since = datetime.datetime.fromisoformat(created).date()
@@ -238,6 +235,39 @@ def serve_pulls(github: fake_github.FakeGitHub) -> None:
         }
     )
     github.routes[f'/search/issues?{query}'] = {'items': items}
+
+
+def serve_bases(github: fake_github.FakeGitHub) -> None:
+    """
+    Base branches: `main` still fails lint (for 4), `fixed` passes it (for
+    10), and `old` passes it but has not moved since the last run (for 11).
+    """
+    path = f'/repos/{REPO}'
+    for base, sha, at, lint in (
+        ('main', 'base2', AFTER, 'failure'),
+        ('fixed', 'base3', AFTER, 'success'),
+        ('old', 'base4', BEFORE, 'success'),
+    ):
+        github.routes[f'{path}/branches/{base}'] = {
+            'commit': {'sha': sha, 'commit': {'committer': {'date': at}}}
+        }
+        github.routes[f'{path}/commits/{sha}/check-runs?per_page=100'] = {
+            'check_runs': [
+                check('lint', lint, at),
+                check('lint', 'skipped', at),
+                check('test', 'failure', at),
+            ]
+        }
+        github.routes[f'{path}/commits/{sha}/status'] = {'statuses': []}
+    for number in (4, 10, 11):
+        github.routes[
+            f'{path}/commits/sha{number}/check-runs?per_page=100'
+        ] = {'check_runs': [check('lint', 'failure', BEFORE)]}
+    for base, number in (('main', 4), ('fixed', 10), ('old', 11)):
+        github.routes[f'{path}/compare/{base}...sha{number}?per_page=1'] = {
+            'behind_by': 2,
+            'ahead_by': 1,
+        }
 
 
 def add_runs(
@@ -268,7 +298,9 @@ def test_review_resumes_units_with_news(
     add('review', 'no PR, last resume')
     add('review', 'asked', '--question', 'which?')
     add('review', 'answered', '--question', 'which?')
-    for ident in (1, 2, 3, 4, 8):
+    add('review', 'behind a fixed base')
+    add('review', 'behind a base which has not moved')
+    for ident in (1, 2, 3, 4, 8, 9, 10):
         add_runs(monkeypatch, ident, 'queue', 1)
     add_runs(monkeypatch, 5, 'review', 3)
     add_runs(monkeypatch, 6, 'review', 2)
@@ -281,7 +313,7 @@ def test_review_resumes_units_with_news(
         handed[collection.work_key] = collection.text
 
     print(json.dumps(handed, indent=1))
-    assert sorted(handed) == [f'build/task-{i}' for i in (1, 2, 3, 6, 8)]
+    assert sorted(handed) == [f'build/task-{i}' for i in (1, 2, 3, 6, 8, 9)]
     assert '<news>\n- Merged.\n</news>' in handed['build/task-1']
     talk = handed['build/task-2']
     assert f'url="https://github.com/{REPO}/pull/2"' in talk
@@ -298,11 +330,17 @@ def test_review_resumes_units_with_news(
     assert '- Status ci/circleci is error: https://circleci.com/x' in broken
     assert '- Conflicts with main, now at base2.' in broken
     assert 'last-automatic-resume' not in broken
+    assert 'the head lacks' not in broken
+    assert (
+        '<news>\n- fixed has 2 commit(s) the head lacks (now at base3), and'
+        ' passes lint, which failed on the head: rebase onto it, and see'
+        ' whether that fixes it.\n</news>'
+    ) in handed['build/task-9']
     last = handed['build/task-6']
     assert 'No pull request comes from a `kjames/bakery-6-*` branch' in last
     assert '<last-automatic-resume>' in last
     assert '- The operator answered your questions.' in handed['build/task-8']
-    for ident in (1, 2, 3, 6, 8):
+    for ident in (1, 2, 3, 6, 8, 9):
         assert testing_tasks.show(f'bakery:{ident}')['claim'] == (
             f'build/task-{ident}'
         )
