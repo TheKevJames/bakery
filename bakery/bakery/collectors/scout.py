@@ -5,9 +5,9 @@ task list.
 Repos are every one the claws' GitHub user can reach (see scout_repos). For
 each: CI failures on the default branch, and the masked failures and
 warnings in passing runs whose workflow file is still current (minus lines
-matching `ignore_ci_lines`; see scout_logs), open issues and non-bot pull
-requests, and TODO/FIXME comments on the default branch (fetched into
-scout's own clone; see scout_todos).
+matching `ignore_ci_lines`; see scout_logs), open issues, and TODO/FIXME
+comments on the default branch (fetched into scout's own clone; see
+scout_todos). Pull requests are never candidates.
 A candidate is new unless a task already has its link, which is
 deterministic: the link is the task's lineage.
 """
@@ -47,7 +47,7 @@ log = logging.getLogger(__name__)
 T = TypeVar('T')
 
 # Hand-over order: what is most likely broken or blocking someone first.
-KINDS = ('ci', 'error', 'pr', 'issue', 'warning', 'todo')
+KINDS = ('ci', 'error', 'issue', 'warning', 'todo')
 FAILED = frozenset({'failure', 'timed_out', 'startup_failure'})
 # Dependabot's own update jobs: their failures surface in Dependabot itself.
 IGNORED_EVENTS = frozenset({'dynamic'})
@@ -281,13 +281,13 @@ def _issues(
     gh: github.GitHub, repo: scout_repos.Repo, opt_out: str
 ) -> Iterator[Candidate]:
     for item in gh.get_all(f'repos/{repo.name}/issues', {'state': 'open'}):
+        # The issues endpoint lists pull requests too.
+        if 'pull_request' in item:
+            continue
         if opt_out in {label['name'] for label in item.get('labels', [])}:
             continue
-        is_pr = 'pull_request' in item
-        if is_pr and item['user'].get('type') == 'Bot':
-            continue
         yield Candidate(
-            kind='pr' if is_pr else 'issue',
+            kind='issue',
             repo=repo.name,
             link=item['html_url'],
             title=item['title'],

@@ -1,9 +1,8 @@
 # scout: finds things in the operator's repos that belong on the task list
-# (CI failures and warnings, issues and PRs, to-do comments) and adds them for
-# triage.
+# (CI failures and warnings, issues, to-do comments) and adds them for triage.
 # Candidates are gathered deterministically by bakery/bakery/collectors/
 # scout.py from scout.toml; the model only writes them up. Scout reads
-# untrusted issue and PR text, so the model's GitHub token is read-only: a
+# untrusted issue text, so the model's GitHub token is read-only: a
 # classic PAT with no scopes, which reads public repositories (all the claws
 # work on). The collector runs in the gateway and reads GitHub with the
 # gateway's BAKERY_GITHUB instead, as GitHub refuses Actions log downloads to
