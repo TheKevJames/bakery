@@ -435,7 +435,8 @@ on connect:
 - `#bakery-<claw>` per enabled claw (eg. `#bakery-scout`), each with one
   bot-owned webhook so the claw posts under its own name (and
   `claws/<name>/avatar.png`, if present). Claws added later need a gateway
-  restart for their channel.
+  restart for their channel; a webhook deleted while the gateway runs is
+  found or created again on its next use.
 
 Only the operator's user ID is acted on (others' messages are ignored and
 their clicks and commands refused); bots, webhooks, and DMs are ignored.
