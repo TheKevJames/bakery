@@ -12,13 +12,16 @@ the first with news (`build/task-<id>`), claiming the task for it:
   else: anyone can comment on a public repository);
 - a check on the pull request's head failed since then;
 - it conflicts with its base branch, which moved since then;
+- it fails a check or status (whenever it did) which its base branch, which
+  moved since then and has commits its head lacks, passes: a fix landed
+  there without a conflict to say so, and a rebase may pick it up;
 - no pull request comes from its branch.
 
 "Since then" is since the unit's latest run started, in the ledger, so
 nothing new is stored. A task's pull request is found among the claws'
 GitHub user's by its branch, `kjames/bakery-<id>-<slug>` (see build).
 
-The last three are automatic: a task gets at most `max_auto_resumes` of
+The last four are automatic: a task gets at most `max_auto_resumes` of
 them since an operator last said anything on it, the last one told to ask
 the operator rather than try again, so a fix which keeps failing cannot
 loop.
@@ -173,25 +176,47 @@ def _said(gh: github.GitHub, pull: Pull) -> list[tuple[str, float, str]]:
     return said
 
 
-def _failed(gh: github.GitHub, pull: Pull, since: float) -> list[str]:
-    """Checks and statuses on the head which failed since `since`."""
+@dataclasses.dataclass(frozen=True)
+class Failure:
+    name: str  # the check's name, or the status's context
+    when: float
+    line: str
+
+
+def _failures(gh: github.GitHub, pull: Pull) -> list[Failure]:
+    """Checks and statuses which failed on the head."""
     sha = pull.data['head']['sha']
     runs = gh.get_all(
         f'{pull.path}/commits/{sha}/check-runs', key='check_runs'
     )
     failed = [
-        f'- Check {r["name"]} ended {r["conclusion"]}: {r["html_url"]}'
+        Failure(
+            r['name'],
+            _time(r['completed_at']),
+            f'- Check {r["name"]} ended {r["conclusion"]}: {r["html_url"]}',
+        )
         for r in runs
         if r['conclusion'] in FAILED_CHECKS
-        and _time(r['completed_at']) > since
     ]
     statuses = gh.get(f'{pull.path}/commits/{sha}/status')['statuses']
     failed.extend(
-        f'- Status {s["context"]} is {s["state"]}: {s["target_url"]}'
+        Failure(
+            s['context'],
+            _time(s['updated_at']),
+            f'- Status {s["context"]} is {s["state"]}: {s["target_url"]}',
+        )
         for s in statuses
-        if s['state'] in FAILED_STATUSES and _time(s['updated_at']) > since
+        if s['state'] in FAILED_STATUSES
     )
     return failed
+
+
+def _base_head(gh: github.GitHub, pull: Pull) -> dict[str, Any]:
+    """The commit at the head of the base branch."""
+    base_ref = pull.data['base']['ref']
+    branch = gh.get(f'{pull.path}/branches/{urllib.parse.quote(base_ref)}')
+    head: dict[str, Any] = branch['commit']
+    return head
 
 
 def _conflict(gh: github.GitHub, pull: Pull, since: float) -> list[str]:
@@ -200,11 +225,66 @@ def _conflict(gh: github.GitHub, pull: Pull, since: float) -> list[str]:
     if pull.data['mergeable'] is not False:
         return []
     base_ref = pull.data['base']['ref']
-    branch = gh.get(f'{pull.path}/branches/{urllib.parse.quote(base_ref)}')
-    head = branch['commit']
+    head = _base_head(gh, pull)
     if _time(head['commit']['committer']['date']) <= since:
         return []
     return [f'- Conflicts with {base_ref}, now at {head["sha"]}.']
+
+
+def _passes(gh: github.GitHub, pull: Pull, sha: str, names: set[str]) -> bool:
+    """
+    Whether commit `sha` passes every check or status in `names`: each has
+    succeeded on it, and none failed or is still running.
+    """
+    runs = gh.get_all(
+        f'{pull.path}/commits/{sha}/check-runs', key='check_runs'
+    )
+    statuses = gh.get(f'{pull.path}/commits/{sha}/status')['statuses']
+    results: dict[str, list[str | None]] = {}
+    for r in runs:
+        results.setdefault(r['name'], []).append(r['conclusion'])
+    for s in statuses:
+        results.setdefault(s['context'], []).append(s['state'])
+    return all(
+        'success' in results.get(name, [])
+        and not {None, 'pending', *FAILED_CHECKS, *FAILED_STATUSES}
+        & set(results[name])
+        for name in names
+    )
+
+
+def _behind(
+    gh: github.GitHub, pull: Pull, failures: list[Failure], since: float
+) -> list[str]:
+    """
+    A base branch which moved since `since` and passes what fails on the
+    head, which it is ahead of: a failure fixed there, which a rebase may
+    pick up without any conflict to say so.
+    """
+    # A conflict says so itself, once the base branch moves.
+    if not failures or pull.data['mergeable'] is False:
+        return []
+    head = _base_head(gh, pull)
+    if _time(head['commit']['committer']['date']) <= since:
+        return []
+    names = {f.name for f in failures}
+    if not _passes(gh, pull, head['sha'], names):
+        return []
+    base_ref = pull.data['base']['ref']
+    compare = gh.get(
+        f'{pull.path}/compare/{urllib.parse.quote(base_ref)}...'
+        f'{pull.data["head"]["sha"]}',
+        {'per_page': '1'},
+    )
+    behind = int(compare['behind_by'])
+    if behind <= 0:
+        return []
+    return [
+        f'- {base_ref} has {behind} commit(s) the head lacks (now at'
+        f' {head["sha"]}), and passes {", ".join(sorted(names))}, which'
+        ' failed on the head: rebase onto it, and see whether that fixes'
+        ' it.'
+    ]
 
 
 def _news(
@@ -241,8 +321,10 @@ def _news(
             if when > since:
                 news.told.append(line)
     if pull.data['state'] == 'open':
-        news.automatic.extend(_failed(gh, pull, since))
+        failures = _failures(gh, pull)
+        news.automatic.extend(f.line for f in failures if f.when > since)
         news.automatic.extend(_conflict(gh, pull, since))
+        news.automatic.extend(_behind(gh, pull, failures, since))
     return news
 
 

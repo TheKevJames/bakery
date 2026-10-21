@@ -4,7 +4,8 @@
 # Only these GitHub users' comments and reviews count: anyone can comment on
 # a public repository.
 operators = ["TheKevJames"]
-# Resumes for failing checks, conflicts, or a missing pull request, per task
+# Resumes for failing checks, conflicts, a base branch which passes what
+# fails on the head, or a missing pull request, per task
 # since an operator last said anything on it (on the task or its pull
 # request); the last one is told to ask the operator instead.
 max_auto_resumes = 3
