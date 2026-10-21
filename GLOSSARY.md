@@ -54,6 +54,12 @@ A working copy of a clone for one unit of work: the only place a claw checks
 out or changes a repository's files.
 _Avoid_: checkout
 
+**Release**:
+One published version of a repository: its version tag, and every versioned
+or `latest` artifact published for it. An artifact built from a branch, such
+as a `sha-*` image, is not a release.
+_Avoid_: build, deploy
+
 ### Work
 
 **Job**:

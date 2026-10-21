@@ -662,22 +662,28 @@ Credentials (macOS Keychain, least privilege, selected per claw by `secrets`):
   Claw account, a collaborator on the public `TheKevJames` repositories the
   claws work on. Collaborators on a personal account's repositories always
   have write access, and fine-grained PATs can't reach another user's
-  repositories, so GitHub enforces the limits instead: the rulesets every
+  repositories, so GitHub enforces the limits instead. The rulesets every
   repository gets from the operator's repo template (dotsystem's
-  `repo-template`) require a PR approved after its last push for the default
-  branch. Tags are not protected yet, so the account can create and move them
-  (and so trigger tag-driven releases). The account has no admin rights.
-  Private repositories have no rulesets on GitHub Free, so the account is
-  never invited to them.
+  `repo-template`), reconciled by its `repo-settings` workflow, set them:
+  - A PR to the default branch needs the operator's approval as code owner,
+    given after its last push. The account may merge what the operator
+    approved.
+  - Only Renovate's automerges are exempt. Only Renovate may push to
+    `renovate/**`, so an automerge carries only its own commits.
+  - Only the operator and deploy keys can create, move or delete tags.
+    Merging a version change is the release (see
+    `docs/adr/0003-releases-are-tagged-by-deploy-keys.md`).
 
-  The account's code also runs in CI, so CI must not be able to approve on
-  its behalf. The template's `.github/actions-permissions.json`, reconciled
-  by its `repo-settings` workflow, defaults every job's `GITHUB_TOKEN` to
-  read; Actions may still approve PRs, but only for `autoapproval.yml` to
-  approve Renovate's, from a job that runs none of the PR's code. That holds
-  only while the account cannot change workflows: never give the PAT the
-  `workflow` scope, and never merge a workflow that grants a job running PR
-  code `pull-requests: write`.
+  The account has no admin rights. Private repositories have no rulesets on
+  GitHub Free, so the account is never invited to them.
+
+  The account's code also runs in CI. Approvals only count from a code owner,
+  so CI can't approve for it. The template's
+  `.github/actions-permissions.json` defaults every job's `GITHUB_TOKEN` to
+  read, and doesn't let Actions approve PRs at all. Secrets that matter live
+  in environments only the default branch may use. Never give the PAT the
+  `workflow` scope: a workflow the account wrote would run with whatever
+  permissions and repository secrets it asked for.
 
 `web_search` and `web_fetch` (`pi/extensions/ketch.ts`, running
 [ketch](https://ketch.run) from `pi/package.json`: search falls back
