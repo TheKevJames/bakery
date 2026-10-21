@@ -866,8 +866,9 @@ Finds things in the operator's repos that belong on the task list. Profile:
       and dotted versions (eg. setup-uv's cache key embeds a lockfile hash
       and the OS and python versions). Link: the workflow URL with
       `?warning=<fingerprint>`.
-  - **Issues and PRs**: all open issues, and PRs not by bots, except those
-    labelled `ready-for-human`. Link: their URL.
+  - **Issues**: all open issues, whoever opened them, except those labelled
+    `ready-for-human`. Link: their URL. Pull requests are never collected:
+    build follows the claws' own, and no claw reviews anyone else's yet.
   - **TODO/FIXME comments** on the default branch, fetched with scout's
     token over HTTPS into scout's clone, minus per-repo `exclude` globs.
     Only mentions inside comments count: Pygments lexes each file, picking
@@ -880,11 +881,11 @@ Finds things in the operator's repos that belong on the task list. Profile:
   There is no "seen" store, so a done task comes back if its source still
   exists and was not rejected. Scout therefore never merges or drops
   candidates and copies links verbatim.
-- At most `max_candidates` (25) per run, ordered CI, masked failures, PRs,
+- At most `max_candidates` (25) per run, ordered CI, masked failures,
   issues, warnings, TODOs; the rest wait for the next run. Repos are
   collected in parallel (8 at a time). Repos that cannot be read are reported in `#bakery` and in
   scout's report; the others still run.
-- Scout reads untrusted issue and PR text, so the model's `GH_TOKEN` is
+- Scout reads untrusted issue text, so the model's `GH_TOKEN` is
   `BAKERY_GITHUB_READONLY`: a classic PAT with no scopes, which reads public
   data and can list the repos its user collaborates on, but cannot write.
   The collector, which runs in the gateway and never acts on what it reads,

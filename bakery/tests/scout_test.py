@@ -280,7 +280,6 @@ def test_collects_new_candidates_in_priority_order(
     ] == [
         ('ci', f'{REPO}/actions/runs/7'),
         ('error', f'{REPO}/actions/workflows/w2.yml?error={masked}'),
-        ('pr', f'{REPO}/issues/3'),
         ('issue', f'{REPO}/issues/1'),
         ('warning', f'{REPO}/actions/workflows/w2.yml?warning={warning}'),
         ('warning', f'{REPO}/actions/workflows/w2.yml?warning={node}'),
@@ -291,7 +290,7 @@ def test_collects_new_candidates_in_priority_order(
     assert found[1]['detail'].endswith(
         '\n- test > ./flaky.sh\n- lint > make lint'
     )
-    assert found[4]['detail'].startswith(
+    assert found[3]['detail'].startswith(
         f'From https://github.com/{REPO}/actions/runs/8 (commit '
     )
     assert 'def main():' in found[-1]['detail']
@@ -432,7 +431,7 @@ def test_caps_candidates_per_run(
     text = scout.collect(claw, 'test/run').text
 
     assert text is not None
-    assert '<candidates count="2" deferred="7">' in text
+    assert '<candidates count="2" deferred="6">' in text
     assert [c['kind'] for c in candidates(text)] == ['ci', 'error']
 
 

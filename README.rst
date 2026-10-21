@@ -52,7 +52,7 @@ existing item:
   work on. The gateway's collectors use it too, only to read.
 - ``BAKERY_GITHUB_READONLY``: another classic token of the same user, with no
   scopes, so it only reads public data. Scout's model, which reads untrusted
-  issue and PR text, uses it instead of ``BAKERY_GITHUB``.
+  issue text, uses it instead of ``BAKERY_GITHUB``.
 
 Check which are stored, without printing their values:
 
