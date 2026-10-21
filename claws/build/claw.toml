@@ -13,6 +13,12 @@ minutes = 60
 turns = 150
 daily_cost_usd = 30.0
 
+[policy]
+# What the repositories' prek hooks run: uv's hooks, and argbash, which
+# dotsystem's build runs and which reads its own checkout's src/.
+read_paths = ["${TASK_FOLDER}", "~/.local/src/argbash"]
+commands = ["prek", "uv", "uvx"]
+
 [concurrency]
 # Pull request news resumes tasks' units alongside new work.
 max_resumes = 2

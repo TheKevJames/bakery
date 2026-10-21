@@ -22,9 +22,9 @@ from .. import paths
 from .. import state
 from . import config
 
-# Run by pi or the claw extensions (bash may need more, via read_paths).
-# Each is readable through its link on PATH and the installation it resolves
-# into.
+# Run by pi or the claw extensions (bash may need more, via the policy's
+# commands and read_paths). Each is readable through its link on PATH and the
+# installation it resolves into.
 RUNTIME_TOOLS = ('pi', 'node', 'rg', 'fd', 'gh', 'git', 'task', 'bakery')
 # Read by every macOS process for locale settings; denying them only floods
 # the violation log.
@@ -33,6 +33,11 @@ GLOBAL_PREFERENCES = (
     'Library/Preferences/.GlobalPreferences_m.plist',
     'Library/Preferences/ByHost/.GlobalPreferences.*.plist',
 )
+# Go's telemetry mode (`go telemetry`), under os.UserConfigDir, which no
+# environment variable moves. Unreadable, Go assumes "local" and tries to
+# write counters beside it, flooding the violation log; readable, the
+# operator's "off" stops it.
+GO_TELEMETRY_MODE = 'Library/Application Support/go/telemetry/mode'
 # pi's credential file in its profile. deny_read's defaults hide every
 # claw's from the others; re-allowing a claw's own (literally, so it also
 # beats the glob) lets its pi read it.
@@ -55,8 +60,14 @@ def launcher() -> pathlib.Path:
 
 
 def home(claw: config.Claw) -> pathlib.Path:
-    """The claw's XDG config, cache, and data homes live here."""
-    return claw.state_dir / 'home'
+    """
+    The claw's XDG config, cache, data, and bin homes live here. Outside its
+    cwd, so sandbox-runtime's mandatory write denies (.vscode, .idea,
+    .git/hooks, all anchored at the cwd) stay off what tools unpack into
+    their caches, eg. Go modules shipping a .vscode dir; nothing outside the
+    sandbox opens these.
+    """
+    return state.root() / state.HOMES / claw.name
 
 
 def tmp(claw: config.Claw) -> pathlib.Path:
@@ -185,9 +196,9 @@ def _installation(exe: pathlib.Path) -> list[pathlib.Path]:
     return found
 
 
-def _runtime_reads(path_env: str) -> list[pathlib.Path]:
+def _tool_reads(path_env: str, tools: Iterable[str]) -> list[pathlib.Path]:
     reads = [paths.repo()]
-    for tool in RUNTIME_TOOLS:
+    for tool in tools:
         exe = shutil.which(tool, path=path_env)
         if exe is not None:
             reads.extend(_installation(pathlib.Path(exe)))
@@ -211,19 +222,22 @@ def settings(
         denies.append(user_temp)
     reads = [
         *policy.read_paths,
-        *_runtime_reads(path_env),
+        *_tool_reads(path_env, (*RUNTIME_TOOLS, *policy.commands)),
         claw.profile,
         *(claw.profile / name for name in PI_CREDENTIALS),
         claw.state_dir,
+        home(claw),
         root / state.SHARED,
         sockets(claw),
         task_sockets,
         *(user_home / p for p in GLOBAL_PREFERENCES),
+        user_home / GO_TELEMETRY_MODE,
     ]
     writes = [
         *policy.write_paths,
         *(claw.profile / name for name in PI_PROFILE_WRITES),
         claw.state_dir,
+        home(claw),
         sockets(claw),
         # Every claw edits it; the gateway commits and posts each change.
         state.operator_file(),

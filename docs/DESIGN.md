@@ -54,13 +54,13 @@ with it changed (see [Memory](#memory)).
 $XDG_STATE_HOME/claws/
 ├── _shared/OPERATOR.md      # facts about the operator, injected into every claw
 ├── _gateway/                # gitignored: run ledger (runs.db), control socket, claws' pi state (session registries), sandbox violations
+├── _homes/<name>/           # gitignored: each claw's XDG config, cache, data, and bin (see Claw environment)
 └── <name>/
     ├── MEMORY.md            # curated long-term memory
     ├── memory/YYYY-MM-DD.md # daily notes (kept forever)
     ├── sessions/            # gitignored: pi session transcripts
     ├── clones/              # gitignored: the claw's bare clones, as <owner>/<repo>.git
     ├── worktrees/           # gitignored: its units' worktrees, as <owner>/<repo>/<session id>
-    ├── home/                # gitignored: the claw's XDG config, cache, and data
     └── tmp/                 # gitignored: its pi children's $TMPDIRs
 ```
 
@@ -389,7 +389,7 @@ and warns in `#bakery` and `gateway.log`.
 ### Claw environment
 
 A claw's pi child gets only `PATH`, `HOME`, `USER`, `LANG`, `TASK_FOLDER`,
-`XDG_*` (three replaced, below), and `LC_*` from the gateway's environment,
+`XDG_*` (four replaced, below), and `LC_*` from the gateway's environment,
 plus its `secrets`: entries `NAME` or `NAME=ITEM`, setting variable NAME
 from secret ITEM (default: NAME). The default is `ANTHROPIC_API_KEY` and
 `GH_TOKEN=BAKERY_GITHUB`. Secret values come only from the Keychain (generic
@@ -401,18 +401,28 @@ pi and its extension tools, not to bash (see [Safety](#safety)).
 `PATH` starts with `_gateway/bin/` in the claw state root, which holds only
 a link to the gateway's own `task`, so a claw's `task` always speaks its
 task server's protocol (see [Shared task list](#shared-task-list)), and
-`TASK_SERVER` names the unit's socket.
+`TASK_SERVER` names the unit's socket. The claw's own `$XDG_BIN_HOME` comes
+next, so what it installs (eg. `uv tool install`) runs by name, but cannot
+shadow `task`.
 
 The gateway also reads secrets of its own from the Keychain, by fixed item
 names, and never hands them to a claw: `DISCORD_BOT_TOKEN`, and
 `BAKERY_GITHUB` for collectors (`bakery/bakery/collectors/base.py`), which
 only ever make GET requests and git fetches with it.
 
-`XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, and `XDG_DATA_HOME` point into the
-claw's own `home/` (in its state dir), so tools find an empty config and
-keep their caches there instead of failing on the unreadable real ones under
-`$HOME`. Tools that read `~/.something` directly still get "permission
-denied". The sandbox launcher creates each child's `$TMPDIR` in the claw's
+`XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `XDG_DATA_HOME`, and `XDG_BIN_HOME`
+point into the claw's own home, `_homes/<claw>/` in the claw state root, so
+tools find an empty config and keep their caches and installs (uv's tools
+and Pythons, prek's hook envs) there instead of failing on the unreadable or
+unwritable real ones under `$HOME`; so do `GOPATH` (`data/go`) and `GOCACHE`
+(`cache/go-build`), since Go ignores XDG. The home persists across runs,
+and lies outside the claw's cwd (its state dir) so that sandbox-runtime's
+write denies anchored there (see [Safety](#safety)) stay off what tools
+unpack into it, eg. a Go module shipping a `.vscode` dir. Tools that read
+`~/.something` directly still get "permission denied". Go's telemetry dir,
+`~/Library/Application Support/go/telemetry`, cannot be redirected; claws
+read only its `mode`, so the operator's `go telemetry off` keeps Go from
+trying to write counters there. The sandbox launcher creates each child's `$TMPDIR` in the claw's
 `tmp/` and removes it when the child exits.
 
 ### Control
@@ -541,6 +551,9 @@ The `[policy]` keys:
   secret-file patterns (eg. `~/**/.env*`), which would also hide committed
   files of those names, until `read_paths` takes in somewhere real secrets
   live.
+- `commands`: commands on `PATH` readable besides the ones pi needs (below),
+  each the same way: its link and the installation it resolves into.
+  Default none; build's are `prek`, `uv`, and `uvx`.
 - `write_paths`: writable besides the claw's own state dir, pi's files in its
   profile, and its `$TMPDIR`. Default none: nothing of the task list (see
   "Shared task list"). The memory tools are the intended writers of memory,
@@ -559,15 +572,22 @@ Enforcement:
      what pi needs to run are re-allowed; `deny_read` applies within them.
      What pi needs: the bakery repo, the claw's profile and its own pi
      credentials, its state dir, `_shared`, its socket dir, its unit's task
-     server socket dir, macOS's global preferences, and the tools pi and the claw extensions run (`pi`,
-     `node`, `rg`, `fd`, `gh`, `git`, `task`, `bakery`), each through its
+     server socket dir, its home, macOS's global preferences, Go's
+     telemetry mode, and the tools pi and the claw extensions run (`pi`,
+     `node`, `rg`, `fd`, `gh`, `git`, `task`, `bakery`) plus the policy's
+     `commands`, each through its
      link on `PATH` and the installation it resolves into (a venv's base
      interpreter and the source of its editable installs included).
-   - Writes: `write_paths`, the claw's state dir and socket dir, its
+   - Writes: `write_paths`, the claw's state dir, home, and socket dir, its
      `$TMPDIR`, and exactly the files pi writes in its profile (`auth.json`,
      `models-store.json`, `settings.json`, and their locks); the rest of
      the repo is read-only. sandbox-runtime also always blocks writes to
-     `.git/hooks`, `.git/config`, and shell rc files.
+     `.git/hooks`, shell rc files, `.gitconfig`, `.gitmodules`,
+     `.mcp.json`, `.vscode`, `.idea`, and `.claude/{commands,agents}`
+     beneath the cwd (the claw's state dir: its clones, worktrees, and
+     `$TMPDIR`), since programs outside the sandbox (the operator's editor,
+     the gateway's git) may run what they hold; `allowGitConfig` lets
+     `.git/config` through.
    - Network: through the sandbox's proxy, which allows every host to pi
      and bash alike (its allowlist is empty; a callback in `launch.mts`
      approves every host) but refuses hostnames other than `localhost` and
@@ -611,7 +631,7 @@ Enforcement:
    the operator's unmerged work. They commit on `kjames/bakery-*` branches,
    push over HTTPS, and open PRs with `gh`; the operator reviews and
    merges. The gateway writes the claw's git config
-   (`<state>/home/config/git/config`, its `GIT_CONFIG_GLOBAL`, so git never
+   (`_homes/<claw>/config/git/config`, its `GIT_CONFIG_GLOBAL`, so git never
    trips on an unreadable `~/.gitconfig`) at every start: the claws' GitHub
    user's identity (`[git]`), no signing, no hook templates (the sandbox
    refuses writes to any `.git/hooks`, but allows `.git/config` in the

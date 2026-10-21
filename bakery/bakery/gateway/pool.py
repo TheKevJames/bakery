@@ -33,11 +33,16 @@ REAP_INTERVAL = 15.0
 INHERITED_ENV = ('PATH', 'HOME', 'USER', 'LANG', 'TASK_FOLDER')
 INHERITED_ENV_PREFIXES = ('XDG_', 'LC_')
 # Pointed into the claw's own home, so tools find an empty config (and keep
-# their caches) instead of failing on the unreadable real ones under $HOME.
-XDG_HOMES = {
+# their caches, and what eg. `uv tool install` installs) instead of failing
+# on the unreadable or unwritable real ones under $HOME. Go ignores XDG and
+# defaults to ~/go and ~/Library/Caches/go-build.
+HOME_DIRS = {
     'XDG_CONFIG_HOME': 'config',
     'XDG_CACHE_HOME': 'cache',
     'XDG_DATA_HOME': 'data',
+    'XDG_BIN_HOME': 'bin',
+    'GOPATH': 'data/go',
+    'GOCACHE': 'cache/go-build',
 }
 
 log = logging.getLogger(__name__)
@@ -86,17 +91,18 @@ def child_env(claw: config.Claw, sid: str) -> dict[str, str]:
         for name, value in os.environ.items()
         if name in INHERITED_ENV or name.startswith(INHERITED_ENV_PREFIXES)
     }
-    env['PATH'] = os.pathsep.join(
-        filter(None, (str(_task_bin()), env.get('PATH')))
-    )
-    env.update(
-        {name: secrets.get(item) for name, item in claw.secrets.items()}
-    )
     env.update(
         {
             name: str(sandbox.home(claw) / sub)
-            for name, sub in XDG_HOMES.items()
+            for name, sub in HOME_DIRS.items()
         }
+    )
+    # The claw's own bin after the gateway's `task`, so what it installs
+    # cannot shadow it.
+    path = (str(_task_bin()), env['XDG_BIN_HOME'], env.get('PATH'))
+    env['PATH'] = os.pathsep.join(filter(None, path))
+    env.update(
+        {name: secrets.get(item) for name, item in claw.secrets.items()}
     )
     env.update(
         {
