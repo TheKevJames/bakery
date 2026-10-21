@@ -86,6 +86,7 @@ def test_file_access_follows_the_policy(
     repo.mkdir(parents=True)
     (repo / 'code.py').write_text('fine')
     (repo / '.env').write_text('hunter3')
+    (repo / 'quote.md').write_text('cat: x: Operation not permitted')
     tool = home / 'src' / 'personal' / 'tool'
     tool.mkdir()
     (tool / 'code.py').write_text('editable')
@@ -134,6 +135,9 @@ def test_file_access_follows_the_policy(
         # A runtime tool reads its editable source, but nothing beside it.
         harness.call('bash', command='fd'),
         harness.call('bash', command=f'cat {home}/src/personal/other'),
+        # Succeeding, only quoting a refusal: no note.
+        harness.call('read', path=str(repo / 'quote.md')),
+        harness.call('bash', command=f'cat {repo}/quote.md'),
     ]
 
     run, results = run_calls(claws, fake_llm, 'a', calls)
@@ -152,6 +156,8 @@ def test_file_access_follows_the_policy(
     assert 'editable' in results[13]
     for refused in (0, 1, 3, 4, 7, 10, 12, 14):
         assert 'sandbox policy blocked it' in results[refused], refused
+    assert all('Operation not permitted' in r for r in results[15:])
+    assert not any('sandbox policy blocked' in r for r in results[15:])
     assert not [
         key
         for key in keys

@@ -188,6 +188,19 @@ def test_digest_covers_activity_since_the_last_review(
                 'args': {'text': 'CI logs need auth', 'source': 'self'},
                 'text': 'Saved.',
             },
+            # Succeeded, only quoting refusals: nothing was refused.
+            {
+                'at': SINCE + 110,
+                'tool': 'bash',
+                'args': {'command': 'jq .text other-claw.jsonl'},
+                'text': '"touch /tmp/x: Operation not permitted"',
+            },
+            {
+                'at': SINCE + 120,
+                'tool': 'task_add',
+                'args': {'summary': 'Quoted'},
+                'text': 'Added: `touch /tmp/x` -> Operation not permitted',
+            },
         ],
     )
     violations = state.root() / '_gateway' / 'violations' / 'scout'
@@ -224,9 +237,11 @@ def test_digest_covers_activity_since_the_last_review(
     assert 'scout/daily-x parked: cost limit' in text
     assert 'too old' not in text
     assert (
-        '- scout (1 sessions): bash 3 (3 failed), web_fetch 1 (1 failed)'
+        '- scout (1 sessions): bash 4 (3 failed), web_fetch 1 (1 failed)'
         in text
     )
+    assert text.count('scout · sandbox · ') == 2
+    assert 'touch /tmp/x' not in text
     assert (
         'scout · sandbox · gh: open ~/.config/gh/config.yml: operation not'
         ' permitted - 2 calls in 1 units; latest scout-daily-x' in text
