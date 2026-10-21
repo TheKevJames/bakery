@@ -103,7 +103,9 @@ def test_file_access_follows_the_policy(
         {
             'a': f"""
                 [policy]
-                read_paths = {toml_list(['~/src/personal/repo', state / 'b'])}
+                read_paths = [
+                    "~/src/personal/repo", "{state / 'b'}", "{out}",
+                ]
                 deny_read = ["../*/auth.json", "~/**/.env*"]
                 write_paths = {toml_list([out])}
             """,
@@ -301,6 +303,12 @@ def test_sandbox_exec_runs_commands_as_the_claw(
     secret = root / 'state' / 'claws' / 'b' / 'MEMORY.md'
     secret.parent.mkdir(parents=True)
     secret.write_text('hunter2')
+    # Under /tmp, but outside the claw state root.
+    stray = root / 'stray.txt'
+    stray.write_text('swordfish')
+    shared_tmp = pathlib.Path('/private/tmp/claude')
+    shared_tmp.mkdir(exist_ok=True)
+    planted = shared_tmp / f'{root.name}.txt'
 
     def run(*command: str) -> int:
         args = argparse.Namespace(
@@ -310,9 +318,14 @@ def test_sandbox_exec_runs_commands_as_the_claw(
 
     assert run('sh', '-c', 'echo "TMPDIR=$TMPDIR"') == 0
     assert run('cat', str(secret)) != 0
+    assert run('cat', str(stray)) != 0
+    assert run('touch', str(planted)) != 0
     out = capfd.readouterr()
+    print(out.err)
     assert f'TMPDIR={root.resolve()}/state/claws/a/tmp/pi-' in out.out
     assert 'hunter2' not in out.out + out.err
+    assert 'swordfish' not in out.out + out.err
+    assert not planted.exists()
 
 
 def test_claws_keep_their_toolchain_in_their_home(
@@ -382,7 +395,14 @@ def test_claws_change_repos_only_in_worktrees(
     )  # fmt: skip
     commands.git(seed, 'push', '-q', str(upstream), 'main')
     claws = testing_gateway.make_claws(
-        root, {'a': f'[policy]\nwrite_paths = {toml_list([upstream])}'}
+        root,
+        {
+            'a': f"""
+                [policy]
+                read_paths = {toml_list([upstream])}
+                write_paths = {toml_list([upstream])}
+            """
+        },
     )
     # As pi/claw-rules/repos.md has every claw work; each refusal is echoed.
     script = f"""

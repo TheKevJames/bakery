@@ -1,7 +1,7 @@
 # Sandbox
 
-- `/tmp` is not writable: use `$TMPDIR` for scratch files. It is yours alone
-  and does not outlast your process. Keep scratch files out of
+- `/tmp` is neither readable nor writable: use `$TMPDIR` for scratch files.
+  It is yours alone and does not outlast your process. Keep scratch files out of
   `$BAKERY_MEMORY_DIR`, which is committed.
 - Your home holds your XDG config, cache, data, and bin dirs, and Go's
   `GOPATH` and `GOCACHE`; it persists across your runs. Install tools there,

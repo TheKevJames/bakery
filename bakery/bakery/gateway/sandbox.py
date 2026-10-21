@@ -3,9 +3,9 @@ A claw's OS sandbox: the sandbox-runtime config pi/claw-sandbox/launch.mts
 runs the claw's pi in, built from its policy plus what pi needs to run.
 
 pi and everything it starts share the one sandbox; macOS cannot nest them.
-Reads are denied across $HOME (and per-user temp, and the claw state root),
-then re-allowed for the policy's read_paths and pi's own needs; deny_read
-then applies within those.
+Reads are denied across $HOME (and per-user temp, the shared dirs every
+user may write, and the claw state root), then re-allowed for the policy's
+read_paths and pi's own needs; deny_read then applies within those.
 """
 
 import functools
@@ -50,9 +50,15 @@ PI_PROFILE_WRITES = (
     'models-store.json', 'models-store.json.lock',
     'settings.json', 'settings.json.lock',
 )  # fmt: skip
-# sandbox-runtime's default $TMPDIR, shared by every sandbox on the machine;
-# claws get their own instead.
-SHARED_TMP = ('/tmp/claude', '/private/tmp/claude')
+# World-writable, so anything may leave files in them; claws get a $TMPDIR
+# of their own instead.
+# TODO: consider denying reads by default (all of `/`) and re-allowing system
+# paths, rather than listing what to deny.
+SHARED_DIRS = ('/private/tmp', '/private/var/tmp', '/Users/Shared')
+# sandbox-runtime's default $TMPDIR, which it keeps writable for every sandbox
+# on the machine; a claw writing there could plant files in other sandboxes'
+# $TMPDIR.
+SANDBOX_RUNTIME_TMP = '/private/tmp/claude'
 
 
 def launcher() -> pathlib.Path:
@@ -216,7 +222,7 @@ def settings(
     policy = claw.policy
     root = state.root()
     user_home = pathlib.Path.home()
-    denies: list[pathlib.Path | str] = [user_home, root, *SHARED_TMP]
+    denies: list[pathlib.Path | str] = [user_home, root, *SHARED_DIRS]
     user_temp = _user_temp()
     if user_temp is not None:
         denies.append(user_temp)
@@ -266,7 +272,7 @@ def settings(
             'denyRead': [*_real(denies), *policy.deny_read],
             'allowRead': _real(reads),
             'allowWrite': _real(writes),
-            'denyWrite': [],
+            'denyWrite': [SANDBOX_RUNTIME_TMP],
             # Claws clone into their own (writable) state; nothing of the
             # operator's is writable, so this only lets them make and
             # configure clones. .git/hooks stays unwritable.
