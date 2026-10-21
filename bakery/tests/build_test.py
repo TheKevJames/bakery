@@ -8,6 +8,7 @@ from collections.abc import Iterator
 
 import pytest
 
+from bakery import github as github_api
 from bakery.collectors import build
 from bakery.collectors import build_review
 from bakery.gateway import config
@@ -30,6 +31,7 @@ prompt = "Your pull request has news."
 collector = "build-review"
 """
 REPO = 'TheKevJames/thing'
+OTHER = 'TheKevJames/other'
 BOT = 'thekevjames-bakery'
 NOW = time.time()
 # Every unit's last run started an hour ago.
@@ -133,14 +135,18 @@ def test_build_routes_tasks_it_holds(
 
 
 def pull(
-    github: fake_github.FakeGitHub, number: int, branch: str, **data: object
+    github: fake_github.FakeGitHub,
+    number: int,
+    branch: str,
+    repo: str = REPO,
+    **data: object,
 ) -> dict[str, object]:
-    """A pull request in REPO; its search item."""
-    path = f'/repos/{REPO}'
+    """A pull request in `repo`; its search item."""
+    path = f'/repos/{repo}'
     sha = f'sha{number}'
     github.routes[f'{path}/pulls/{number}'] = {
         'number': number,
-        'html_url': f'https://github.com/{REPO}/pull/{number}',
+        'html_url': f'https://github.com/{repo}/pull/{number}',
         'state': 'open',
         'closed_at': None,
         'merged_at': None,
@@ -161,6 +167,43 @@ def pull(
     )
     github.routes.setdefault(f'{path}/commits/{sha}/status', {'statuses': []})
     return {'number': number, 'repository_url': f'{github.url}{path}'}
+
+
+def listed(
+    number: int, branch: str, at: str, login: str = BOT
+) -> dict[str, object]:
+    """A pull request as a repository's list of them has it."""
+    return {
+        'number': number,
+        'state': 'open',
+        'head': {'ref': branch},
+        'updated_at': at,
+        'user': {'login': login},
+    }
+
+
+def serve_lists(github: fake_github.FakeGitHub) -> None:
+    """
+    Repositories' pull requests, for those search missed: REPO's (where
+    search found some) has none for 6, but OTHER (which 12 links to) has
+    12's, which search missed.
+    """
+    query = 'per_page=100&state=all&sort=updated&direction=desc'
+    path = f'/repos/{REPO}/pulls?{query}'
+    github.routes[path] = [
+        listed(2, 'kjames/bakery-2-talk', AFTER),
+        listed(30, 'kjames/bakery-6-not-mine', AFTER, login='stranger'),
+        listed(31, 'kjames/bakery-6-too-old', '2000-01-01T00:00:00Z'),
+    ]
+    # Never read: the list is latest updated first, and 31 is too old.
+    github.next_pages[path] = f'/repos/{REPO}/pulls?page=2'
+    github.routes[f'/repos/{OTHER}/pulls?{query}'] = [
+        listed(5, 'kjames/bakery-12-missed', AFTER)
+    ]
+    pull(github, 5, 'kjames/bakery-12-missed', OTHER)
+    github.routes[f'/repos/{OTHER}/issues/5/comments?per_page=100'] = [
+        comment('TheKevJames', AFTER, 'still-here')
+    ]
 
 
 def comment(login: str, at: str, body: str) -> dict[str, object]:
@@ -227,6 +270,12 @@ def serve_pulls(github: fake_github.FakeGitHub) -> None:
         ]
     }
     serve_bases(github)
+    serve_lists(github)
+    github.routes[search_path()] = {'items': items}
+
+
+def search_path() -> str:
+    """The collector's search for the claws' user's pull requests."""
     created = testing_tasks.show('bakery:1')['created']
     assert isinstance(created, str)
     since = datetime.datetime.fromisoformat(created).date()
@@ -238,7 +287,7 @@ def serve_pulls(github: fake_github.FakeGitHub) -> None:
             'sort': 'updated',
         }
     )
-    github.routes[f'/search/issues?{query}'] = {'items': items}
+    return f'/search/issues?{query}'
 
 
 def serve_bases(github: fake_github.FakeGitHub) -> None:
@@ -299,13 +348,25 @@ def test_review_resumes_units_with_news(
     for summary in ('merged', 'talked about', 'broken', 'quiet'):
         add('review', summary)
     add('review', 'no PR, out of resumes')
-    add('review', 'no PR, last resume')
+    # Not a repository: nothing to list there.
+    add(
+        'review',
+        'no PR, last resume',
+        '--link',
+        'https://github.com/advisories/GHSA-1',
+    )
     add('review', 'asked', '--question', 'which?')
     add('review', 'answered', '--question', 'which?')
     add('review', 'behind a fixed base')
     add('review', 'behind a base which has not moved')
     add('review', 'a check cancelled')
-    for ident in (1, 2, 3, 4, 8, 9, 10, 11):
+    add(
+        'review',
+        'missed by search',
+        '--link',
+        f'https://github.com/{OTHER}/issues/3',
+    )
+    for ident in (1, 2, 3, 4, 8, 9, 10, 11, 12):
         add_runs(monkeypatch, ident, 'queue', 1)
     add_runs(monkeypatch, 5, 'review', 3)
     add_runs(monkeypatch, 6, 'review', 2)
@@ -319,7 +380,7 @@ def test_review_resumes_units_with_news(
 
     print(json.dumps(handed, indent=1))
     assert sorted(handed) == sorted(
-        f'build/task-{i}' for i in (1, 2, 3, 6, 8, 9, 11)
+        f'build/task-{i}' for i in (1, 2, 3, 6, 8, 9, 11, 12)
     )
     assert '<news>\n- Merged.\n</news>' in handed['build/task-1']
     talk = handed['build/task-2']
@@ -351,7 +412,26 @@ def test_review_resumes_units_with_news(
         '<news>\n- Check test ended cancelled:'
         f' https://github.com/{REPO}/runs/test\n</news>'
     ) in handed['build/task-11']
-    for ident in (1, 2, 3, 6, 8, 9, 11):
+    missed = handed['build/task-12']
+    assert f'url="https://github.com/{OTHER}/pull/5"' in missed
+    assert 'still-here' in missed and 'No pull request' not in missed
+    for ident in (1, 2, 3, 6, 8, 9, 11, 12):
         assert testing_tasks.show(f'bakery:{ident}')['claim'] == (
             f'build/task-{ident}'
         )
+
+
+def test_review_waits_out_incomplete_search_results(
+    root: pathlib.Path,
+    github: fake_github.FakeGitHub,
+    keychain: dict[str, str],
+) -> None:
+    keychain['BAKERY_GITHUB'] = 'collector-token'
+    claw = config.load(build_claws(root, github.url)).claw('build')
+    add('review', 'no PR found yet')
+    github.routes[search_path()] = {'items': [], 'incomplete_results': True}
+
+    with pytest.raises(github_api.GitHubError, match='incomplete results'):
+        build_review.collect(claw, 'build/review-x')
+
+    assert testing_tasks.show('bakery:1')['claim'] is None
