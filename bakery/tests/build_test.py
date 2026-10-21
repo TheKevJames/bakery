@@ -195,6 +195,7 @@ def serve_pulls(github: fake_github.FakeGitHub) -> None:
         pull(github, 9, 'renovate/thing'),
         pull(github, 10, 'kjames/bakery-9-behind', base={'ref': 'fixed'}),
         pull(github, 11, 'kjames/bakery-10-stale', base={'ref': 'old'}),
+        pull(github, 12, 'kjames/bakery-11-cancelled'),
     ]  # fmt: skip
     github.routes[f'{path}/issues/2/comments?per_page=100'] = [
         comment('TheKevJames', BEFORE, 'old'),
@@ -211,6 +212,9 @@ def serve_pulls(github: fake_github.FakeGitHub) -> None:
             check('old', 'failure', BEFORE),
             check('test', 'success', AFTER),
         ]
+    }
+    github.routes[f'{path}/commits/sha12/check-runs?per_page=100'] = {
+        'check_runs': [check('test', 'cancelled', AFTER)]
     }
     github.routes[f'{path}/commits/sha3/status'] = {
         'statuses': [
@@ -300,7 +304,8 @@ def test_review_resumes_units_with_news(
     add('review', 'answered', '--question', 'which?')
     add('review', 'behind a fixed base')
     add('review', 'behind a base which has not moved')
-    for ident in (1, 2, 3, 4, 8, 9, 10):
+    add('review', 'a check cancelled')
+    for ident in (1, 2, 3, 4, 8, 9, 10, 11):
         add_runs(monkeypatch, ident, 'queue', 1)
     add_runs(monkeypatch, 5, 'review', 3)
     add_runs(monkeypatch, 6, 'review', 2)
@@ -313,7 +318,9 @@ def test_review_resumes_units_with_news(
         handed[collection.work_key] = collection.text
 
     print(json.dumps(handed, indent=1))
-    assert sorted(handed) == [f'build/task-{i}' for i in (1, 2, 3, 6, 8, 9)]
+    assert sorted(handed) == sorted(
+        f'build/task-{i}' for i in (1, 2, 3, 6, 8, 9, 11)
+    )
     assert '<news>\n- Merged.\n</news>' in handed['build/task-1']
     talk = handed['build/task-2']
     assert f'url="https://github.com/{REPO}/pull/2"' in talk
@@ -340,7 +347,11 @@ def test_review_resumes_units_with_news(
     assert 'No pull request comes from a `kjames/bakery-6-*` branch' in last
     assert '<last-automatic-resume>' in last
     assert '- The operator answered your questions.' in handed['build/task-8']
-    for ident in (1, 2, 3, 6, 8, 9):
+    assert (
+        '<news>\n- Check test ended cancelled:'
+        f' https://github.com/{REPO}/runs/test\n</news>'
+    ) in handed['build/task-11']
+    for ident in (1, 2, 3, 6, 8, 9, 11):
         assert testing_tasks.show(f'bakery:{ident}')['claim'] == (
             f'build/task-{ident}'
         )

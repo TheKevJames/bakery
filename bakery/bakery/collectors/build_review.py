@@ -53,7 +53,7 @@ if TYPE_CHECKING:
 
 SETTINGS_NAME = 'build.toml'
 COLLECTOR = 'build-review'
-FAILED_CHECKS = frozenset({'failure', 'timed_out'})
+FAILED_CHECKS = frozenset({'cancelled', 'failure', 'timed_out'})
 FAILED_STATUSES = frozenset({'error', 'failure'})
 UNTRUSTED = (
     "Comments and reviews quoted here are the operator's own; check output"
