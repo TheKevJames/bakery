@@ -33,6 +33,11 @@ GLOBAL_PREFERENCES = (
     'Library/Preferences/.GlobalPreferences_m.plist',
     'Library/Preferences/ByHost/.GlobalPreferences.*.plist',
 )
+# Go's telemetry mode (`go telemetry`), under os.UserConfigDir, which no
+# environment variable moves. Unreadable, Go assumes "local" and tries to
+# write counters beside it, flooding the violation log; readable, the
+# operator's "off" stops it.
+GO_TELEMETRY_MODE = 'Library/Application Support/go/telemetry/mode'
 # pi's credential file in its profile. deny_read's defaults hide every
 # claw's from the others; re-allowing a claw's own (literally, so it also
 # beats the glob) lets its pi read it.
@@ -226,6 +231,7 @@ def settings(
         sockets(claw),
         task_sockets,
         *(user_home / p for p in GLOBAL_PREFERENCES),
+        user_home / GO_TELEMETRY_MODE,
     ]
     writes = [
         *policy.write_paths,

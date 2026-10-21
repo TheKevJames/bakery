@@ -419,9 +419,10 @@ unwritable real ones under `$HOME`; so do `GOPATH` (`data/go`) and `GOCACHE`
 and lies outside the claw's cwd (its state dir) so that sandbox-runtime's
 write denies anchored there (see [Safety](#safety)) stay off what tools
 unpack into it, eg. a Go module shipping a `.vscode` dir. Tools that read
-`~/.something` directly still get "permission denied"; Go's telemetry, in
-`~/Library/Application Support/go/telemetry`, cannot be redirected and
-shows up as denials. The sandbox launcher creates each child's `$TMPDIR` in the claw's
+`~/.something` directly still get "permission denied". Go's telemetry dir,
+`~/Library/Application Support/go/telemetry`, cannot be redirected; claws
+read only its `mode`, so the operator's `go telemetry off` keeps Go from
+trying to write counters there. The sandbox launcher creates each child's `$TMPDIR` in the claw's
 `tmp/` and removes it when the child exits.
 
 ### Control
@@ -571,7 +572,8 @@ Enforcement:
      what pi needs to run are re-allowed; `deny_read` applies within them.
      What pi needs: the bakery repo, the claw's profile and its own pi
      credentials, its state dir, `_shared`, its socket dir, its unit's task
-     server socket dir, its home, macOS's global preferences, and the tools pi and the claw extensions run (`pi`,
+     server socket dir, its home, macOS's global preferences, Go's
+     telemetry mode, and the tools pi and the claw extensions run (`pi`,
      `node`, `rg`, `fd`, `gh`, `git`, `task`, `bakery`) plus the policy's
      `commands`, each through its
      link on `PATH` and the installation it resolves into (a venv's base
