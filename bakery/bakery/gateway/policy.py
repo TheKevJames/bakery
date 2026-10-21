@@ -1,9 +1,10 @@
 """
 A claw's `[policy]`: the paths its pi child may read and write, enforced by
 the OS sandbox the child runs in (see sandbox.py); eg. it writes only the
-claws' namespace of the task list. Which tools it uses, and how it uses that
-namespace, are rules in its instructions, not policy: bash shares pi's
-sandbox, so nothing pi's process could refuse would bind bash.
+claws' namespace of the task list. `commands` only makes commands
+readable; which tools it uses, and how it uses that namespace, are rules in
+its instructions, not policy: bash shares pi's sandbox, so nothing pi's
+process could refuse would bind bash.
 """
 
 import dataclasses
@@ -24,6 +25,9 @@ class Policy:
     deny_read: tuple[str, ...]
     # Absolute paths the claw may write, besides its own state and profile.
     write_paths: tuple[pathlib.Path, ...]
+    # Commands on PATH made readable like sandbox.RUNTIME_TOOLS: their link
+    # and the installation it resolves into.
+    commands: tuple[str, ...]
 
 
 def _pattern(raw: str, base: pathlib.Path) -> str:
@@ -49,6 +53,7 @@ def parse(table: toml.Table, profile: pathlib.Path) -> Policy:
         write_paths=tuple(
             toml.expand(p, profile) for p in table.strings('write_paths')
         ),
+        commands=table.strings('commands'),
     )
     table.done()
     return policy

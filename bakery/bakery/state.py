@@ -15,11 +15,13 @@ import threading
 from . import paths
 
 SHARED = '_shared'
+# Each claw's home (gateway/sandbox.py), as _homes/<claw>.
+HOMES = '_homes'
 GITIGNORE = """\
 /_gateway/
+/_homes/
 /*/sessions/
 /*/clones/
-/*/home/
 /*/tmp/
 /*/worktrees/
 """

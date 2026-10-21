@@ -50,6 +50,10 @@ deny_read = [
 # intended writers of memory, but bash could write it. None of the task list:
 # the gateway writes it for the claw, under its rules (see gateway.toml).
 write_paths = []
+# Commands on PATH (eg. "uv") readable besides the ones pi and the claw
+# extensions run: each through its link and the installation it resolves
+# into (a venv, its base interpreter, its editable sources; an npm package).
+commands = []
 
 # The identity of the claw's commits (the claws' GitHub user), in the git
 # config the gateway writes into the claw's home at every start.

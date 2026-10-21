@@ -315,6 +315,57 @@ def test_sandbox_exec_runs_commands_as_the_claw(
     assert 'hunter2' not in out.out + out.err
 
 
+def test_claws_keep_their_toolchain_in_their_home(
+    root: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    home = root / 'home'
+    monkeypatch.setenv('HOME', str(home))
+    tool = home / 'src' / 'tool'
+    tool.mkdir(parents=True)
+    (tool / 'code.py').write_text('editable\n')
+    install_editable(home / 'venvs' / 'lint', 'lint', tool)
+    install_editable(home / 'venvs' / 'other', 'other', tool)
+    monkeypatch.setenv(
+        'PATH',
+        f'{home / "venvs" / "lint" / "bin"}:'
+        f'{home / "venvs" / "other" / "bin"}:{os.environ["PATH"]}',
+    )
+    claws = testing_gateway.make_claws(
+        root, {'a': '[policy]\ncommands = ["lint"]'}
+    )
+    # As `uv tool install` and Go's module cache would, then a .vscode dir
+    # in a repo, which stays protected.
+    script = """
+        lint && echo RAN-TOOL
+        other || echo REFUSED-OTHER
+        mkdir -p "$XDG_BIN_HOME" "$GOPATH/pkg/mod/m/.vscode" "$GOCACHE"
+        printf '#!/bin/sh\\necho RAN-INSTALLED\\n' > "$XDG_BIN_HOME/installed"
+        chmod +x "$XDG_BIN_HOME/installed" && installed
+        echo {} > "$GOPATH/pkg/mod/m/.vscode/settings.json" && echo WROTE-CACHE
+        mkdir -p "$BAKERY_MEMORY_DIR/worktrees/r/.vscode"
+        echo {} > "$BAKERY_MEMORY_DIR/worktrees/r/.vscode/settings.json" \\
+            || echo REFUSED-REPO
+        echo "GO=$GOPATH:$GOCACHE"
+    """
+    args = argparse.Namespace(
+        claw='a', claws_dir=str(claws), command=['sh', '-c', script]
+    )
+
+    gateway_cli.do_sandbox_exec(args)
+
+    out = capfd.readouterr()
+    print(out.out, out.err)
+    for marker in (
+        'editable', 'RAN-TOOL', 'REFUSED-OTHER', 'RAN-INSTALLED',
+        'WROTE-CACHE', 'REFUSED-REPO',
+    ):  # fmt: skip
+        assert marker in out.out.split(), marker
+    claw_home = root.resolve() / 'state' / 'claws' / '_homes' / 'a'
+    assert f'GO={claw_home}/data/go:{claw_home}/cache/go-build' in out.out
+
+
 def test_claws_change_repos_only_in_worktrees(
     root: pathlib.Path, capfd: pytest.CaptureFixture[str]
 ) -> None:
