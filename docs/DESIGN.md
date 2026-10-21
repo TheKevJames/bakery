@@ -535,10 +535,12 @@ The `[policy]` keys:
   bakery repo is readable only because pi runs from it. Outside `$HOME` everything is readable except
   per-user temp (`/var/folders/...`) and the claw state root, of which a claw
   reads only its own state dir and `_shared`.
-- `deny_read`: paths and globs unreadable even within `read_paths`:
-  `~/**/.env*`, `~/**/*.tfvars`, `~/**/*.pem`, SSH key names
-  (`~/**/id_rsa*` etc.), `interactive/auth.json`, and other claws' pi
-  credentials (`claws/*/auth.json`; the gateway re-allows the claw's own).
+- `deny_read`: paths and globs unreadable even within `read_paths`.
+  Default `interactive/auth.json` and other claws' pi credentials
+  (`claws/*/auth.json`; the gateway re-allows the claw's own); no
+  secret-file patterns (eg. `~/**/.env*`), which would also hide committed
+  files of those names, until `read_paths` takes in somewhere real secrets
+  live.
 - `write_paths`: writable besides the claw's own state dir, pi's files in its
   profile, and its `$TMPDIR`. Default none: nothing of the task list (see
   "Shared task list"). The memory tools are the intended writers of memory,
