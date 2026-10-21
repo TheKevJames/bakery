@@ -567,9 +567,13 @@ Enforcement:
    macOS) with settings built by `bakery/bakery/gateway/sandbox.py`. pi and everything it
    starts (bash, `gh`, `rg`, `task`) share that one sandbox:
    macOS cannot nest sandboxes, so nothing inside gets a stricter one.
-   - Reads: `$HOME`, per-user temp, the claw state root, and
-     sandbox-runtime's shared `/tmp/claude` are denied; `read_paths` and
+   - Reads: `$HOME`, per-user temp, the claw state root, and the
+     world-writable shared dirs (`/private/tmp`, `/private/var/tmp`,
+     `/Users/Shared`) are denied; `read_paths` and
      what pi needs to run are re-allowed; `deny_read` applies within them.
+     sandbox-runtime still lets every process stat any directory (so
+     `realpath` can walk through denied ones): a claw can probe whether a
+     guessed directory exists, but not list or read it.
      What pi needs: the bakery repo, the claw's profile and its own pi
      credentials, its state dir, `_shared`, its socket dir, its unit's task
      server socket dir, its home, macOS's global preferences, Go's
@@ -581,7 +585,10 @@ Enforcement:
    - Writes: `write_paths`, the claw's state dir, home, and socket dir, its
      `$TMPDIR`, and exactly the files pi writes in its profile (`auth.json`,
      `models-store.json`, `settings.json`, and their locks); the rest of
-     the repo is read-only. sandbox-runtime also always blocks writes to
+     the repo is read-only. sandbox-runtime's own shared `$TMPDIR`,
+     `/tmp/claude`, which it otherwise keeps writable for every sandbox, is
+     denied, so a claw cannot plant files in others'. sandbox-runtime also
+     always blocks writes to
      `.git/hooks`, shell rc files, `.gitconfig`, `.gitmodules`,
      `.mcp.json`, `.vscode`, `.idea`, and `.claude/{commands,agents}`
      beneath the cwd (the claw's state dir: its clones, worktrees, and

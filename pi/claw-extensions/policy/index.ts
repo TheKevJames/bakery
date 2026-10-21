@@ -34,7 +34,7 @@ const SANDBOX_NOTE =
   "If the output above shows an operation refused (Operation not permitted, EPERM, or a proxy 403), " +
   "this claw's sandbox policy blocked it: it restricts which paths the claw may use, and refuses unix sockets and names other than localhost resolving to this machine. " +
   "This is not a missing credential, permission, or file; use a tool instead, or report the gap. " +
-  "For scratch files, use $TMPDIR: /tmp is not writable.";
+  "For scratch files, use $TMPDIR: /tmp is neither readable nor writable.";
 
 function stripSecrets(policy: Policy, env: NodeJS.ProcessEnv): void {
   for (const name of policy.secretNames) delete env[name];
