@@ -4,12 +4,12 @@ import argparse
 import asyncio
 import datetime
 import json
+import logging
 import os
 import pathlib
 import subprocess
 import sys
 from collections.abc import Callable
-from collections.abc import Coroutine
 from typing import Any
 
 from .. import paths
@@ -21,6 +21,8 @@ from . import control
 from . import main
 from . import pool
 from . import sandbox
+
+log = logging.getLogger(__name__)
 
 
 def _call(
@@ -121,17 +123,15 @@ def _claws_dir(args: argparse.Namespace) -> pathlib.Path:
         sys.exit(str(e))
 
 
-def _run_async(coroutine: Coroutine[None, None, None]) -> int:
-    try:
-        asyncio.run(coroutine)
-    except (config.ConfigError, secrets.SecretError) as e:
-        sys.exit(str(e))
-    return 0
-
-
 def do_run(args: argparse.Namespace) -> int:
     main.configure_logging()
-    return _run_async(main.run(_claws_dir(args)))
+    try:
+        asyncio.run(main.run(_claws_dir(args)))
+    except (config.ConfigError, secrets.SecretError) as e:
+        # stderr reaches only launchd.log; say why where the operator looks.
+        log.exception('gateway cannot start')
+        sys.exit(str(e))
+    return 0
 
 
 def do_check(args: argparse.Namespace) -> int:
