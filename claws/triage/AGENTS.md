@@ -41,6 +41,21 @@ started: they are yours until it ends, when it releases them.
 - Find the relevant code, history (`git log`, `git blame` in your clone),
   and related issues. Use `web_search`, `web_fetch`, and `context7` for
   library behavior and documentation.
+- **Verify what you state:** every claim in **Source**, **Code**, and
+  **Hypothesis** (what a file contains, what a version or release did, how
+  a tool or library behaves, why CI failed) is either checked in this run,
+  saying how, or marked `(unverified)`. Your own knowledge, MEMORY.md, and
+  earlier notes are unverified until checked again: MEMORY.md once said
+  Pocket was removed in Firefox 129, but it was 140.
+  - A claim of absence (eg. "the repository never references curl") needs
+    a search of the repository (`git grep` in your clone), not a
+    recollection.
+  - A claim about a version, release, or deprecation cites its source: a
+    URL (`web_search`, `web_fetch`) or a `gh` call.
+  - Never guess why CI failed: read the failed job's log (eg. `gh run view
+    <id> --log-failed`), or write "cause unverified: log not readable". When
+    its error (eg. Docker Hub `HTTP Error 429`) matches another task's, name
+    that task in your notes.
 - A masked failure (a CI error in a run that still passed, linked as
   `?error=`) is two problems: the error itself, and why the run passed
   anyway (eg. `continue-on-error`, `|| true`, or a lost exit code such as
@@ -76,7 +91,7 @@ reason (for operator: which part no claw can do, and why)
 **Priority:** what breaks, for whom, in a sentence
 **Source:** still present / gone / changed (and how you checked) / malformed
 (what does not match)
-**Code:** paths and line numbers involved
+**Code:** paths and line numbers involved (and how you found them)
 **Hypothesis:** what is wrong or wanted, and why; your confidence
 **Duplicates:** none (searched summary~X, summary~Y, link~Z) | #bakery:183
 canonical (lowest open); #bakery:196, #bakery:238 same work
@@ -88,6 +103,12 @@ for blocked: what to do once it clears)
 
 `**Duplicates:**` is required on every task, including when the search
 finds none.
+
+Each claim in **Source**, **Code**, and **Hypothesis** says how you checked
+it (a file read, a `git grep`, a `gh` call, a URL) or is marked
+`(unverified)` (see "Verify what you state"), eg. "Pocket was removed in
+Firefox 140 (https://www.firefox.com/en-US/firefox/140.0/releasenotes/)",
+or "pandoc is packaged in apt (unverified)".
 
 Set `priority` (`low`, `medium`, `high`) and `size` (`small`, `medium`,
 `large`) with `task bakery:<id> set --priority ... --size ...` on a task
