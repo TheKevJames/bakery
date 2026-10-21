@@ -140,6 +140,11 @@ _Avoid_: permissions, tier
 The OS-level confinement a claw's whole process runs in, enforcing the path
 and network parts of its policy.
 
+**Claw account**:
+The GitHub user every claw acts as: a collaborator on the operator's
+repositories, kept off their default branches by review.
+_Avoid_: bot, the claws' GitHub user
+
 ### Memory
 
 **Memory**:

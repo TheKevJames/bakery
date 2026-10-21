@@ -659,16 +659,25 @@ Credentials (macOS Keychain, least privilege, selected per claw by `secrets`):
 
 - `DISCORD_BOT_TOKEN` (gateway only), `ANTHROPIC_API_KEY`.
 - `BAKERY_GITHUB`: a classic PAT (`repo` scope only, one-year expiry) of the
-  claws' own GitHub user, a collaborator on the public `TheKevJames`
-  repositories they work on. Collaborators on a personal account's
-  repositories always have write access, and fine-grained PATs can't reach
-  another user's repositories, so GitHub enforces the limits instead: the
-  rulesets every repository gets from the operator's repo template
-  (dotsystem's `repo-template`) require a PR approved after its last push for
-  the default branch. Tags are not protected yet, so the user can create and move them
-  (and so trigger tag-driven releases). The user has no admin rights. Private
-  repositories have no rulesets on GitHub Free, so the user is never invited
-  to them.
+  Claw account, a collaborator on the public `TheKevJames` repositories the
+  claws work on. Collaborators on a personal account's repositories always
+  have write access, and fine-grained PATs can't reach another user's
+  repositories, so GitHub enforces the limits instead: the rulesets every
+  repository gets from the operator's repo template (dotsystem's
+  `repo-template`) require a PR approved after its last push for the default
+  branch. Tags are not protected yet, so the account can create and move them
+  (and so trigger tag-driven releases). The account has no admin rights.
+  Private repositories have no rulesets on GitHub Free, so the account is
+  never invited to them.
+
+  The account's code also runs in CI, so CI must not be able to approve on
+  its behalf. The template's `.github/actions-permissions.json`, reconciled
+  by its `repo-settings` workflow, defaults every job's `GITHUB_TOKEN` to
+  read; Actions may still approve PRs, but only for `autoapproval.yml` to
+  approve Renovate's, from a job that runs none of the PR's code. That holds
+  only while the account cannot change workflows: never give the PAT the
+  `workflow` scope, and never merge a workflow that grants a job running PR
+  code `pull-requests: write`.
 
 `web_search` and `web_fetch` (`pi/extensions/ketch.ts`, running
 [ketch](https://ketch.run) from `pi/package.json`: search falls back
