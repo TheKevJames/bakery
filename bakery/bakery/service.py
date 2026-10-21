@@ -75,20 +75,48 @@ def _recorded_repo() -> pathlib.Path:
         return paths.repo()
 
 
+def _sources(package: pathlib.Path) -> dict[pathlib.Path, bytes]:
+    return {
+        path.relative_to(package): path.read_bytes()
+        for path in package.rglob('*')
+        if path.is_file() and '__pycache__' not in path.parts
+    }
+
+
+def _code_differs(repo: pathlib.Path) -> bool:
+    """Whether this bakery's code is not the checkout's (a stale install)."""
+    running = pathlib.Path(__file__).resolve().parent
+    checkout = (repo / 'bakery' / 'bakery').resolve()
+    return running != checkout and _sources(running) != _sources(checkout)
+
+
 def check_config(repo: pathlib.Path) -> None:
     """
     Load the checkout's claws config with this (the installed) bakery, as the
     agent will on start: if it cannot, launchd respawns it in a throttled loop
     and `kickstart -k` hangs, with every claw down.
     """
+    claws = repo / 'claws'
     try:
-        config.load(repo / 'claws')
+        config.load(claws)
     except config.ConfigError as e:
+        running = pathlib.Path(__file__).resolve().parent
+        if _code_differs(repo):
+            remedy = (
+                f'this bakery ({running}) is not the code in {repo}, so it '
+                'may just be out of date: reinstall it with `uv tool install '
+                f'--force {repo / "bakery"}`, then retry; if the error stays, '
+                'fix the config'
+            )
+        else:
+            remedy = (
+                f'this bakery ({running}) is the code in {repo}, so the '
+                'config itself is wrong: fix it, then retry'
+            )
         raise ServiceError(
-            f'the installed bakery cannot load {repo / "claws"}: {e}\n'
-            'fix the config, or, if the checkout is newer than the install, '
-            f'reinstall: uv tool install --force {repo / "bakery"}'
-        ) from None
+            f'refusing to (re)start the gateway: it cannot load {claws}:\n'
+            f'  {e}\n{remedy}'
+        ) from e
 
 
 def install() -> pathlib.Path:

@@ -104,7 +104,32 @@ def test_restart_refuses_config_it_cannot_load(
     message = str(raised.value.code)
     assert str(repo / 'claws') in message
     assert REJECTED in message
+    # The checkout holds other code than this bakery's: say to upgrade.
+    assert 'may just be out of date' in message
     assert f'uv tool install --force {repo / "bakery"}' in message
+    assert not launchctl
+
+
+def test_refusal_blames_the_config_when_the_code_is_the_checkouts(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    launchctl: list[tuple[str, ...]],
+) -> None:
+    repo = make_repo(tmp_path / 'repo', monkeypatch)
+    shutil.copytree(
+        pathlib.Path(service.__file__).parent,
+        repo / 'bakery' / 'bakery',
+        ignore=shutil.ignore_patterns('__pycache__'),
+    )
+    break_config(repo)
+
+    with pytest.raises(service.ServiceError) as raised:
+        service.restart()
+
+    message = str(raised.value)
+    assert REJECTED in message
+    assert 'the config itself is wrong' in message
+    assert 'uv tool install' not in message
     assert not launchctl
 
 
@@ -118,7 +143,7 @@ def test_run_logs_why_it_cannot_start(
     monkeypatch.setattr(main, 'configure_logging', lambda: None)
 
     with (
-        caplog.at_level(logging.ERROR, main.log.name),
+        caplog.at_level(logging.ERROR, gateway_cli.log.name),
         pytest.raises(SystemExit, match=re.escape(REJECTED)),
     ):
         gateway_cli.do_run(argparse.Namespace(claws_dir=None))

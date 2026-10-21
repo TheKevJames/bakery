@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import datetime
 import json
+import logging
 import os
 import pathlib
 import subprocess
@@ -20,6 +21,8 @@ from . import control
 from . import main
 from . import pool
 from . import sandbox
+
+log = logging.getLogger(__name__)
 
 
 def _call(
@@ -126,7 +129,7 @@ def do_run(args: argparse.Namespace) -> int:
         asyncio.run(main.run(_claws_dir(args)))
     except (config.ConfigError, secrets.SecretError) as e:
         # stderr reaches only launchd.log; say why where the operator looks.
-        main.log.error('gateway cannot start: %s', e)
+        log.exception('gateway cannot start')
         sys.exit(str(e))
     return 0
 
