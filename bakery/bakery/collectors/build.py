@@ -56,7 +56,7 @@ def footer(claw: 'config.Claw', task: api.Task) -> str:
 def ready() -> list[api.Task]:
     # task next's own order: priority, then due date, then id.
     return store.listed(
-        f'namespace={store.NAMESPACE},tag=ready,blocked=no,claim=,next=,'
+        f'namespace={store.NAMESPACE},tag=ready,blocked=no,claim=,due=,'
         'questions!=open',
         api.SortOrder.priority,
     )

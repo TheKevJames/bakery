@@ -41,7 +41,7 @@ UNTRUSTED = (
 def waiting() -> list[api.Task]:
     # TODO: hand a scheduled task over once it is due, rather than never.
     return store.listed(
-        f'namespace={store.NAMESPACE},tag=triage,blocked=no,claim=,next=,'
+        f'namespace={store.NAMESPACE},tag=triage,blocked=no,claim=,due=,'
         'questions!=open',
         api.SortOrder.ident,
     )

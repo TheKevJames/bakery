@@ -9,9 +9,9 @@
   Filter a list with `-f`: comma-separated `field<op>value` on namespace,
   summary, tag, claim, link, priority, or size, with `=`, `!=`, `~`
   (contains), `!~`, `^=` (starts with), or `!^=`; eg. `task list --json -f
-  'namespace=bakery,tag=ready,claim='` (unclaimed). `next` (the due date)
-  takes `=`, `!=`, `^=`, and `!^=`, eg. `next=2026-01-31`, `next^=2026-01`
-  (due in January), or `next=` (unscheduled).
+  'namespace=bakery,tag=ready,claim='` (unclaimed). `due` (the due date)
+  takes `=`, `!=`, `^=`, and `!^=`, eg. `due=2026-01-31`, `due^=2026-01`
+  (due in January), or `due=` (unscheduled).
   `questions=open` lists tasks waiting on the operator's answers, and
   `questions!=open` those which are not. A task with open questions stays
   in its section, and no claw works on it until all are answered.
