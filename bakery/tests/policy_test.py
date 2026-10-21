@@ -104,6 +104,7 @@ def test_file_access_follows_the_policy(
             'a': f"""
                 [policy]
                 read_paths = {toml_list(['~/src/personal/repo', state / 'b'])}
+                deny_read = ["../*/auth.json", "~/**/.env*"]
                 write_paths = {toml_list([out])}
             """,
             'b': '',
