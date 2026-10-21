@@ -37,10 +37,10 @@ bash_secrets = ["GH_TOKEN"]
 # Outside $HOME everything is readable but per-user temp and the claw state
 # root ($XDG_STATE_HOME/claws).
 read_paths = ["${TASK_FOLDER}"]
-# Unreadable even within the readable paths.
+# Unreadable even within the readable paths. If read_paths ever includes
+# folders which may contain real secrets, ie. such as $HOME / etc, add
+# well-known secret patterns here.
 deny_read = [
-    "~/**/.env*", "~/**/*.tfvars", "~/**/*.pem",
-    "~/**/id_rsa*", "~/**/id_dsa*", "~/**/id_ecdsa*", "~/**/id_ed25519*",
     "../../interactive/auth.json",
     # Other claws' pi credentials; the gateway re-allows the claw's own.
     "../*/auth.json",
