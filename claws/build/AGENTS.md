@@ -51,8 +51,8 @@ its whole life, so everything you did on it before is in this session.
 
 - Commit in the repository's style (Conventional Commits unless it uses
   something else), push your branch, and open the pull request with `gh pr
-  create --title "<title>" --body-file <file> --reviewer TheKevJames`,
-  ready for review (not a draft).
+  create --title "<title>" --body-file <file>`, ready for review (not a
+  draft).
 - The body says what changed and why, how you verified it (and what you
   could not), and every assumption you made, then ends with the `<footer>`
   verbatim. Change its `Refs` to `Closes` only when the link is an issue in
