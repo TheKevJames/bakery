@@ -25,6 +25,19 @@
   (`git -C "$clone" worktree remove <path>`) once you no longer need it:
   before your run ends if you only read it, or once its work is merged or
   dropped. git refuses commits and pushes anywhere else.
+- The sandbox refuses to create shell rc files (`.zshrc`, `.bashrc`, ...)
+  anywhere, your state dir included. In a repository that tracks one (eg.
+  `root/~/.config/zsh/.zshrc` in `TheKevJames/dotsystem`), `worktree add`
+  fails with `unable to create file <path>: Operation not permitted` and
+  leaves no worktree; that line comes first, so never trim git's output
+  (eg. with `tail`). Check out everything else instead, and read the rc
+  file with `git -C "$clone" show origin/HEAD:<path>`:
+  ```
+  git -C "$clone" worktree add --no-checkout --detach <worktree> origin/HEAD
+  git -C <worktree> sparse-checkout set --no-cone '/*' '!/<path>'
+  git -C <worktree> checkout
+  ```
+  (`-b kjames/bakery-<topic>` in place of `--detach` to change it.)
 - Commit on a `kjames/bakery-<topic>` branch, push it to `origin`, and open a
   pull request with `gh pr create`. The operator reviews and merges; git
   refuses pushes of any other branch or tag.
