@@ -41,7 +41,7 @@ def fixture_tasks(root: pathlib.Path) -> pathlib.Path:
     testing_tasks.task('add', 'from scout', '-n', 'bakery', '--tag', 'triage')
     testing_tasks.task(
         'add', 'recurring', '-n', 'bakery', '--tag', 'triage',
-        '--next', '2030-01-01',
+        '--due', '2030-01-01',
     )  # fmt: skip
     testing_tasks.task(
         'add', 'already routed', '-n', 'bakery', '--tag', 'ready'
