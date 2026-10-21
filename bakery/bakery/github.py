@@ -5,6 +5,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Iterator
 from typing import Any
 
 TIMEOUT = 30.0
@@ -49,6 +50,17 @@ class GitHub:
         body, _ = self._open(self._url(path, params))
         return json.loads(body)
 
+    def pages(
+        self, path: str, params: dict[str, str] | None = None
+    ) -> Iterator[Json]:
+        """Each page of a paginated list endpoint, fetched as it is read."""
+        url: str | None = self._url(path, {'per_page': '100'} | (params or {}))
+        while url:
+            body, link = self._open(url)
+            yield json.loads(body)
+            match = NEXT_LINK.search(link or '')
+            url = match.group(1) if match else None
+
     def get_all(
         self,
         path: str,
@@ -59,15 +71,19 @@ class GitHub:
         """
         Every item of a paginated list endpoint, or of its `key` in each
         page for those wrapping their list (eg. search's `items`).
+
+        A page which says it is incomplete (search's `incomplete_results`,
+        when GitHub ran out of time) raises, rather than pass for the whole.
         """
         items: list[Json] = []
-        url: str | None = self._url(path, {'per_page': '100'} | (params or {}))
-        while url:
-            body, link = self._open(url)
-            page = json.loads(body)
+        for page in self.pages(path, params):
+            if key is not None and page.get('incomplete_results'):
+                raise GitHubError(
+                    f'GET {path}: GitHub returned incomplete results (it'
+                    ' timed out); nothing to fix, the next try may get them'
+                    ' all'
+                )
             items.extend(page if key is None else page[key])
-            match = NEXT_LINK.search(link or '')
-            url = match.group(1) if match else None
         return items
 
     def get_bytes(self, path: str) -> bytes:

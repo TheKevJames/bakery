@@ -31,3 +31,10 @@ run.
 - Finding pull requests needs one search, covering pull requests updated since
   the oldest task in `review` was created, then one request per pull request
   it returns, on every poll.
+- Search is a separate index, which can miss a pull request for a while (or
+  say its results are incomplete), so it alone cannot say a task has none.
+  Before it does, the collector lists the pull requests of each repository
+  the search found any in, or which the task's link names, latest updated
+  first, back to the search's cutoff: once per poll, and only when a task is
+  missing one. A search with incomplete results fails the poll, to be tried
+  again next time.
