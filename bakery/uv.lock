@@ -322,7 +322,7 @@ requires-dist = [
     { name = "croniter", specifier = "==6.2.4" },
     { name = "discord-py", specifier = "==2.7.1" },
     { name = "pygments", specifier = "==2.21.0" },
-    { name = "task", git = "https://github.com/TheKevJames/task?tag=10.0.0" },
+    { name = "task", git = "https://github.com/TheKevJames/task?tag=10.0.1" },
 ]
 
 [package.metadata.requires-dev]
@@ -1348,8 +1348,8 @@ wheels = [
 
 [[package]]
 name = "task"
-version = "10.0.0"
-source = { git = "https://github.com/TheKevJames/task?tag=10.0.0#271c88a5e2e4052761d093594ed46d72f80443e2" }
+version = "10.0.1"
+source = { git = "https://github.com/TheKevJames/task?tag=10.0.1#3a4cc91daf56fa0c643a33a4feb0aa686bf46793" }
 dependencies = [
     { name = "pydantic" },
     { name = "typer" },
