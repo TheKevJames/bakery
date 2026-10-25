@@ -16,7 +16,7 @@ jobs:
           python-version: 3.15.1
       - uses: oven-sh/setup-bun@v2.2.0
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
       - run: bun install --frozen-lockfile
         working-directory: pi
       - uses: j178/prek-action@v3.1.0
@@ -43,7 +43,7 @@ jobs:
           pi_version: 1.4.0
       - uses: oven-sh/setup-bun@v2.2.0
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
       - run: bun install --frozen-lockfile
         working-directory: pi
       - uses: astral-sh/setup-uv@v10.3.2
