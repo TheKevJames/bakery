@@ -1,6 +1,6 @@
 {
-  "defaultProvider": "anthropic",
-  "defaultModel": "claude-opus-5-5",
+  "defaultProvider": "llama.cpp",
+  "defaultModel": "ggml-org/LFM2.5-24B-A2B-GGUF:Q4_K_M",
   "defaultThinkingLevel": "high",
   "theme": "dark",
   "enableSkillCommands": true,
@@ -15,19 +15,16 @@
   },
   "shellCommandPrefix": "export GIT_EDITOR=true\nexport MANPAGER=cat",
   "quietStartup": true,
-  "lastChangelogVersion": "1.3.0",
+  "lastChangelogVersion": "1.4.0",
   "enabledModels": [
-    "anthropic/claude-opus-5-5",
-    "anthropic/claude-opus-4-8",
-    "anthropic/claude-fable-5-1",
-    "anthropic/claude-sonnet-5-5"
+    "ggml-org/LFM2.5-24B-A2B-GGUF:Q4_K_M",
+    "ggml-org/Qwen3.8-27B-GGUF:Q4_K_M"
   ],
   "hideThinkingBlock": false,
   "packages": [],
   "extensions": [
     "../pi/extensions",
     "-builtin:codemode",
-    "-builtin:llama.cpp",
     "-builtin:mcp",
     "-builtin:tool-search"
   ],

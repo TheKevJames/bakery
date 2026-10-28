@@ -3,7 +3,7 @@
 # Evidence is gathered by bakery/bakery/collectors/baker.py; baker reads every
 # claw's state but writes only its own memory and new tasks for the operator.
 
-model = "anthropic/claude-opus-5-5"
+model = "ggml-org/LFM2.5-24B-A2B-GGUF:Q4_K_M"
 thinking = "high"
 
 [limits]

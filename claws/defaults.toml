@@ -81,7 +81,7 @@ max_chars = 20000           # MEMORY.md's cap; match its context.toml budget
 name = "dream"
 cron = "0 3 * * *"
 prompt = "/dream"  # pi/claw-prompts/dream.md
-model = "anthropic/claude-opus-5-5"
+model = "ggml-org/LFM2.5-24B-A2B-GGUF:Q4_K_M"
 thinking = "medium"
 silent_ok = true
 # The operator's bakery commits since the last dream, to recheck memory
@@ -95,7 +95,7 @@ skip_empty = false
 [[job]]
 name = "learn"
 prompt = "/learn"  # pi/claw-prompts/learn.md
-model = "anthropic/claude-opus-5-5"
+model = "ggml-org/LFM2.5-24B-A2B-GGUF:Q4_K_M"
 thinking = "xhigh"
 
 # A claw's own jobs, in its claw.toml:

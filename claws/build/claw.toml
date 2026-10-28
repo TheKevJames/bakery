@@ -4,7 +4,7 @@
 # its merge (to `confirm`) or closing. One task is one unit of work, for its
 # whole life. It never merges.
 
-model = "anthropic/claude-opus-5-5"
+model = "ggml-org/Qwen3.8-27B-GGUF:Q4_K_M"
 thinking = "high"
 
 [limits]

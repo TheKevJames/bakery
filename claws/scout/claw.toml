@@ -8,7 +8,7 @@
 # gateway's BAKERY_GITHUB instead, as GitHub refuses Actions log downloads to
 # a token with no scopes.
 
-model = "anthropic/claude-haiku-5-5"
+model = "ggml-org/LFM2.5-24B-A2B-GGUF:Q4_K_M"
 thinking = "high"
 # Replaces the default list.
 secrets = [

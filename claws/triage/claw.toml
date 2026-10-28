@@ -6,7 +6,7 @@
 # to triage once all has.
 # Research only: no reproduction, no edits.
 
-model = "anthropic/claude-sonnet-5-5"
+model = "ggml-org/LFM2.5-24B-A2B-GGUF:Q4_K_M"
 thinking = "high"
 
 [limits]

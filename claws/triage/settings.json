@@ -12,7 +12,6 @@
     "../../pi/claw-extensions/ask-operator.ts",
     "../../pi/claw-extensions/memory",
     "-builtin:codemode",
-    "-builtin:llama.cpp",
     "-builtin:mcp",
     "-builtin:tool-search"
   ],
