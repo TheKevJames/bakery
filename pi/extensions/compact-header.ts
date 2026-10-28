@@ -17,7 +17,7 @@ export default function (pi: ExtensionAPI) {
         const cmds = pi.getCommands();
         const prompts = cmds.filter(c => c.source === "prompt").map(c => `/${c.name}`).join("  ");
         const skills = cmds.filter(c => c.source === "skill").map(c => c.name).join("  ");
-        const model = ctx.model ? `${ctx.model.id}` : "no model";
+        const model = ctx.model ? `${ctx.model.provider}  ${ctx.model.id}` : "no model";
         const thinking = pi.getThinkingLevel();
         const provider = ctx.model?.provider ?? "";
         const configs = ctx.getSystemPrompt()

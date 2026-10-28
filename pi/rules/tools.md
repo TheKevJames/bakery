@@ -10,7 +10,6 @@ You have access to the following additional shell tools that will help you find 
 
 ```
 ast-grep (command: sg)
-bazel / bazelisk
 difftastic (command: difft)
 docker-tags
 eb
@@ -19,16 +18,9 @@ fd-find (command: fd)
 gh
 git-ci-status
 gog
-gron
-grpcurl
 hyperfine
 jira-cli (command: jira)
 jq
-kubectl mtail
-kubectl stern
-miller (command: mlr)
-ngrok
-observe
 prek
 pypi-versions
 renovate / renovate-config-validator
