@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import pathlib
@@ -55,12 +56,36 @@ def fixture_state_home(
 @pytest.fixture(name='run_pi', scope='function')
 def fixture_run_pi(
     tmp_path: pathlib.Path, short_tmp: pathlib.Path, fake_llm: harness.FakeLLM
-) -> Callable[[pathlib.Path], harness.Pi]:
+) -> Iterator[Callable[[pathlib.Path], harness.Pi]]:
     state = tmp_path / 'state'
     cwd = tmp_path / 'cwd'
     cwd.mkdir()
+    restores: list[tuple[pathlib.Path, str]] = []
 
     def make(profile: pathlib.Path) -> harness.Pi:
+        settings_path = profile / 'settings.json'
+        if settings_path.exists():
+            orig_text = settings_path.read_text()
+            try:
+                settings = json.loads(orig_text)
+            except Exception:
+                settings = {}
+            extensions = settings.get('extensions', [])
+            changed = False
+            if '-builtin:llama.cpp' not in extensions:
+                extensions.append('-builtin:llama.cpp')
+                settings['extensions'] = extensions
+                changed = True
+            enabled_models = settings.get('enabledModels', [])
+            if any(m.startswith('llama.cpp/') for m in enabled_models):
+                settings['enabledModels'] = [
+                    m for m in enabled_models if not m.startswith('llama.cpp/')
+                ]
+                changed = True
+            if changed:
+                settings_path.write_text(json.dumps(settings, indent=2))
+                restores.append((settings_path, orig_text))
+
         env = os.environ | {
             # Real profiles name real models; dummy keys make them resolve
             # (as on a configured machine) and ensure nothing reaches a
@@ -76,7 +101,10 @@ def fixture_run_pi(
         }
         return harness.Pi(profile, env, cwd)
 
-    return make
+    yield make
+
+    for settings_path, orig_text in restores:
+        settings_path.write_text(orig_text)
 
 
 @pytest.fixture(name='logs', scope='function')
