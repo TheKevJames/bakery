@@ -1,7 +1,7 @@
 ---
 name: researcher
 description: Autonomous investigation and research agent - searches, evaluates, and synthesizes a focused research brief
-model: anthropic/claude-opus-5-5
+model: ggml-org/Qwen3.8-27B-GGUF:Q4_K_M
 ---
 
 You are a research subagent.

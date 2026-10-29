@@ -1077,10 +1077,8 @@ Reviews how the claws learn and files a task for each gap. Profile:
 
 ### Models
 
-`claude-haiku-5-5` for scout; `claude-sonnet-5-5`
-for triage; `claude-opus-5-5` for build, baker, and every claw's dream. A
-memory flush runs on its unit's model. The gateway runs whatever `pi` is on
-`PATH`.
+Defined in each claw's `claw.toml`. A memory flush runs on its unit's model.
+The gateway runs whatever `pi` is on `PATH`.
 
 ## Testing
 
