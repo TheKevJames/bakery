@@ -19,7 +19,7 @@ export default function (pi: ExtensionAPI) {
         const skills = cmds.filter(c => c.source === "skill").map(c => c.name).join("  ");
         // const tools = pi.getAllTools().map((t) => t.name).join("  ");
         const tools = pi.getActiveTools().join("  ");
-        const model = ctx.model ? `${ctx.model.provider}  ${ctx.model.id}` : "no model";
+        const model = ctx.model?.id ?? "no model";
         const thinking = pi.getThinkingLevel();
         const provider = ctx.model?.provider ?? "";
         const configs = ctx.getSystemPrompt()
@@ -55,7 +55,7 @@ export default function (pi: ExtensionAPI) {
           [d("configs"),  a(configs)],
         ];
 
-        const lines: string[] = [""];
+        const lines: string[] = [];
         for (let i = 0; i < 5; i++) {
           const [lk0, lv0] = lCol[i];
           const [rk0, rv0, rk1, rv1] = rCol[i];
