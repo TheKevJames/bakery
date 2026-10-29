@@ -17,6 +17,8 @@ export default function (pi: ExtensionAPI) {
         const cmds = pi.getCommands();
         const prompts = cmds.filter(c => c.source === "prompt").map(c => `/${c.name}`).join("  ");
         const skills = cmds.filter(c => c.source === "skill").map(c => c.name).join("  ");
+        // const tools = pi.getAllTools().map((t) => t.name).join("  ");
+        const tools = pi.getActiveTools().join("  ");
         const model = ctx.model ? `${ctx.model.provider}  ${ctx.model.id}` : "no model";
         const thinking = pi.getThinkingLevel();
         const provider = ctx.model?.provider ?? "";
@@ -46,11 +48,11 @@ export default function (pi: ExtensionAPI) {
         const lk = 9; // label width
 
         const lCol = [
-          [d("version"), a(`v${VERSION}  ${provider}`)],
-          [d("model"),   a(model)],
-          [d("think"),   a(thinking)],
-          [d("configs"), a(configs)],
-          [d(""),        d("")],
+          [d("version"),  a(`v${VERSION}`)],
+          [d("provider"), a(provider)],
+          [d("model"),    a(model)],
+          [d("think"),    a(thinking)],
+          [d("configs"),  a(configs)],
         ];
 
         const lines: string[] = [""];
@@ -62,8 +64,10 @@ export default function (pi: ExtensionAPI) {
           lines.push(t(pad(left, leftW) + sep + right));
         }
 
+        lines.push(d(""));
         if (prompts) lines.push(t(`${pad(d("prompts"), lk)}${a(prompts)}`));
         if (skills) lines.push(t(`${pad(d("skills"), lk)}${a(skills)}`));
+        if (tools) lines.push(t(`${pad(d("tools"), lk)}${a(tools)}`));
         lines.push(d("─".repeat(width)));
 
         return lines;

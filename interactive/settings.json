@@ -18,6 +18,15 @@
   "lastChangelogVersion": "1.4.0",
   "hideThinkingBlock": false,
   "packages": [],
+  "defaultTools": [
+    "bash",
+    "edit",
+    "find",
+    "grep",
+    "ls",
+    "read",
+    "write"
+  ],
   "extensions": [
     "../pi/extensions",
     "-builtin:codemode",
