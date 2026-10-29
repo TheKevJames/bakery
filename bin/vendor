@@ -32,7 +32,7 @@ FOLDERS["pi/skills/vendor/setup-matt-pocock-skills"]=\
 FOLDERS["pi/skills/vendor/wizard"]="skills/engineering/wizard"
 
 # renovate: datasource=github-releases depName=mattpocock/skills
-MATTPOCOCK_SKILLS_TAG="v1.3.1"
+MATTPOCOCK_SKILLS_TAG="v1.3.2"
 REPO_SOURCES["mattpocock/skills:${MATTPOCOCK_SKILLS_TAG}"]=$(declare -p SOURCES)
 REPO_FOLDERS["mattpocock/skills:${MATTPOCOCK_SKILLS_TAG}"]=$(declare -p FOLDERS)
 
