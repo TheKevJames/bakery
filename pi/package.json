@@ -6,7 +6,7 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "@anthropic-ai/sandbox-runtime": "0.0.80",
+    "@anthropic-ai/sandbox-runtime": "0.0.81",
     "ketch-cli": "0.20.0",
     "smol-toml": "1.9.1",
     "unpdf": "1.9.1"
