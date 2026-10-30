@@ -29,11 +29,11 @@ dev = [
     "types-pygments==2.21.0.20260819",
 ]
 
-[tool.pytest.ini_options]
-addopts = "-n auto --dist worksteal"
+[tool.pytest]
+addopts = ["-n", "auto", "--dist", "worksteal"]
 pythonpath = ["."]
 testpaths = ["tests"]
-timeout = 30
+timeout = "30"
 
 # Install bakery with `uv tool install`: pip, and so pipx, ignores these.
 # Tests and claws run this `task`, never another on PATH.
