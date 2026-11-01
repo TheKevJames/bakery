@@ -9,7 +9,7 @@
     "@anthropic-ai/sandbox-runtime": "0.0.80",
     "ketch-cli": "0.20.1",
     "smol-toml": "1.9.1",
-    "unpdf": "1.9.1"
+    "unpdf": "2.0.1"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "1.4.0",
