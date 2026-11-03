@@ -1,7 +1,27 @@
 {
+  "google/gemini-3.1-flash-lite": [
+    { "metric": "requests", "max": 15, "window": "rolling:60s" },
+    { "metric": "tokens", "max": 250000, "window": "rolling:60s" },
+    { "metric": "requests", "max": 500, "window": "calendar:America/Los_Angeles" }
+  ],
   "google/gemini-3.5-flash-lite": [
     { "metric": "requests", "max": 15, "window": "rolling:60s" },
     { "metric": "tokens", "max": 250000, "window": "rolling:60s" },
     { "metric": "requests", "max": 500, "window": "calendar:America/Los_Angeles" }
+  ],
+  "google/gemini-3.6": [
+    { "metric": "requests", "max": 5, "window": "rolling:60s" },
+    { "metric": "tokens", "max": 250000, "window": "rolling:60s" },
+    { "metric": "requests", "max": 20, "window": "calendar:America/Los_Angeles" }
+  ],
+  "google/gemma-4-26b-a4b-it": [
+    { "metric": "requests", "max": 30, "window": "rolling:60s" },
+    { "metric": "tokens", "max": 16000, "window": "rolling:60s" },
+    { "metric": "requests", "max": 14400, "window": "calendar:America/Los_Angeles" }
+  ],
+  "google/gemma-4-31b-it": [
+    { "metric": "requests", "max": 30, "window": "rolling:60s" },
+    { "metric": "tokens", "max": 16000, "window": "rolling:60s" },
+    { "metric": "requests", "max": 14400, "window": "calendar:America/Los_Angeles" }
   ]
 }
