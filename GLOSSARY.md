@@ -145,6 +145,13 @@ The GitHub user every claw acts as: a collaborator on the operator's
 repositories, kept off their default branches by review.
 _Avoid_: bot, the claws' GitHub user
 
+**Rate limit**:
+A provider's cap on the traffic to one model: requests or tokens per window.
+Enforced by holding a request until the window has room. Not a Limit: a Limit
+caps one run and parks it; a rate limit caps model traffic and never parks a
+run.
+_Avoid_: throttle, quota
+
 ### Memory
 
 **Memory**:

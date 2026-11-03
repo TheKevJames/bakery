@@ -1,0 +1,7 @@
+{
+  "google/gemini-3.5-flash-lite": [
+    { "metric": "requests", "max": 15, "window": "rolling:60s" },
+    { "metric": "tokens", "max": 250000, "window": "rolling:60s" },
+    { "metric": "requests", "max": 500, "window": "calendar:America/Los_Angeles" }
+  ]
+}
