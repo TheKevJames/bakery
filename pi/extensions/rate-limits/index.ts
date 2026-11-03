@@ -277,6 +277,61 @@ function sleepUntil(target: number, signal: AbortSignal | undefined): Promise<vo
   });
 }
 
+function parseRetryAfter(headers: Record<string, string>): number | undefined {
+  if (!headers) return undefined;
+  const entry = Object.entries(headers).find(([k]) => k.toLowerCase() === "retry-after");
+  if (!entry) return undefined;
+  const value = entry[1].trim();
+  const seconds = Number(value);
+  if (!Number.isNaN(seconds)) {
+    return seconds * 1_000;
+  }
+  const dateMs = Date.parse(value);
+  if (!Number.isNaN(dateMs)) {
+    return Math.max(0, dateMs - Date.now());
+  }
+  return undefined;
+}
+
+function parseRetryDelayFromMessage(message: string): number | undefined {
+  if (!message) return undefined;
+  const patterns = [
+    /please retry in\s+(\d+(?:\.\d+)?)\s*(s|m|h)?/i,
+    /retry in\s+(\d+(?:\.\d+)?)\s*(s|m|h)?/i,
+    /retryDelay['"]?\s*:\s*['"]?(\d+(?:\.\d+)?)(s)?['"]?/i,
+  ];
+  const unitMultipliers: Record<string, number> = { s: 1_000, m: 60_000, h: 3_600_000 };
+  for (const pattern of patterns) {
+    const match = message.match(pattern);
+    if (match) {
+      const val = Number(match[1]);
+      const unit = (match[2] || "s").toLowerCase();
+      if (!Number.isNaN(val)) {
+        return val * (unitMultipliers[unit] ?? 1_000);
+      }
+    }
+  }
+  return undefined;
+}
+
+function recordRateLimitHit(
+  modelKey: string,
+  limitsForModel: Limit[],
+  delayMs: number,
+  stateFile: string,
+  retentionMs: number,
+): void {
+  const now = Date.now();
+  const targetWait = now + delayMs;
+  for (const limit of limitsForModel) {
+    if (limit.metric === "requests") {
+      const windowMs = limit.window.kind === "rolling" ? limit.window.durationMs : BASE_RETENTION_MS;
+      const ts = targetWait - windowMs;
+      appendEvent(stateFile, { ts, model: modelKey, kind: "request" }, now, retentionMs);
+    }
+  }
+}
+
 /** Waits until every limit for the model has room, then logs the request. */
 async function gate(
   modelKey: string,
@@ -353,11 +408,31 @@ export default function rateLimits(pi: ExtensionAPI) {
     await gate(modelKey, limitsForModel, stateFile, retentionMs, ctx);
   });
 
+  pi.on("after_provider_response", async (event, ctx) => {
+    if (event.status !== 429) return;
+    const model = ctx.model;
+    if (!model) return;
+    const modelKey = `${model.provider}/${model.id}`;
+    const limitsForModel = limits.get(modelKey);
+    if (limitsForModel === undefined) return;
+    const delayMs = parseRetryAfter(event.headers) ?? 10_000;
+    recordRateLimitHit(modelKey, limitsForModel, delayMs, stateFile, retentionMs);
+  });
+
   pi.on("message_end", (event) => {
     if (event.message.role !== "assistant") return;
     const modelKey = `${event.message.provider}/${event.message.model}`;
     const limitsForModel = limits.get(modelKey);
-    if (limitsForModel === undefined || !limitsForModel.some((limit) => limit.metric === "tokens")) return;
+    if (limitsForModel === undefined) return;
+
+    if (event.message.stopReason === "error" && event.message.errorMessage) {
+      const delayMs = parseRetryDelayFromMessage(event.message.errorMessage);
+      if (delayMs !== undefined) {
+        recordRateLimitHit(modelKey, limitsForModel, delayMs, stateFile, retentionMs);
+      }
+    }
+
+    if (!limitsForModel.some((limit) => limit.metric === "tokens")) return;
     const usage = event.message.usage;
     const tokens = usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
     if (tokens <= 0) return;
