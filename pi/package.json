@@ -7,7 +7,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sandbox-runtime": "0.0.80",
-    "ketch-cli": "0.20.1",
+    "ketch-cli": "0.20.2",
     "smol-toml": "1.9.1",
     "unpdf": "1.9.1"
   },
