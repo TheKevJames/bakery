@@ -17,15 +17,17 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-/** Waits longer than this fail the request instead of holding it. */
+// Waits longer than this fail the request instead of holding it.
 const MAX_WAIT_MS = 10 * 60_000;
 // Longer than the longest possible calendar day (25h on a fall-back DST
 // transition), so calendar windows always see a full day of events.
 const BASE_RETENTION_MS = 26 * 3_600_000;
-/** Rewrite the event log once it grows past this. */
+// Rewrite the event log once it grows past this.
 const PRUNE_AT_BYTES = 256 * 1024;
-/** Random extra sleep after a wait, so concurrent processes don't race one freed slot. */
+// Random extra sleep after a wait, so concurrent processes don't race one freed slot.
 const WAKE_JITTER_MS = 2_000;
+// Buffer on estimated token usage, to account for mismatches in how we count vs the provider.
+const TOKEN_BUFFER = 0.95;
 const STATUS_KEY = "rate-limits";
 
 type Window =
@@ -105,7 +107,7 @@ function loadLimits(settingsPath: string): Map<string, Limit[]> {
       }
       modelLimits.push({
         metric: entry.metric as "requests" | "tokens",
-        max: entry.max as number,
+        max: entry.metric === "tokens" ? Math.floor((entry.max as number) * TOKEN_BUFFER) : (entry.max as number),
         window,
       });
     }
@@ -217,35 +219,72 @@ function waitUntilForLimit(limit: Limit, events: Event[], now: number): number |
 }
 
 function rollingWaitUntil(limit: Limit, windowMs: number, events: Event[], now: number): number | undefined {
-  const kind = limit.metric === "requests" ? "request" : "response";
-  const inWindow = events
-    .filter((e) => e.kind === kind && e.ts > now - windowMs && e.ts <= now)
-    .sort((a, b) => a.ts - b.ts);
+  const cutoff = now - windowMs;
   if (limit.metric === "requests") {
+    const inWindow = events
+      .filter((e) => e.kind === "request" && e.ts > cutoff && e.ts <= now)
+      .sort((a, b) => a.ts - b.ts);
     // The outgoing request counts as one.
     if (inWindow.length < limit.max) return undefined;
     // Oldest events leave the window first; wait for the one that drops the
     // count to max - 1.
     return inWindow[inWindow.length - limit.max].ts + windowMs;
   }
-  let total = inWindow.reduce((sum, e) => sum + (e.tokens ?? 0), 0);
+  const windowRequests = events.filter((e) => e.kind === "request" && e.ts > cutoff && e.ts <= now).sort((a, b) => a.ts - b.ts);
+  const windowResponses = events.filter((e) => e.kind === "response" && e.ts > cutoff && e.ts <= now).sort((a, b) => a.ts - b.ts);
+
+  const matchedResponses = new Set<number>();
+  const items: { ts: number; tokens: number }[] = [];
+
+  for (const req of windowRequests) {
+    const matchIdx = windowResponses.findIndex((resp, idx) => !matchedResponses.has(idx) && resp.ts >= req.ts);
+    if (matchIdx !== -1) {
+      matchedResponses.add(matchIdx);
+      items.push({ ts: windowResponses[matchIdx].ts, tokens: windowResponses[matchIdx].tokens ?? 0 });
+    } else {
+      items.push({ ts: req.ts, tokens: req.tokens ?? 0 });
+    }
+  }
+  windowResponses.forEach((resp, idx) => {
+    if (!matchedResponses.has(idx)) {
+      items.push({ ts: resp.ts, tokens: resp.tokens ?? 0 });
+    }
+  });
+
+  items.sort((a, b) => a.ts - b.ts);
+  let total = items.reduce((sum, item) => sum + item.tokens, 0);
   if (total <= limit.max) return undefined;
-  for (const e of inWindow) {
-    total -= e.tokens ?? 0;
-    if (total <= limit.max) return e.ts + windowMs;
+  for (const item of items) {
+    total -= item.tokens;
+    if (total <= limit.max) return item.ts + windowMs;
   }
   return undefined;
 }
 
 function calendarWaitUntil(limit: Limit, timezone: string, events: Event[], now: number): number | undefined {
   const dayStart = startOfDayInTz(timezone, now);
-  const kind = limit.metric === "requests" ? "request" : "response";
-  const today = events.filter((e) => e.kind === kind && e.ts >= dayStart && e.ts <= now);
+  const todayRequests = events.filter((e) => e.kind === "request" && e.ts >= dayStart && e.ts <= now).sort((a, b) => a.ts - b.ts);
+  const todayResponses = events.filter((e) => e.kind === "response" && e.ts >= dayStart && e.ts <= now).sort((a, b) => a.ts - b.ts);
   if (limit.metric === "requests") {
     // The outgoing request counts as one.
-    return today.length >= limit.max ? nextDayStartInTz(timezone, now) : undefined;
+    return todayRequests.length >= limit.max ? nextDayStartInTz(timezone, now) : undefined;
   }
-  const total = today.reduce((sum, e) => sum + (e.tokens ?? 0), 0);
+  const matchedResponses = new Set<number>();
+  let total = 0;
+  for (const req of todayRequests) {
+    const matchIdx = todayResponses.findIndex((resp, idx) => !matchedResponses.has(idx) && resp.ts >= req.ts);
+    if (matchIdx !== -1) {
+      matchedResponses.add(matchIdx);
+      total += todayResponses[matchIdx].tokens ?? 0;
+    } else {
+      total += req.tokens ?? 0;
+    }
+  }
+  todayResponses.forEach((resp, idx) => {
+    if (!matchedResponses.has(idx)) {
+      total += resp.tokens ?? 0;
+    }
+  });
   return total > limit.max ? nextDayStartInTz(timezone, now) : undefined;
 }
 
@@ -327,7 +366,14 @@ function recordRateLimitHit(
     if (limit.metric === "requests") {
       const windowMs = limit.window.kind === "rolling" ? limit.window.durationMs : BASE_RETENTION_MS;
       const ts = targetWait - windowMs;
-      appendEvent(stateFile, { ts, model: modelKey, kind: "request" }, now, retentionMs);
+      for (let i = 0; i < limit.max; i++) {
+        appendEvent(stateFile, { ts, model: modelKey, kind: "request" }, now, retentionMs);
+      }
+    } else if (limit.metric === "tokens") {
+      const windowMs = limit.window.kind === "rolling" ? limit.window.durationMs : BASE_RETENTION_MS;
+      const ts = targetWait - windowMs;
+      const tokens = limit.max + 1;
+      appendEvent(stateFile, { ts, model: modelKey, kind: "request", tokens }, now, retentionMs);
     }
   }
 }
@@ -339,6 +385,7 @@ async function gate(
   stateFile: string,
   retentionMs: number,
   ctx: ExtensionContext,
+  estimatedInputTokens: number = 0,
 ): Promise<void> {
   let now = Date.now();
   for (;;) {
@@ -384,10 +431,8 @@ async function gate(
     }
     now = Date.now();
   }
-  if (limits.some((limit) => limit.metric === "requests")) {
-    const ts = Date.now();
-    appendEvent(stateFile, { ts, model: modelKey, kind: "request" }, ts, retentionMs);
-  }
+  const ts = Date.now();
+  appendEvent(stateFile, { ts, model: modelKey, kind: "request", tokens: estimatedInputTokens }, ts, retentionMs);
 }
 
 export default function rateLimits(pi: ExtensionAPI) {
@@ -399,13 +444,15 @@ export default function rateLimits(pi: ExtensionAPI) {
     ...[...limits.values()].flat().map((limit) => (limit.window.kind === "rolling" ? limit.window.durationMs : 0)),
   );
 
-  pi.on("before_provider_request", async (_event, ctx) => {
+  pi.on("before_provider_request", async (event, ctx) => {
     const model = ctx.model;
     if (!model) return;
     const modelKey = `${model.provider}/${model.id}`;
     const limitsForModel = limits.get(modelKey);
     if (limitsForModel === undefined) return;
-    await gate(modelKey, limitsForModel, stateFile, retentionMs, ctx);
+    const text = typeof event.payload === "string" ? event.payload : JSON.stringify(event.payload ?? "");
+    const estimatedInputTokens = Math.ceil(text.length / 4);
+    await gate(modelKey, limitsForModel, stateFile, retentionMs, ctx, estimatedInputTokens);
   });
 
   pi.on("after_provider_response", async (event, ctx) => {
@@ -434,7 +481,7 @@ export default function rateLimits(pi: ExtensionAPI) {
 
     if (!limitsForModel.some((limit) => limit.metric === "tokens")) return;
     const usage = event.message.usage;
-    const tokens = usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
+    const tokens = usage.input;
     if (tokens <= 0) return;
     const now = Date.now();
     appendEvent(stateFile, { ts: now, model: modelKey, kind: "response", tokens }, now, retentionMs);
