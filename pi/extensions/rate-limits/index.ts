@@ -213,12 +213,12 @@ function nextDayStartInTz(timezone: string, ts: number): number {
  * gate assumes the outgoing request adds 0 tokens), or undefined when there is
  * room now.
  */
-function waitUntilForLimit(limit: Limit, events: Event[], now: number): number | undefined {
-  if (limit.window.kind === "rolling") return rollingWaitUntil(limit, limit.window.durationMs, events, now);
-  return calendarWaitUntil(limit, limit.window.timezone, events, now);
+function waitUntilForLimit(limit: Limit, events: Event[], now: number, estimatedInputTokens: number = 0): number | undefined {
+  if (limit.window.kind === "rolling") return rollingWaitUntil(limit, limit.window.durationMs, events, now, estimatedInputTokens);
+  return calendarWaitUntil(limit, limit.window.timezone, events, now, estimatedInputTokens);
 }
 
-function rollingWaitUntil(limit: Limit, windowMs: number, events: Event[], now: number): number | undefined {
+function rollingWaitUntil(limit: Limit, windowMs: number, events: Event[], now: number, estimatedInputTokens: number = 0): number | undefined {
   const cutoff = now - windowMs;
   if (limit.metric === "requests") {
     const inWindow = events
@@ -251,6 +251,10 @@ function rollingWaitUntil(limit: Limit, windowMs: number, events: Event[], now: 
     }
   });
 
+  if (estimatedInputTokens > 0) {
+    items.push({ ts: now, tokens: estimatedInputTokens });
+  }
+
   items.sort((a, b) => a.ts - b.ts);
   let total = items.reduce((sum, item) => sum + item.tokens, 0);
   if (total <= limit.max) return undefined;
@@ -261,7 +265,7 @@ function rollingWaitUntil(limit: Limit, windowMs: number, events: Event[], now: 
   return undefined;
 }
 
-function calendarWaitUntil(limit: Limit, timezone: string, events: Event[], now: number): number | undefined {
+function calendarWaitUntil(limit: Limit, timezone: string, events: Event[], now: number, estimatedInputTokens: number = 0): number | undefined {
   const dayStart = startOfDayInTz(timezone, now);
   const todayRequests = events.filter((e) => e.kind === "request" && e.ts >= dayStart && e.ts <= now).sort((a, b) => a.ts - b.ts);
   const todayResponses = events.filter((e) => e.kind === "response" && e.ts >= dayStart && e.ts <= now).sort((a, b) => a.ts - b.ts);
@@ -285,6 +289,7 @@ function calendarWaitUntil(limit: Limit, timezone: string, events: Event[], now:
       total += resp.tokens ?? 0;
     }
   });
+  total += estimatedInputTokens;
   return total > limit.max ? nextDayStartInTz(timezone, now) : undefined;
 }
 
@@ -392,7 +397,7 @@ async function gate(
     const events = readEvents(stateFile, now, retentionMs).filter((e) => e.model === modelKey);
     let worst: { waitUntil: number; limit: Limit } | undefined;
     for (const limit of limits) {
-      const waitUntil = waitUntilForLimit(limit, events, now);
+      const waitUntil = waitUntilForLimit(limit, events, now, estimatedInputTokens);
       if (waitUntil !== undefined && (worst === undefined || waitUntil > worst.waitUntil)) {
         worst = { waitUntil, limit };
       }
