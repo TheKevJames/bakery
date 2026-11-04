@@ -321,6 +321,33 @@ function sleepUntil(target: number, signal: AbortSignal | undefined): Promise<vo
   });
 }
 
+async function pauseForDelay(
+  delayMs: number,
+  label: string,
+  modelKey: string,
+  ctx: ExtensionContext,
+): Promise<void> {
+  const target = Date.now() + delayMs;
+  let tick: NodeJS.Timeout | undefined;
+  if (ctx.mode === "tui") {
+    const update = () =>
+      ctx.ui.setStatus(
+        STATUS_KEY,
+        `rate limit (${label}): ${modelKey} — waiting ${Math.max(0, Math.ceil((target - Date.now()) / 1000))}s`,
+      );
+    update();
+    tick = setInterval(update, 1_000);
+  }
+  try {
+    await sleepUntil(target, ctx.signal);
+  } catch {
+    // aborted
+  } finally {
+    if (tick) clearInterval(tick);
+    ctx.ui.setStatus(STATUS_KEY, undefined);
+  }
+}
+
 function parseRetryAfter(headers: Record<string, string>): number | undefined {
   if (!headers) return undefined;
   const entry = Object.entries(headers).find(([k]) => k.toLowerCase() === "retry-after");
@@ -467,11 +494,12 @@ export default function rateLimits(pi: ExtensionAPI) {
     const modelKey = `${model.provider}/${model.id}`;
     const limitsForModel = limits.get(modelKey);
     if (limitsForModel === undefined) return;
-    const delayMs = parseRetryAfter(event.headers) ?? 10_000;
+    const delayMs = parseRetryAfter(event.headers) ?? 15_000;
     recordRateLimitHit(modelKey, limitsForModel, delayMs, stateFile, retentionMs);
+    await pauseForDelay(delayMs, "429", modelKey, ctx);
   });
 
-  pi.on("message_end", (event) => {
+  pi.on("message_end", async (event, ctx) => {
     if (event.message.role !== "assistant") return;
     const modelKey = `${event.message.provider}/${event.message.model}`;
     const limitsForModel = limits.get(modelKey);
@@ -481,6 +509,7 @@ export default function rateLimits(pi: ExtensionAPI) {
       const delayMs = parseRetryDelayFromMessage(event.message.errorMessage);
       if (delayMs !== undefined) {
         recordRateLimitHit(modelKey, limitsForModel, delayMs, stateFile, retentionMs);
+        await pauseForDelay(delayMs, "error", modelKey, ctx);
       }
     }
 
