@@ -6,7 +6,7 @@
       "name": "bakery-pi",
       "dependencies": {
         "@anthropic-ai/sandbox-runtime": "0.0.80",
-        "ketch-cli": "0.20.2",
+        "ketch-cli": "0.20.4",
         "smol-toml": "1.9.1",
         "unpdf": "1.9.1",
       },
@@ -80,17 +80,17 @@
 
     "@google/genai": ["@google/genai@2.21.0", "", { "dependencies": { "google-auth-library": "^10.3.0", "p-retry": "^4.6.2", "protobufjs": "^7.5.4", "ws": "^8.18.0" }, "peerDependencies": { "@modelcontextprotocol/sdk": "^1.25.2" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-+PDtco2/Z0ONdzCGekCoCT+O1VJS9xJQNN4XzQpXG/t3El/SWWMkCWlFRO1KmivOHPa4Q0VjUYu1HBKCZ/v33Q=="],
 
-    "@ketch-cli/darwin-arm64": ["@ketch-cli/darwin-arm64@0.20.2", "", { "os": "darwin", "cpu": "arm64" }, "sha512-qYoh3VlVtglp2Gm34mWci1axd4yP0abzyOIOWeYxpqZcX+QVt2BAs7ht9yqcqHXcIrd5u1NWIqwBdQxMUEprvA=="],
+    "@ketch-cli/darwin-arm64": ["@ketch-cli/darwin-arm64@0.20.4", "", { "os": "darwin", "cpu": "arm64" }, "sha512-/YVgT2cv9M7utViyN9FJAV7SqlXJyHSsmqdQ8j+5a3V3O03DW8E0G4GzzfoKcA3A9g6DryHSTEDcu40vBQVI9A=="],
 
-    "@ketch-cli/darwin-x64": ["@ketch-cli/darwin-x64@0.20.2", "", { "os": "darwin", "cpu": "x64" }, "sha512-pqtylb324QbW/843xirMC0XIAtU6b0IN3AH/JtXSuXE3NWQymwzK9FoygdM485/EQDtR1WPR24/z7kiAck53XA=="],
+    "@ketch-cli/darwin-x64": ["@ketch-cli/darwin-x64@0.20.4", "", { "os": "darwin", "cpu": "x64" }, "sha512-GuAP+/ICjAdEI5FQYdvTJvNRriTrQigk8JfVLHjA8DD7++g2GeJeA3GgfxPDYV82oCO0az/dDqestxgruhgKkw=="],
 
-    "@ketch-cli/linux-arm64": ["@ketch-cli/linux-arm64@0.20.2", "", { "os": "linux", "cpu": "arm64" }, "sha512-6JkUYBX2SIHkMisTmxlKKs6Z0h4FrTj6U8JhDJqEdSFu8FiqXj9Y9VRHfrWSza3r88OFXbmG2NofQSbP3G8QvQ=="],
+    "@ketch-cli/linux-arm64": ["@ketch-cli/linux-arm64@0.20.4", "", { "os": "linux", "cpu": "arm64" }, "sha512-Tb4TVt8GY58gQ0WbHAvpSdNNiVYA5hDxJEnZ5ZEvRq94wJtsOVTdkrOIYo+G782kKCHf2Rb0q804PrlvbvY/gw=="],
 
-    "@ketch-cli/linux-x64": ["@ketch-cli/linux-x64@0.20.2", "", { "os": "linux", "cpu": "x64" }, "sha512-b+FqrO9pxzp8Fv7V6AlSD66MVpEWXh6ik1BHGdR32QTY1RyRrq9hk/1QjFKrgrBl87IKEW3yv05lhsE8rb6CTA=="],
+    "@ketch-cli/linux-x64": ["@ketch-cli/linux-x64@0.20.4", "", { "os": "linux", "cpu": "x64" }, "sha512-AKJ3xrtz46+oRJMcdYaCkerqg1/qOqoj1BYvsZJqH3krrKsUlKWICB9Pcs/rDkixyEbz//l9E6jlt8As50XJig=="],
 
-    "@ketch-cli/win32-arm64": ["@ketch-cli/win32-arm64@0.20.2", "", { "os": "win32", "cpu": "arm64" }, "sha512-bi73GJEpH3FfnkaMSSUb57WlHgIdTkKN/LqxFIzzLsqaRjBMR023UH5TbXlJfM3iHKB6qZtgEdHl2tLJdYtu8A=="],
+    "@ketch-cli/win32-arm64": ["@ketch-cli/win32-arm64@0.20.4", "", { "os": "win32", "cpu": "arm64" }, "sha512-Lr+U35h322FGFjcR43XmB3ahqemvG+WFnvAxiqbs8+jocfTVv0n4RkhMOowpJt/qUjesFPvLcAqHHWTw6W5Zyw=="],
 
-    "@ketch-cli/win32-x64": ["@ketch-cli/win32-x64@0.20.2", "", { "os": "win32", "cpu": "x64" }, "sha512-/ix2+W8Bg0CexiSobVY8P1vTZ52DNmiCcYCDuaJzIzb4h/Ih6mljvef9Ny2jxxLBN1whc5KTSzWpAXN6oJQAxg=="],
+    "@ketch-cli/win32-x64": ["@ketch-cli/win32-x64@0.20.4", "", { "os": "win32", "cpu": "x64" }, "sha512-ctjOWP/GunSJ0218JFDlkraaSli9+jvswBV4qA/uB5t0y8N8mukgdXPtzc7wibSF2ZP/wXip6NlPFwSNJaq5Ug=="],
 
     "@pondwader/socks5-server": ["@pondwader/socks5-server@1.0.10", "", {}, "sha512-bQY06wzzR8D2+vVCUoBsr5QS2U6UgPUQRmErNwtsuI6vLcyRKkafjkr3KxbtGFf9aBBIV2mcvlsKD1UYaIV+sg=="],
 
@@ -244,7 +244,7 @@
 
     "jws": ["jws@4.0.1", "", { "dependencies": { "jwa": "^2.0.1", "safe-buffer": "^5.0.1" } }, "sha512-EKI/M/yqPncGUUh44xz0PxSidXFr/+r0pA70+gIYhjv+et7yxM+s29Y+VGDkovRofQem0fs7Uvf4+YmAdyRduA=="],
 
-    "ketch-cli": ["ketch-cli@0.20.2", "", { "optionalDependencies": { "@ketch-cli/darwin-arm64": "0.20.2", "@ketch-cli/darwin-x64": "0.20.2", "@ketch-cli/linux-arm64": "0.20.2", "@ketch-cli/linux-x64": "0.20.2", "@ketch-cli/win32-arm64": "0.20.2", "@ketch-cli/win32-x64": "0.20.2" }, "bin": { "ketch": "bin/ketch.js", "ketch-cli": "bin/ketch.js" } }, "sha512-WOiEB8UOGmf8g5gHAJdUFZ9Txl449KYMU+XZrm3dPI10t4F0naEx29TQZyK0Xd8bVY99+pyMoPj2BqgUkv8Mgg=="],
+    "ketch-cli": ["ketch-cli@0.20.4", "", { "optionalDependencies": { "@ketch-cli/darwin-arm64": "0.20.4", "@ketch-cli/darwin-x64": "0.20.4", "@ketch-cli/linux-arm64": "0.20.4", "@ketch-cli/linux-x64": "0.20.4", "@ketch-cli/win32-arm64": "0.20.4", "@ketch-cli/win32-x64": "0.20.4" }, "bin": { "ketch": "bin/ketch.js", "ketch-cli": "bin/ketch.js" } }, "sha512-SlJstJJBZP8DdCNi+YlETKL4vV4/Md0azjJm8tIL2L6IwnFCs498Q9ACvOhWR1zR/thmb+w8oYhNbUA/Qz2EjQ=="],
 
     "long": ["long@5.3.2", "", {}, "sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA=="],
 
