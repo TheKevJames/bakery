@@ -995,7 +995,10 @@ turns per run, and $30 a day. One task is one unit of work,
   collector (`bakery/bakery/collectors/build_review.py`, settings in
   `claws/build/build.toml`). It finds the PRs of unclaimed `bakery >
   review` tasks without open questions by their branch, among the claws'
-  GitHub user's PRs (one search, then each PR), and resumes the unit of the
+  GitHub user's PRs (one search, then each PR; before a task has none,
+  the PR lists of the repositories search found any in, or which the task's
+  link names, since search can miss one for a while; a search which says
+  its results are incomplete fails the poll), and resumes the unit of the
   first task with news since the unit's last run started (from the ledger,
   so nothing is stored): merged or closed; the operator answered its
   questions; comments and reviews by `build.toml`'s `operators` only, as
